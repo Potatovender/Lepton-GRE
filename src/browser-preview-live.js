@@ -213,8 +213,7 @@ function mathEditor(field, value, label, small = false) {
   const latex = latexSourceFromExpression(value);
   return `
     <div class="mathquill-editor ${small ? "mathquill-editor-small" : ""}">
-      <div class="latex-preview latex-render ${small ? "latex-editor-small" : ""}" aria-hidden="true">${renderLatexExpression(latex)}</div>
-      <textarea class="latex-input" data-field="${field}" data-source="${escapeHtml(latex)}" aria-label="${escapeHtml(label)}" spellcheck="false">${escapeHtml(latex)}</textarea>
+      <div class="mq-root latex-preview ${small ? "latex-editor-small" : ""}" data-field="${field}" data-source="${escapeHtml(latex)}" contenteditable="true" role="textbox" aria-label="${escapeHtml(label)}" spellcheck="false">${renderEditableLatex(latex)}</div>
     </div>
     <textarea class="math-box math-source" data-source-field="${field}" tabindex="-1" aria-hidden="true">${escapeHtml(latex)}</textarea>
   `;
@@ -282,36 +281,37 @@ function bindEvents() {
     }
   });
 
-  root.querySelectorAll(".latex-input[data-field]").forEach((field) => {
+  root.querySelectorAll(".mq-root[data-field]").forEach((field) => {
     field.addEventListener("focus", () => {
       field.dataset.editing = "true";
-      renderMathEditor(field);
     });
     field.addEventListener("beforeinput", (event) => {
-      handleLatexBeforeInput(field, event);
+      handleMathBeforeInput(field, event);
     });
     field.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
         field.blur();
       }
+      if (event.key === "Backspace") {
+        handleMathBackspace(field, event);
+      }
     });
     field.addEventListener("input", () => {
-      expandLatexShortcut(field);
-      updateMathSource(field);
+      expandMathShortcut(field);
+      syncMathField(field);
       updateField(field);
-      renderMathEditor(field);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
     });
     field.addEventListener("blur", () => {
       field.dataset.editing = "false";
-      renderMathEditor(field);
+      syncMathField(field);
     });
     field.addEventListener("copy", (event) => {
       event.preventDefault();
-      event.clipboardData?.setData("text/plain", field.value);
+      event.clipboardData?.setData("text/plain", serializeMathField(field));
     });
   });
 
@@ -463,15 +463,15 @@ function updateField(field) {
   }
 
   scene[collection][Number(rawIndex)][property] = value;
-  if (field.classList?.contains("latex-input")) {
+  if (field.classList?.contains("mq-root")) {
     field.dataset.source = value;
   }
 }
 
 function readFieldValue(field) {
   if (field.type === "checkbox") return field.checked;
-  if (field.classList?.contains("latex-input")) {
-    return sourceFromLatexText(field.value);
+  if (field.classList?.contains("mq-root")) {
+    return sourceFromLatexText(serializeMathField(field));
   }
   return stripChannelPrefix(field.value);
 }
@@ -1023,73 +1023,53 @@ function combineDiagnostics(items) {
   return items.find((item) => item.status === "invalid") ?? { status: "valid", message: "Color is valid" };
 }
 
-function handleLatexBeforeInput(field, event) {
+function handleMathBeforeInput(field, event) {
   if (!["/", "÷"].includes(event.data)) return;
-  const cursor = field.selectionStart;
-  const text = field.value;
-  const before = text.slice(0, cursor);
-  const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\)|\{[^{}]*\})$/);
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const textNode = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer : null;
+  if (!textNode) return;
+  const before = textNode.textContent.slice(0, range.startOffset);
+  const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))$/);
   if (!division) return;
 
   event.preventDefault();
-  const numerator = division[1].replace(/^\{|\}$/g, "");
-  const start = cursor - division[1].length;
-  const replacement = `\\frac{${numerator}}{}`;
-  field.value = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
-  field.dataset.source = field.value;
-  renderMathEditor(field);
-  field.setSelectionRange(start + replacement.length - 1, start + replacement.length - 1);
+  const numerator = division[1];
+  textNode.textContent = `${before.slice(0, -numerator.length)}${textNode.textContent.slice(range.startOffset)}`;
+  const frac = createMathAtom("frac", [numerator, ""]);
+  range.insertNode(frac);
+  focusMathSlot(frac, 1);
+  syncMathField(field);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
 
-function expandLatexShortcut(field) {
-  const cursor = field.selectionStart;
-  const text = field.value;
-  const before = text.slice(0, cursor);
-  const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))(\/|÷)$/);
-  if (division) {
-    const numerator = division[1];
-    const start = cursor - division[0].length;
-    const replacement = `\\frac{${numerator}}{}`;
-    field.value = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
-    field.dataset.source = field.value;
-    renderMathEditor(field);
-    field.setSelectionRange(start + replacement.length - 1, start + replacement.length - 1);
-    return;
-  }
-
+function expandMathShortcut(field) {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const textNode = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer : null;
+  if (!textNode) return;
+  const before = textNode.textContent.slice(0, range.startOffset);
   const shortcut = before.match(/(?:^|[^A-Za-z\\])([A-Za-z]+)$/);
   if (!shortcut) return;
 
   const name = shortcut[1];
   if (!LATEX_SHORTCUTS.has(name)) return;
-  const start = cursor - name.length;
-  const replacement = `\\${name}{}`;
-  field.value = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
-  field.dataset.source = field.value;
-  renderMathEditor(field);
-  field.setSelectionRange(start + replacement.length - 1, start + replacement.length - 1);
+  const start = range.startOffset - name.length;
+  textNode.textContent = `${textNode.textContent.slice(0, start)}${textNode.textContent.slice(range.startOffset)}`;
+  const atom = createMathAtom(name, Array.from({ length: LATEX_FUNCTIONS[name].args }, () => ""));
+  range.setStart(textNode, start);
+  range.collapse(true);
+  range.insertNode(atom);
+  focusMathSlot(atom, 0);
 }
 
-function updateMathSource(field) {
-  const source = sourceFromLatexText(field.value);
+function syncMathField(field) {
+  const source = serializeMathField(field);
   field.dataset.source = source;
   const raw = root.querySelector(`textarea[data-source-field="${cssEscape(field.dataset.field)}"]`);
   if (raw) raw.value = latexSourceFromExpression(source);
-}
-
-function renderMathEditor(field) {
-  const source = field.value ?? field.dataset.source ?? "";
-  const render = field.closest(".mathquill-editor")?.querySelector(".latex-render");
-  if (render) render.innerHTML = renderLatexExpression(source);
-  updateMathSourceDisplay(field, source);
-}
-
-function rerenderSupportedLatex(field) {
-  const source = field.dataset.source ?? "";
-  if (!hasRenderableLatex(source) && !hasInternalRenderableCall(source)) return;
-  renderMathEditor(field);
-  placeCaretAtEnd(field);
 }
 
 function hasRenderableLatex(source) {
@@ -1098,6 +1078,119 @@ function hasRenderableLatex(source) {
 
 function hasInternalRenderableCall(source) {
   return /\b(?:frac|sqrt|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|min|max|exp|sec|csc|cot|round|clamp)\(/.test(source);
+}
+
+function renderEditableLatex(source) {
+  return renderEditableExpression(latexToExpression(source));
+}
+
+function renderEditableExpression(source) {
+  const trimmed = String(source ?? "");
+  if (!trimmed) return "";
+
+  const internalIndex = nextInternalCallIndex(trimmed);
+  if (internalIndex !== -1) {
+    const parsed = parseEditableInternalCallAt(trimmed, internalIndex);
+    if (parsed) {
+      return `${renderEditableExpression(trimmed.slice(0, internalIndex))}${parsed.html}${renderEditableExpression(trimmed.slice(parsed.end))}`;
+    }
+  }
+
+  const fraction = splitTopLevel(trimmed, "/");
+  if (fraction) {
+    return atomEditableHtml("frac", fraction);
+  }
+
+  return escapeHtml(trimmed).replaceAll(/\bpi\b/g, "π");
+}
+
+function parseEditableInternalCallAt(source, index) {
+  for (const [name, config] of Object.entries(LATEX_FUNCTIONS)) {
+    const marker = `${config.internal}(`;
+    if (!source.startsWith(marker, index)) continue;
+    const openIndex = index + config.internal.length;
+    const closeIndex = matchingParen(source, openIndex);
+    if (closeIndex === -1) return null;
+    const args = splitFunctionArgs(source.slice(openIndex + 1, closeIndex));
+    if (args.length !== config.args) return null;
+    return { end: closeIndex + 1, html: atomEditableHtml(name, args) };
+  }
+  return null;
+}
+
+function atomEditableHtml(command, args) {
+  const slot = (arg, index) => `<span class="mq-slot" data-slot="${index}" contenteditable="true">${renderEditableExpression(arg)}</span>`;
+  if (command === "frac") {
+    return `<span class="mq-atom mq-frac" data-command="frac"><span class="mq-num">${slot(args[0] ?? "", 0)}</span><span class="mq-den">${slot(args[1] ?? "", 1)}</span></span>`;
+  }
+  if (command === "sqrt") {
+    return `<span class="mq-atom mq-radical" data-command="sqrt"><span class="mq-radical-symbol">√</span><span class="mq-radicand">${slot(args[0] ?? "", 0)}</span></span>`;
+  }
+  if (command === "abs") {
+    return `<span class="mq-atom mq-delimited" data-command="abs"><span class="mq-delimiter">|</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">|</span></span>`;
+  }
+  if (command === "floor") {
+    return `<span class="mq-atom mq-delimited" data-command="floor"><span class="mq-delimiter">⌊</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">⌋</span></span>`;
+  }
+  if (command === "ceil") {
+    return `<span class="mq-atom mq-delimited" data-command="ceil"><span class="mq-delimiter">⌈</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">⌉</span></span>`;
+  }
+  const renderedArgs = args.map((arg, index) => slot(arg, index)).join('<span class="mq-separator">, </span>');
+  return `<span class="mq-atom mq-call" data-command="${escapeHtml(command)}"><span class="mq-operator">${escapeHtml(LATEX_FUNCTIONS[command].display)}</span><span class="mq-paren">(</span>${renderedArgs}<span class="mq-paren">)</span></span>`;
+}
+
+function createMathAtom(command, args) {
+  const wrapper = document.createElement("span");
+  wrapper.innerHTML = atomEditableHtml(command, args);
+  return wrapper.firstElementChild;
+}
+
+function focusMathSlot(atom, index) {
+  const slot = atom.querySelector(`.mq-slot[data-slot="${index}"]`) ?? atom.querySelector(".mq-slot");
+  if (!slot) return;
+  const range = document.createRange();
+  range.selectNodeContents(slot);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function handleMathBackspace(field, event) {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return;
+  const range = selection.getRangeAt(0);
+  if (range.startContainer.nodeType === Node.TEXT_NODE && range.startOffset > 0) return;
+  const container = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+  const previous = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.previousSibling : container.childNodes[range.startOffset - 1];
+  const atom = previous?.classList?.contains("mq-atom") ? previous : null;
+  if (!atom) return;
+  event.preventDefault();
+  atom.remove();
+  syncMathField(field);
+  field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+}
+
+function serializeMathField(field) {
+  return Array.from(field.childNodes).map(serializeMathNode).join("").trim();
+}
+
+function serializeMathNode(node) {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  if (node.classList.contains("mq-atom")) {
+    const command = node.dataset.command;
+    const slots = Array.from(node.querySelectorAll(":scope > .mq-slot, :scope > .mq-num > .mq-slot, :scope > .mq-den > .mq-slot, :scope > .mq-radicand > .mq-slot")).map((slot) =>
+      Array.from(slot.childNodes).map(serializeMathNode).join("")
+    );
+    if (command === "frac") return `\\frac{${slots[0] ?? ""}}{${slots[1] ?? ""}}`;
+    if (command === "sqrt") return `\\sqrt{${slots[0] ?? ""}}`;
+    if (command === "abs") return `\\left|${slots[0] ?? ""}\\right|`;
+    if (command === "floor") return `\\lfloor${slots[0] ?? ""}\\rfloor`;
+    if (command === "ceil") return `\\lceil${slots[0] ?? ""}\\rceil`;
+    return `\\${command}${slots.map((value) => `{${value}}`).join("")}`;
+  }
+  return Array.from(node.childNodes).map(serializeMathNode).join("");
 }
 
 function updateMathSourceDisplay(field, source) {
@@ -1693,6 +1786,12 @@ function unescapeHtml(value) {
     .replaceAll("&lt;", "<")
     .replaceAll("&amp;", "&");
 }
+
+window.__leptonDebug = {
+  latexToExpression,
+  renderEditableLatex,
+  serializeMathField
+};
 
 window.addEventListener("resize", renderScene);
 renderApp();
