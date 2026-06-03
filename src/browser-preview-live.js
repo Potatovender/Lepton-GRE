@@ -210,9 +210,13 @@ function renderPanel() {
 }
 
 function mathEditor(field, value, label, small = false) {
+  const latex = latexSourceFromExpression(value);
   return `
-    <div class="latex-preview latex-editor ${small ? "latex-editor-small" : ""}" data-field="${field}" data-source="${escapeHtml(value)}" contenteditable="true" role="textbox" aria-label="${escapeHtml(label)}" spellcheck="false">${toLatexPreview(value)}</div>
-    <textarea class="math-box math-source" data-source-field="${field}" tabindex="-1" aria-hidden="true">${escapeHtml(latexSourceFromExpression(value))}</textarea>
+    <div class="mathquill-editor ${small ? "mathquill-editor-small" : ""}">
+      <div class="latex-preview latex-render ${small ? "latex-editor-small" : ""}" aria-hidden="true">${renderLatexExpression(latex)}</div>
+      <textarea class="latex-input" data-field="${field}" data-source="${escapeHtml(latex)}" aria-label="${escapeHtml(label)}" spellcheck="false">${escapeHtml(latex)}</textarea>
+    </div>
+    <textarea class="math-box math-source" data-source-field="${field}" tabindex="-1" aria-hidden="true">${escapeHtml(latex)}</textarea>
   `;
 }
 
@@ -278,11 +282,10 @@ function bindEvents() {
     }
   });
 
-  root.querySelectorAll(".latex-editor[data-field]").forEach((field) => {
+  root.querySelectorAll(".latex-input[data-field]").forEach((field) => {
     field.addEventListener("focus", () => {
       field.dataset.editing = "true";
       renderMathEditor(field);
-      placeCaretAtEnd(field);
     });
     field.addEventListener("beforeinput", (event) => {
       handleLatexBeforeInput(field, event);
@@ -297,7 +300,7 @@ function bindEvents() {
       expandLatexShortcut(field);
       updateMathSource(field);
       updateField(field);
-      rerenderSupportedLatex(field);
+      renderMathEditor(field);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
@@ -308,12 +311,7 @@ function bindEvents() {
     });
     field.addEventListener("copy", (event) => {
       event.preventDefault();
-      event.clipboardData?.setData("text/plain", latexSourceFromExpression(field.dataset.source ?? ""));
-    });
-    field.addEventListener("paste", (event) => {
-      event.preventDefault();
-      const text = event.clipboardData?.getData("text/plain") ?? "";
-      document.execCommand("insertText", false, text);
+      event.clipboardData?.setData("text/plain", field.value);
     });
   });
 
@@ -465,18 +463,15 @@ function updateField(field) {
   }
 
   scene[collection][Number(rawIndex)][property] = value;
-  if (field.classList?.contains("latex-editor")) {
+  if (field.classList?.contains("latex-input")) {
     field.dataset.source = value;
   }
 }
 
 function readFieldValue(field) {
   if (field.type === "checkbox") return field.checked;
-  if (field.classList?.contains("latex-editor")) {
-    if (field.dataset.editing !== "true" && document.activeElement !== field) {
-      return field.dataset.source ?? sourceFromLatexText(field.textContent ?? "");
-    }
-    return sourceFromLatexText(editorSourceText(field));
+  if (field.classList?.contains("latex-input")) {
+    return sourceFromLatexText(field.value);
   }
   return stripChannelPrefix(field.value);
 }
@@ -1030,8 +1025,8 @@ function combineDiagnostics(items) {
 
 function handleLatexBeforeInput(field, event) {
   if (!["/", "÷"].includes(event.data)) return;
-  const cursor = getCaretOffset(field);
-  const text = editorSourceText(field);
+  const cursor = field.selectionStart;
+  const text = field.value;
   const before = text.slice(0, cursor);
   const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\)|\{[^{}]*\})$/);
   if (!division) return;
@@ -1040,24 +1035,26 @@ function handleLatexBeforeInput(field, event) {
   const numerator = division[1].replace(/^\{|\}$/g, "");
   const start = cursor - division[1].length;
   const replacement = `\\frac{${numerator}}{}`;
-  field.dataset.source = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  field.value = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  field.dataset.source = field.value;
   renderMathEditor(field);
-  setCaretOffset(field, start + replacement.length - 1);
+  field.setSelectionRange(start + replacement.length - 1, start + replacement.length - 1);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
 
 function expandLatexShortcut(field) {
-  const cursor = getCaretOffset(field);
-  const text = editorSourceText(field);
+  const cursor = field.selectionStart;
+  const text = field.value;
   const before = text.slice(0, cursor);
   const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))(\/|÷)$/);
   if (division) {
     const numerator = division[1];
     const start = cursor - division[0].length;
     const replacement = `\\frac{${numerator}}{}`;
-    field.dataset.source = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+    field.value = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+    field.dataset.source = field.value;
     renderMathEditor(field);
-    setCaretOffset(field, start + replacement.length - 1);
+    field.setSelectionRange(start + replacement.length - 1, start + replacement.length - 1);
     return;
   }
 
@@ -1068,22 +1065,23 @@ function expandLatexShortcut(field) {
   if (!LATEX_SHORTCUTS.has(name)) return;
   const start = cursor - name.length;
   const replacement = `\\${name}{}`;
-  field.dataset.source = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  field.value = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  field.dataset.source = field.value;
   renderMathEditor(field);
-  setCaretOffset(field, start + replacement.length - 1);
+  field.setSelectionRange(start + replacement.length - 1, start + replacement.length - 1);
 }
 
 function updateMathSource(field) {
-  const source = sourceFromLatexText(editorSourceText(field));
+  const source = sourceFromLatexText(field.value);
   field.dataset.source = source;
   const raw = root.querySelector(`textarea[data-source-field="${cssEscape(field.dataset.field)}"]`);
   if (raw) raw.value = latexSourceFromExpression(source);
 }
 
 function renderMathEditor(field) {
-  const source = field.dataset.source ?? "";
-  field.innerHTML = toLatexPreview(source);
-  field.dataset.rendered = "true";
+  const source = field.value ?? field.dataset.source ?? "";
+  const render = field.closest(".mathquill-editor")?.querySelector(".latex-render");
+  if (render) render.innerHTML = renderLatexExpression(source);
   updateMathSourceDisplay(field, source);
 }
 
@@ -1333,11 +1331,15 @@ function parseLatexCommandAt(source, index) {
     let cursor = index + marker.length;
     while (args.length < expectedArgs && source[cursor] === "{") {
       const end = matchingBrace(source, cursor);
-      if (end === -1) return null;
+      if (end === -1) {
+        args.push(source.slice(cursor + 1));
+        cursor = source.length;
+        break;
+      }
       args.push(source.slice(cursor + 1, end));
       cursor = end + 1;
     }
-    if (args.length !== expectedArgs) return null;
+    while (args.length < expectedArgs) args.push("");
     const html = renderLatexFunction(command, args);
     return { end: cursor, html };
   }
@@ -1362,7 +1364,7 @@ function parseLatexCommand(source, command, expectedArgs) {
 
 function parsePairedLatexDelimiterAt(source, index) {
   const pairs = [
-    { open: "\\left|", close: "\\right|", render: (inner) => delimiterHtml("|", inner, "|", `\\left|${inner}\\right|`) },
+    { open: "\\left|", close: "\\right|", fallbackClose: "\\right", render: (inner) => delimiterHtml("|", inner, "|", `\\left|${inner}\\right|`) },
     { open: "\\lvert", close: "\\rvert", render: (inner) => delimiterHtml("|", inner, "|", `\\lvert${inner}\\rvert`) },
     { open: "\\lfloor", close: "\\rfloor", render: (inner) => delimiterHtml("⌊", inner, "⌋", `\\lfloor${inner}\\rfloor`) },
     { open: "\\lceil", close: "\\rceil", render: (inner) => delimiterHtml("⌈", inner, "⌉", `\\lceil${inner}\\rceil`) }
@@ -1371,10 +1373,15 @@ function parsePairedLatexDelimiterAt(source, index) {
   for (const pair of pairs) {
     if (!source.startsWith(pair.open, index)) continue;
     const start = index + pair.open.length;
-    const end = source.indexOf(pair.close, start);
+    let end = source.indexOf(pair.close, start);
+    let closeLength = pair.close.length;
+    if (end === -1 && pair.fallbackClose) {
+      end = source.indexOf(pair.fallbackClose, start);
+      closeLength = pair.fallbackClose.length;
+    }
     if (end === -1) return null;
     const inner = source.slice(start, end);
-    return { end: end + pair.close.length, html: pair.render(inner) };
+    return { end: end + closeLength, html: pair.render(inner) };
   }
   return null;
 }
@@ -1544,9 +1551,9 @@ function latexToExpression(value) {
   let source = String(value)
     .replace(/\u00a0/g, " ")
     .replaceAll("π", "pi")
-    .replaceAll(/\\left|\\right/g, "")
     .trim();
 
+  source = replaceLatexDelimited(source, "\\left|", "\\right|", (inner) => `abs(${latexToExpression(inner)})`);
   source = replaceLatexDelimited(source, "|", "|", (inner) => `abs(${latexToExpression(inner)})`);
   source = replaceLatexDelimited(source, "\\lvert", "\\rvert", (inner) => `abs(${latexToExpression(inner)})`);
   source = replaceLatexDelimited(source, "\\lfloor", "\\rfloor", (inner) => `floor(${latexToExpression(inner)})`);
@@ -1555,7 +1562,7 @@ function latexToExpression(value) {
   for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
     source = replaceLatexCommand(source, command, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
   }
-  return source.replaceAll(/\\pi\b/g, "pi");
+  return source.replaceAll(/\\left|\\right/g, "").replaceAll(/\\pi\b/g, "pi");
 }
 
 function replaceLatexDelimited(source, open, close, build) {

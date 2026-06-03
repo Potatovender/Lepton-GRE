@@ -142,6 +142,54 @@ select {
   line-height: 1.35;
 }
 
+.mathquill-editor {
+  position: relative;
+  min-height: 52px;
+  border: 1px solid #cfd5df;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.mathquill-editor-small {
+  min-height: 42px;
+}
+
+.latex-render {
+  min-height: 50px;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.latex-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 100%;
+  resize: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: transparent;
+  color: transparent;
+  caret-color: #1f2937;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.latex-input::selection {
+  background: rgba(79, 125, 217, 0.28);
+  color: transparent;
+}
+
+.latex-input:focus {
+  outline: 2px solid #4f7dd9;
+  outline-offset: 1px;
+}
+
 .latex-editor {
   min-height: 48px;
   border: 1px solid #cfd5df;
@@ -332,6 +380,7 @@ select {
 
 .math-box:focus,
 .latex-editor:focus,
+.mathquill-editor:focus-within,
 .compact-field:focus,
 .entry-id:focus {
   outline: 2px solid #4f7dd9;
