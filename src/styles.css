@@ -201,6 +201,29 @@ select {
   padding: 0 0.2em;
 }
 
+.latex-call,
+.latex-delimited {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.08em;
+  vertical-align: middle;
+}
+
+.latex-operator {
+  font-style: normal;
+  padding-right: 0.08em;
+}
+
+.latex-delimiter {
+  font-size: 1.08em;
+  line-height: 1;
+}
+
+.latex-delimited-inner {
+  display: inline-block;
+  padding: 0 0.08em;
+}
+
 .math-box-small {
   min-height: 38px;
   font-size: 15px;

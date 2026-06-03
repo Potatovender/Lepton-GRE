@@ -61,6 +61,33 @@ const BUILTIN_NAMES = new Set([
 ]);
 
 const RESERVED_FUNCTION_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x", "y", "z", "pi", "e", "Math", "ref", "NaN"].includes(name)));
+const LATEX_FUNCTIONS = {
+  sin: { internal: "sin", args: 1, display: "sin" },
+  cos: { internal: "cos", args: 1, display: "cos" },
+  tan: { internal: "tan", args: 1, display: "tan" },
+  asin: { internal: "asin", args: 1, display: "arcsin" },
+  acos: { internal: "acos", args: 1, display: "arccos" },
+  atan: { internal: "atan", args: 1, display: "arctan" },
+  arcsin: { internal: "arcsin", args: 1, display: "arcsin" },
+  arccos: { internal: "arccos", args: 1, display: "arccos" },
+  arctan: { internal: "arctan", args: 1, display: "arctan" },
+  sqrt: { internal: "sqrt", args: 1, display: "sqrt" },
+  log: { internal: "log", args: 1, display: "log" },
+  ln: { internal: "ln", args: 1, display: "ln" },
+  abs: { internal: "abs", args: 1, display: "abs" },
+  floor: { internal: "floor", args: 1, display: "floor" },
+  ceil: { internal: "ceil", args: 1, display: "ceil" },
+  round: { internal: "round", args: 1, display: "round" },
+  exp: { internal: "exp", args: 1, display: "exp" },
+  sec: { internal: "sec", args: 1, display: "sec" },
+  csc: { internal: "csc", args: 1, display: "csc" },
+  cot: { internal: "cot", args: 1, display: "cot" },
+  min: { internal: "min", args: 2, display: "min" },
+  max: { internal: "max", args: 2, display: "max" },
+  clamp: { internal: "clamp", args: 3, display: "clamp" },
+  frac: { internal: "frac", args: 2, display: "frac" }
+};
+const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
 
 let scene = structuredClone(DEFAULT_SCENE);
 let activeTab = "functions";
@@ -270,6 +297,7 @@ function bindEvents() {
       expandLatexShortcut(field);
       updateMathSource(field);
       updateField(field);
+      rerenderSupportedLatex(field);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
@@ -415,7 +443,8 @@ function schedulePanRender() {
 
 function updateField(field) {
   const [collection, rawIndex, property] = field.dataset.field.split(".");
-  const value = readFieldValue(field);
+  let value = readFieldValue(field);
+  if (property === "id") value = value.trim();
 
   if (collection === "settings") {
     scene.settings[rawIndex] = rawIndex === "angleMode" ? value : Number(value);
@@ -899,7 +928,7 @@ function convertPowers(expression) {
 }
 
 function validateScene() {
-  const env = Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression]));
+  const env = Object.fromEntries(scene.functions.filter((entry) => entry.id.trim()).map((entry) => [entry.id, entry.expression]));
   const diagnostics = {
     functions: [],
     colors: [],
@@ -910,20 +939,27 @@ function validateScene() {
   };
 
   diagnostics.functions = scene.functions.map((entry) => {
+    const idResult = validateEntryId(entry.id, "Function");
+    if (idResult.status === "invalid") return idResult;
     const result = validateExpression(entry.expression, env, [entry.id]);
     if (result.status === "valid" && RESERVED_FUNCTION_NAMES.has(entry.id)) {
       return { status: "warning", message: `"${entry.id}" shadows a built-in function name` };
     }
     return result;
   });
-  diagnostics.colors = scene.colors.map((entry) =>
-    combineDiagnostics([
+  diagnostics.colors = scene.colors.map((entry) => {
+    const idResult = validateEntryId(entry.id, "Color");
+    if (idResult.status === "invalid") return idResult;
+    return combineDiagnostics([
       validateExpression(entry.red, env),
       validateExpression(entry.green, env),
       validateExpression(entry.blue, env)
-    ])
-  );
-  diagnostics.restrictions = scene.restrictions.map((entry) => validateExpression(entry.expression, env));
+    ]);
+  });
+  diagnostics.restrictions = scene.restrictions.map((entry) => {
+    const idResult = validateEntryId(entry.id, "Boundary");
+    return idResult.status === "invalid" ? idResult : validateExpression(entry.expression, env);
+  });
   diagnostics.draws = scene.draws.map((entry) => {
     const missing = [];
     if (!scene.functions.some((candidate) => candidate.id === entry.equationId)) missing.push("function");
@@ -940,6 +976,16 @@ function validateScene() {
   diagnostics.hasErrors = Boolean(firstError);
   diagnostics.summary = firstError ? firstError.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
+}
+
+function validateEntryId(id, label) {
+  if (!id.trim()) {
+    return { status: "invalid", message: `${label} name cannot be blank` };
+  }
+  if (!/^[A-Za-z_]\w*$/.test(id)) {
+    return { status: "invalid", message: `${label} name must start with a letter or underscore` };
+  }
+  return { status: "valid", message: `${label} name is valid` };
 }
 
 function validateExpression(source, env, stack = []) {
@@ -1015,10 +1061,11 @@ function expandLatexShortcut(field) {
     return;
   }
 
-  const shortcut = before.match(/(?:^|[^A-Za-z\\])(sqrt|sin|cos|tan|log|ln)$/);
+  const shortcut = before.match(/(?:^|[^A-Za-z\\])([A-Za-z]+)$/);
   if (!shortcut) return;
 
   const name = shortcut[1];
+  if (!LATEX_SHORTCUTS.has(name)) return;
   const start = cursor - name.length;
   const replacement = `\\${name}{}`;
   field.dataset.source = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
@@ -1038,6 +1085,21 @@ function renderMathEditor(field) {
   field.innerHTML = toLatexPreview(source);
   field.dataset.rendered = "true";
   updateMathSourceDisplay(field, source);
+}
+
+function rerenderSupportedLatex(field) {
+  const source = field.dataset.source ?? "";
+  if (!hasRenderableLatex(source) && !hasInternalRenderableCall(source)) return;
+  renderMathEditor(field);
+  placeCaretAtEnd(field);
+}
+
+function hasRenderableLatex(source) {
+  return /\\(?:frac|sqrt|left\||lvert|lfloor|lceil|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|min|max|exp|sec|csc|cot|round|clamp)\b/.test(source);
+}
+
+function hasInternalRenderableCall(source) {
+  return /\b(?:frac|sqrt|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|min|max|exp|sec|csc|cot|round|clamp)\(/.test(source);
 }
 
 function updateMathSourceDisplay(field, source) {
@@ -1068,6 +1130,29 @@ function latexSourceFromExpression(source) {
     return `\\sqrt{${latexSourceFromExpression(sqrtCall[0])}}`;
   }
 
+  const absCall = parseFunctionCall(normalized, "abs");
+  if (absCall && absCall.length === 1) {
+    return `\\left|${latexSourceFromExpression(absCall[0])}\\right|`;
+  }
+
+  const floorCall = parseFunctionCall(normalized, "floor");
+  if (floorCall && floorCall.length === 1) {
+    return `\\lfloor${latexSourceFromExpression(floorCall[0])}\\rfloor`;
+  }
+
+  const ceilCall = parseFunctionCall(normalized, "ceil");
+  if (ceilCall && ceilCall.length === 1) {
+    return `\\lceil${latexSourceFromExpression(ceilCall[0])}\\rceil`;
+  }
+
+  for (const [name, config] of Object.entries(LATEX_FUNCTIONS)) {
+    if (["frac", "sqrt", "abs", "floor", "ceil"].includes(name)) continue;
+    const call = parseFunctionCall(normalized, config.internal);
+    if (call && call.length === config.args) {
+      return `\\${name}${call.map((arg) => `{${latexSourceFromExpression(arg)}}`).join("")}`;
+    }
+  }
+
   return normalized
     .replaceAll(/\bpi\b/g, "\\pi")
     .replaceAll(/\b(sin|cos|tan|log|ln)\(/g, "\\$1{")
@@ -1083,10 +1168,17 @@ function sourceFromLatexText(text) {
 }
 
 function editorSourceText(field) {
-  if (field.dataset.rendered === "true" && field.querySelector(".latex-frac, .latex-radical")) {
-    return field.dataset.source ?? "";
+  if (field.dataset.rendered === "true" && field.querySelector("[data-latex]")) {
+    return sourceFromRenderedNode(field) || field.dataset.source || "";
   }
   return field.textContent ?? field.dataset.source ?? "";
+}
+
+function sourceFromRenderedNode(node) {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  if (node.dataset?.latex) return node.dataset.latex;
+  return Array.from(node.childNodes).map(sourceFromRenderedNode).join("");
 }
 
 function replaceLatexCommand(source, command, build) {
@@ -1134,29 +1226,60 @@ function renderLatexExpression(source) {
     }
   }
 
+  const internalIndex = nextInternalCallIndex(trimmed);
+  if (internalIndex !== -1) {
+    const parsed = parseInternalCallAt(trimmed, internalIndex);
+    if (parsed) {
+      return `${renderLatexExpression(trimmed.slice(0, internalIndex))}${parsed.html}${renderLatexExpression(trimmed.slice(parsed.end))}`;
+    }
+  }
+
   const latexFrac = parseLatexCommand(trimmed, "frac", 2);
   if (latexFrac) {
-    return fractionHtml(renderLatexExpression(latexFrac[0]), renderLatexExpression(latexFrac[1]));
+    return renderLatexFunction("frac", latexFrac);
   }
 
   const latexSqrt = parseLatexCommand(trimmed, "sqrt", 1);
   if (latexSqrt) {
-    return `<span class="latex-radical"><span class="latex-radical-symbol">√</span><span class="latex-radicand">${renderLatexExpression(latexSqrt[0])}</span></span>`;
+    return renderLatexFunction("sqrt", latexSqrt);
   }
 
   const fraction = splitTopLevel(trimmed, "/");
   if (fraction) {
-    return fractionHtml(renderLatexExpression(fraction[0]), renderLatexExpression(fraction[1]));
+    return fractionHtml(renderLatexExpression(fraction[0]), renderLatexExpression(fraction[1]), `\\frac{${fraction[0]}}{${fraction[1]}}`);
   }
 
   const fracCall = parseFunctionCall(trimmed, "frac");
   if (fracCall && fracCall.length === 2) {
-    return fractionHtml(renderLatexExpression(fracCall[0]), renderLatexExpression(fracCall[1]));
+    return fractionHtml(renderLatexExpression(fracCall[0]), renderLatexExpression(fracCall[1]), `\\frac{${fracCall[0]}}{${fracCall[1]}}`);
   }
 
   const sqrtCall = parseFunctionCall(trimmed, "sqrt");
   if (sqrtCall && sqrtCall.length === 1) {
-    return `<span class="latex-radical"><span class="latex-radical-symbol">√</span><span class="latex-radicand">${renderLatexExpression(sqrtCall[0])}</span></span>`;
+    return radicalHtml(renderLatexExpression(sqrtCall[0]), `\\sqrt{${sqrtCall[0]}}`);
+  }
+
+  const absCall = parseFunctionCall(trimmed, "abs");
+  if (absCall && absCall.length === 1) {
+    return delimiterHtml("|", absCall[0], "|", `\\left|${absCall[0]}\\right|`);
+  }
+
+  const floorCall = parseFunctionCall(trimmed, "floor");
+  if (floorCall && floorCall.length === 1) {
+    return delimiterHtml("⌊", floorCall[0], "⌋", `\\lfloor${floorCall[0]}\\rfloor`);
+  }
+
+  const ceilCall = parseFunctionCall(trimmed, "ceil");
+  if (ceilCall && ceilCall.length === 1) {
+    return delimiterHtml("⌈", ceilCall[0], "⌉", `\\lceil${ceilCall[0]}\\rceil`);
+  }
+
+  for (const [name, config] of Object.entries(LATEX_FUNCTIONS)) {
+    if (["frac", "sqrt", "abs", "floor", "ceil"].includes(name)) continue;
+    const call = parseFunctionCall(trimmed, config.internal);
+    if (call && call.length === config.args) {
+      return renderLatexFunction(name, call);
+    }
   }
 
   let text = escapeHtml(trimmed)
@@ -1165,20 +1288,47 @@ function renderLatexExpression(source) {
     .replaceAll(/\^2/g, "<sup>2</sup>")
     .replaceAll(/\^3/g, "<sup>3</sup>");
 
-  text = text.replaceAll(/\b(sin|cos|tan|log|ln)\(([^()]*)\)/g, (_match, name, arg) => `${name}(${renderLatexExpression(arg)})`);
   return text;
 }
 
 function nextLatexCommandIndex(source) {
-  const indexes = ["\\frac", "\\sqrt"].map((command) => source.indexOf(command)).filter((index) => index !== -1);
+  const commands = [
+    ...Object.keys(LATEX_FUNCTIONS).map((command) => `\\${command}`),
+    "\\left|",
+    "\\lvert",
+    "\\lfloor",
+    "\\lceil"
+  ];
+  const indexes = commands.map((command) => source.indexOf(command)).filter((index) => index !== -1);
   return indexes.length ? Math.min(...indexes) : -1;
 }
 
+function nextInternalCallIndex(source) {
+  const indexes = Object.values(LATEX_FUNCTIONS)
+    .map((config) => source.indexOf(`${config.internal}(`))
+    .filter((index) => index !== -1);
+  return indexes.length ? Math.min(...indexes) : -1;
+}
+
+function parseInternalCallAt(source, index) {
+  for (const [name, config] of Object.entries(LATEX_FUNCTIONS)) {
+    const marker = `${config.internal}(`;
+    if (!source.startsWith(marker, index)) continue;
+    const openIndex = index + config.internal.length;
+    const closeIndex = matchingParen(source, openIndex);
+    if (closeIndex === -1) return null;
+    const args = splitFunctionArgs(source.slice(openIndex + 1, closeIndex));
+    if (args.length !== config.args) return null;
+    return { end: closeIndex + 1, html: renderLatexFunction(name, args) };
+  }
+  return null;
+}
+
 function parseLatexCommandAt(source, index) {
-  for (const command of ["frac", "sqrt"]) {
+  for (const command of Object.keys(LATEX_FUNCTIONS)) {
     const marker = `\\${command}`;
     if (!source.startsWith(marker, index)) continue;
-    const expectedArgs = command === "frac" ? 2 : 1;
+    const expectedArgs = LATEX_FUNCTIONS[command].args;
     const args = [];
     let cursor = index + marker.length;
     while (args.length < expectedArgs && source[cursor] === "{") {
@@ -1188,12 +1338,11 @@ function parseLatexCommandAt(source, index) {
       cursor = end + 1;
     }
     if (args.length !== expectedArgs) return null;
-    const html =
-      command === "frac"
-        ? fractionHtml(renderLatexExpression(args[0]), renderLatexExpression(args[1]))
-        : `<span class="latex-radical"><span class="latex-radical-symbol">√</span><span class="latex-radicand">${renderLatexExpression(args[0])}</span></span>`;
+    const html = renderLatexFunction(command, args);
     return { end: cursor, html };
   }
+  const paired = parsePairedLatexDelimiterAt(source, index);
+  if (paired) return paired;
   return null;
 }
 
@@ -1211,8 +1360,66 @@ function parseLatexCommand(source, command, expectedArgs) {
   return args.length === expectedArgs && cursor === source.length ? args : null;
 }
 
-function fractionHtml(top, bottom) {
-  return `<span class="latex-frac"><span class="latex-num">${top || "&nbsp;"}</span><span class="latex-den">${bottom || "&nbsp;"}</span></span>`;
+function parsePairedLatexDelimiterAt(source, index) {
+  const pairs = [
+    { open: "\\left|", close: "\\right|", render: (inner) => delimiterHtml("|", inner, "|", `\\left|${inner}\\right|`) },
+    { open: "\\lvert", close: "\\rvert", render: (inner) => delimiterHtml("|", inner, "|", `\\lvert${inner}\\rvert`) },
+    { open: "\\lfloor", close: "\\rfloor", render: (inner) => delimiterHtml("⌊", inner, "⌋", `\\lfloor${inner}\\rfloor`) },
+    { open: "\\lceil", close: "\\rceil", render: (inner) => delimiterHtml("⌈", inner, "⌉", `\\lceil${inner}\\rceil`) }
+  ];
+
+  for (const pair of pairs) {
+    if (!source.startsWith(pair.open, index)) continue;
+    const start = index + pair.open.length;
+    const end = source.indexOf(pair.close, start);
+    if (end === -1) return null;
+    const inner = source.slice(start, end);
+    return { end: end + pair.close.length, html: pair.render(inner) };
+  }
+  return null;
+}
+
+function renderLatexFunction(command, args) {
+  const latex = `\\${command}${args.map((arg) => `{${arg}}`).join("")}`;
+  if (command === "frac") {
+    return fractionHtml(renderLatexExpression(args[0]), renderLatexExpression(args[1]), latex);
+  }
+  if (command === "sqrt") {
+    return radicalHtml(renderLatexExpression(args[0]), latex);
+  }
+  if (command === "abs") {
+    return delimiterHtml("|", args[0], "|", latex);
+  }
+  if (command === "floor") {
+    return delimiterHtml("⌊", args[0], "⌋", latex);
+  }
+  if (command === "ceil") {
+    return delimiterHtml("⌈", args[0], "⌉", latex);
+  }
+
+  const renderedArgs = args.map(renderLatexExpression).join(", ");
+  return `<span class="latex-call" data-latex="${escapeHtml(latex)}"><span class="latex-operator">${escapeHtml(LATEX_FUNCTIONS[command].display)}</span><span class="latex-paren">(</span>${renderedArgs}<span class="latex-paren">)</span></span>`;
+}
+
+function fractionHtml(top, bottom, latex = null) {
+  latex ??= `\\frac{${sourceFromRenderedHtml(top)}}{${sourceFromRenderedHtml(bottom)}}`;
+  return `<span class="latex-frac" data-latex="${escapeHtml(latex)}"><span class="latex-num">${top || "&nbsp;"}</span><span class="latex-den">${bottom || "&nbsp;"}</span></span>`;
+}
+
+function radicalHtml(inner, latex = null) {
+  return `<span class="latex-radical" data-latex="${escapeHtml(latex ?? `\\sqrt{${sourceFromRenderedHtml(inner)}}`)}"><span class="latex-radical-symbol">√</span><span class="latex-radicand">${inner || "&nbsp;"}</span></span>`;
+}
+
+function delimiterHtml(open, innerSource, close, latex) {
+  return `<span class="latex-delimited" data-latex="${escapeHtml(latex)}"><span class="latex-delimiter">${escapeHtml(open)}</span><span class="latex-delimited-inner">${renderLatexExpression(innerSource)}</span><span class="latex-delimiter">${escapeHtml(close)}</span></span>`;
+}
+
+function sourceFromRenderedHtml(html) {
+  return String(html)
+    .replaceAll(/<span[^>]*data-latex="([^"]*)"[^>]*>.*?<\/span>/g, (_, latex) => unescapeHtml(latex))
+    .replaceAll(/<[^>]+>/g, "")
+    .replaceAll("&nbsp;", "")
+    .trim();
 }
 
 function splitTopLevel(source, operator) {
@@ -1230,7 +1437,13 @@ function splitTopLevel(source, operator) {
 
 function parseFunctionCall(source, name) {
   if (!source.startsWith(`${name}(`) || !source.endsWith(")")) return null;
+  const closeIndex = matchingParen(source, name.length);
+  if (closeIndex !== source.length - 1) return null;
   const inner = source.slice(name.length + 1, -1);
+  return splitFunctionArgs(inner);
+}
+
+function splitFunctionArgs(inner) {
   const args = [];
   let depth = 0;
   let start = 0;
@@ -1245,6 +1458,16 @@ function parseFunctionCall(source, name) {
   }
   args.push(inner.slice(start));
   return args;
+}
+
+function matchingParen(source, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i += 1) {
+    if (source[i] === "(") depth += 1;
+    if (source[i] === ")") depth -= 1;
+    if (depth === 0) return i;
+  }
+  return -1;
 }
 
 function exportScene() {
@@ -1324,12 +1547,29 @@ function latexToExpression(value) {
     .replaceAll(/\\left|\\right/g, "")
     .trim();
 
-  source = replaceLatexCommand(source, "frac", (args) => `frac(${latexToExpression(args[0] ?? "")},${latexToExpression(args[1] ?? "")})`);
-  source = replaceLatexCommand(source, "sqrt", (args) => `sqrt(${latexToExpression(args[0] ?? "")})`);
-  for (const fn of ["sin", "cos", "tan", "log", "ln"]) {
-    source = replaceLatexCommand(source, fn, (args) => `${fn}(${latexToExpression(args[0] ?? "")})`);
+  source = replaceLatexDelimited(source, "|", "|", (inner) => `abs(${latexToExpression(inner)})`);
+  source = replaceLatexDelimited(source, "\\lvert", "\\rvert", (inner) => `abs(${latexToExpression(inner)})`);
+  source = replaceLatexDelimited(source, "\\lfloor", "\\rfloor", (inner) => `floor(${latexToExpression(inner)})`);
+  source = replaceLatexDelimited(source, "\\lceil", "\\rceil", (inner) => `ceil(${latexToExpression(inner)})`);
+
+  for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
+    source = replaceLatexCommand(source, command, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
   }
   return source.replaceAll(/\\pi\b/g, "pi");
+}
+
+function replaceLatexDelimited(source, open, close, build) {
+  let output = source;
+  let start = output.indexOf(open);
+  while (start !== -1) {
+    const innerStart = start + open.length;
+    const end = output.indexOf(close, innerStart);
+    if (end === -1) break;
+    const inner = output.slice(innerStart, end);
+    output = `${output.slice(0, start)}${build(inner)}${output.slice(end + close.length)}`;
+    start = output.indexOf(open, start + 1);
+  }
+  return output;
 }
 
 function parseAssignment(value) {
@@ -1437,6 +1677,14 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function unescapeHtml(value) {
+  return String(value)
+    .replaceAll("&quot;", '"')
+    .replaceAll("&gt;", ">")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&amp;", "&");
 }
 
 window.addEventListener("resize", renderScene);
