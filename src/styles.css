@@ -127,6 +127,10 @@ select {
   line-height: 1.25;
 }
 
+.math-source {
+  display: none;
+}
+
 .latex-preview {
   min-height: 28px;
   border-radius: 5px;
@@ -136,6 +140,23 @@ select {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 18px;
   line-height: 1.35;
+}
+
+.latex-editor {
+  min-height: 48px;
+  border: 1px solid #cfd5df;
+  background: #ffffff;
+  cursor: text;
+  white-space: pre-wrap;
+}
+
+.latex-editor[contenteditable="true"]:empty::before {
+  content: " ";
+}
+
+.latex-editor-small {
+  min-height: 38px;
+  font-size: 16px;
 }
 
 .latex-ref {
@@ -183,6 +204,20 @@ select {
 .math-box-small {
   min-height: 38px;
   font-size: 15px;
+}
+
+.channel-row {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.channel-label {
+  padding-top: 8px;
+  color: #596273;
+  font-size: 13px;
+  font-family: Georgia, "Times New Roman", serif;
 }
 
 .brand-row {
@@ -273,6 +308,7 @@ select {
 }
 
 .math-box:focus,
+.latex-editor:focus,
 .compact-field:focus,
 .entry-id:focus {
   outline: 2px solid #4f7dd9;

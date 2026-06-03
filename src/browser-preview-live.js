@@ -112,8 +112,7 @@ function renderPanel() {
       ...scene.functions.map(
         (entry, index) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", `
           <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Function id" />
-          <textarea class="math-box" data-field="functions.${index}.expression" aria-label="Function expression">${escapeHtml(entry.expression)}</textarea>
-          <div class="latex-preview">${toLatexPreview(entry.expression)}</div>
+          ${mathEditor(`functions.${index}.expression`, entry.expression, "Function expression")}
         `)
       ),
       addRow("Add function", "functions")
@@ -125,12 +124,9 @@ function renderPanel() {
       ...scene.colors.map(
         (entry, index) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
           <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Color id" />
-          <textarea class="math-box math-box-small" data-field="colors.${index}.red" aria-label="Red expression">r = ${escapeHtml(entry.red)}</textarea>
-          <div class="latex-preview">${toLatexPreview(entry.red)}</div>
-          <textarea class="math-box math-box-small" data-field="colors.${index}.green" aria-label="Green expression">g = ${escapeHtml(entry.green)}</textarea>
-          <div class="latex-preview">${toLatexPreview(entry.green)}</div>
-          <textarea class="math-box math-box-small" data-field="colors.${index}.blue" aria-label="Blue expression">b = ${escapeHtml(entry.blue)}</textarea>
-          <div class="latex-preview">${toLatexPreview(entry.blue)}</div>
+          <label class="channel-row"><span class="channel-label">r =</span>${mathEditor(`colors.${index}.red`, entry.red, "Red expression", true)}</label>
+          <label class="channel-row"><span class="channel-label">g =</span>${mathEditor(`colors.${index}.green`, entry.green, "Green expression", true)}</label>
+          <label class="channel-row"><span class="channel-label">b =</span>${mathEditor(`colors.${index}.blue`, entry.blue, "Blue expression", true)}</label>
         `)
       ),
       addRow("Add color", "colors")
@@ -142,8 +138,7 @@ function renderPanel() {
       ...scene.restrictions.map(
         (entry, index) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
           <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Restriction id" />
-          <textarea class="math-box" data-field="restrictions.${index}.expression" aria-label="Restriction expression">${escapeHtml(entry.expression)}</textarea>
-          <div class="latex-preview">${toLatexPreview(entry.expression)}</div>
+          ${mathEditor(`restrictions.${index}.expression`, entry.expression, "Restriction expression")}
           <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> <= 0</label>
         `)
       ),
@@ -181,6 +176,13 @@ function renderPanel() {
         </select>
       </label>
     </div>
+  `;
+}
+
+function mathEditor(field, value, label, small = false) {
+  return `
+    <div class="latex-preview latex-editor ${small ? "latex-editor-small" : ""}" data-field="${field}" data-source="${escapeHtml(value)}" contenteditable="true" role="textbox" aria-label="${escapeHtml(label)}" spellcheck="false">${toLatexPreview(value)}</div>
+    <textarea class="math-box math-source" data-source-field="${field}" tabindex="-1" aria-hidden="true">${escapeHtml(latexSourceFromExpression(value))}</textarea>
   `;
 }
 
@@ -245,11 +247,41 @@ function bindEvents() {
     }
   });
 
-  root.querySelectorAll("textarea[data-field]").forEach((field) => {
+  root.querySelectorAll(".latex-editor[data-field]").forEach((field) => {
+    field.addEventListener("focus", () => {
+      field.dataset.editing = "true";
+      field.textContent = latexSourceFromExpression(field.dataset.source ?? "");
+      placeCaretAtEnd(field);
+    });
+    field.addEventListener("beforeinput", (event) => {
+      handleLatexBeforeInput(field, event);
+    });
     field.addEventListener("input", () => {
-      expandMathShortcut(field);
+      expandLatexShortcut(field);
       updateField(field);
-      updateLatexPreview(field);
+      updateMathSource(field);
+      const diagnostics = validateScene();
+      updateStatusLights(diagnostics);
+      renderScene(diagnostics);
+    });
+    field.addEventListener("blur", () => {
+      field.dataset.editing = "false";
+      renderMathEditor(field);
+    });
+    field.addEventListener("copy", (event) => {
+      event.preventDefault();
+      event.clipboardData?.setData("text/plain", latexSourceFromExpression(field.dataset.source ?? ""));
+    });
+    field.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      document.execCommand("insertText", false, text);
+    });
+  });
+
+  root.querySelectorAll("input.entry-id[data-field]").forEach((field) => {
+    field.addEventListener("input", () => {
+      updateField(field);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
@@ -265,6 +297,7 @@ function bindEvents() {
 
   root.querySelectorAll("[data-add]").forEach((button) => {
     button.addEventListener("click", () => {
+      syncFields();
       addEntry(button.dataset.add);
       renderApp();
     });
@@ -296,7 +329,7 @@ function bindSidebarResize() {
 
 function updateField(field) {
   const [collection, rawIndex, property] = field.dataset.field.split(".");
-  const value = field.type === "checkbox" ? field.checked : stripChannelPrefix(field.value);
+  const value = readFieldValue(field);
 
   if (collection === "settings") {
     scene.settings[rawIndex] = rawIndex === "angleMode" ? value : Number(value);
@@ -313,6 +346,20 @@ function updateField(field) {
   }
 
   scene[collection][Number(rawIndex)][property] = value;
+  if (field.classList?.contains("latex-editor")) {
+    field.dataset.source = value;
+  }
+}
+
+function readFieldValue(field) {
+  if (field.type === "checkbox") return field.checked;
+  if (field.classList?.contains("latex-editor")) {
+    if (field.dataset.editing !== "true" && document.activeElement !== field) {
+      return field.dataset.source ?? sourceFromLatexText(field.textContent ?? "");
+    }
+    return sourceFromLatexText(field.textContent ?? field.dataset.source ?? "");
+  }
+  return stripChannelPrefix(field.value);
 }
 
 function syncFields() {
@@ -388,6 +435,7 @@ function renderSceneCpu(canvas) {
   drawGrid(ctx, rect.width, rect.height);
 
   const env = Object.fromEntries(scene.functions.map((entry) => [entry.id, compileExpression(entry.expression)]));
+  attachRuntimeGuard(env);
   const xPoints = axis(scene.settings.xMin, scene.settings.xMax, scene.settings.xPoints);
   const yPoints = axis(scene.settings.yMin, scene.settings.yMax, scene.settings.yPoints);
   const pixelWidth = rect.width / Math.max(1, xPoints.length - 1);
@@ -644,7 +692,16 @@ function compileExpression(source) {
         const sec = (value) => 1 / Math.cos(value);
         const csc = (value) => 1 / Math.sin(value);
         const cot = (value) => 1 / Math.tan(value);
-        const ref = (name, rx, ry) => env[name] ? env[name](rx, ry, env) : NaN;
+        const runtime = env.__runtime ?? { depth: 0, maxDepth: ${recursionLimit()} };
+        const ref = (name, rx, ry) => {
+          if (!env[name] || runtime.depth >= runtime.maxDepth) return NaN;
+          runtime.depth += 1;
+          try {
+            return env[name](rx, ry, env);
+          } finally {
+            runtime.depth -= 1;
+          }
+        };
         return ${js};
       `
     );
@@ -654,6 +711,9 @@ function compileExpression(source) {
 }
 
 function expressionToGlsl(source, env = {}, zName = null, stack = []) {
+  if (stack.length > recursionLimit()) {
+    throw new Error(`Recursion depth exceeded at ${stack.at(-1) ?? "expression"}`);
+  }
   let expression = normalizeExpressionText(source);
   expression = inlineCustomVariables(expression, env, stack, zName);
   expression = inlineBareVariables(expression, env, stack, zName);
@@ -679,6 +739,9 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
 
   expression = convertPowers(expression);
   expression = normalizeGlslNumbers(expression);
+  if (expression.length > 200000) {
+    throw new Error("Expanded expression is too large");
+  }
   if (!/^[\dA-Za-z_+\-*/().,\s~]+$/.test(expression)) {
     throw new Error(`Unsupported GLSL expression: ${source}`);
   }
@@ -694,10 +757,7 @@ function inlineCustomVariables(expression, env, stack, zName) {
     if (!env[name]) {
       throw new Error(`Unknown reference ~${name}~`);
     }
-    if (stack.includes(name)) {
-      throw new Error(`Recursive reference: ${[...stack, name].join(" -> ")}`);
-    }
-    if (stack.length >= scene.settings.maxRecursion) {
+    if (stack.length >= recursionLimit()) {
       throw new Error(`Recursion depth exceeded at ~${name}~`);
     }
     return `(${expressionToGlsl(env[name], env, zName, [...stack, name])})`;
@@ -711,10 +771,7 @@ function inlineBareVariables(expression, env, stack, zName) {
       if (!env[name]) {
         throw new Error(`Unknown variable: ${name}`);
       }
-      if (stack.includes(name)) {
-        throw new Error(`Recursive reference: ${[...stack, name].join(" -> ")}`);
-      }
-      if (stack.length >= scene.settings.maxRecursion) {
+      if (stack.length >= recursionLimit()) {
         throw new Error(`Recursion depth exceeded at ${name}`);
       }
       return `(${expressionToGlsl(env[name], env, zName, [...stack, name])})`;
@@ -796,7 +853,9 @@ function validateExpression(source, env, stack = []) {
       throw new Error("Empty function argument");
     }
     expressionToGlsl(source, env, null, stack);
-    compileExpression(source)(1, 1, Object.fromEntries(Object.entries(env).map(([id, expr]) => [id, compileExpression(expr)])));
+    const runtimeEnv = Object.fromEntries(Object.entries(env).map(([id, expr]) => [id, compileExpression(expr)]));
+    attachRuntimeGuard(runtimeEnv);
+    compileExpression(source)(1, 1, runtimeEnv);
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
     return { status: "invalid", message: error.message };
@@ -828,41 +887,139 @@ function combineDiagnostics(items) {
   return items.find((item) => item.status === "invalid") ?? { status: "valid", message: "Color is valid" };
 }
 
-function expandMathShortcut(field) {
-  const cursor = field.selectionStart;
-  const before = field.value.slice(0, cursor);
+function handleLatexBeforeInput(field, event) {
+  if (!["/", "÷"].includes(event.data)) return;
+  const cursor = getCaretOffset(field);
+  const text = field.textContent ?? "";
+  const before = text.slice(0, cursor);
+  const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\)|\{[^{}]*\})$/);
+  if (!division) return;
+
+  event.preventDefault();
+  const numerator = division[1].replace(/^\{|\}$/g, "");
+  const start = cursor - division[1].length;
+  const replacement = `\\frac{${numerator}}{}`;
+  field.textContent = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  setCaretOffset(field, start + replacement.length - 1);
+  field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+}
+
+function expandLatexShortcut(field) {
+  const cursor = getCaretOffset(field);
+  const text = field.textContent ?? "";
+  const before = text.slice(0, cursor);
   const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))(\/|÷)$/);
   if (division) {
     const numerator = division[1];
     const start = cursor - division[0].length;
-    const replacement = `frac(${numerator},)`;
-    field.value = `${field.value.slice(0, start)}${replacement}${field.value.slice(cursor)}`;
-    const nextCursor = start + `frac(${numerator},`.length;
-    field.setSelectionRange(nextCursor, nextCursor);
+    const replacement = `\\frac{${numerator}}{}`;
+    field.textContent = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+    setCaretOffset(field, start + replacement.length - 1);
     return;
   }
 
-  const shortcut = before.match(/(?:^|[^A-Za-z])(sqrt|sin|cos|tan|log|ln)$/);
+  const shortcut = before.match(/(?:^|[^A-Za-z\\])(sqrt|sin|cos|tan|log|ln)$/);
   if (!shortcut) return;
 
   const name = shortcut[1];
   const start = cursor - name.length;
-  const replacement = `${name}()`;
-  field.value = `${field.value.slice(0, start)}${replacement}${field.value.slice(cursor)}`;
-  const nextCursor = start + name.length + 1;
-  field.setSelectionRange(nextCursor, nextCursor);
+  const replacement = `\\${name}{}`;
+  field.textContent = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  setCaretOffset(field, start + replacement.length - 1);
 }
 
-function updateLatexPreview(field) {
-  const preview = field.nextElementSibling?.classList.contains("latex-preview") ? field.nextElementSibling : null;
-  if (preview) {
-    preview.innerHTML = toLatexPreview(stripChannelPrefix(field.value));
-  }
+function updateMathSource(field) {
+  const source = sourceFromLatexText(field.textContent ?? "");
+  field.dataset.source = source;
+  const raw = root.querySelector(`textarea[data-source-field="${cssEscape(field.dataset.field)}"]`);
+  if (raw) raw.value = latexSourceFromExpression(source);
+}
+
+function renderMathEditor(field) {
+  const source = field.dataset.source ?? "";
+  field.innerHTML = toLatexPreview(source);
+  updateMathSourceDisplay(field, source);
+}
+
+function updateMathSourceDisplay(field, source) {
+  const raw = root.querySelector(`textarea[data-source-field="${cssEscape(field.dataset.field)}"]`);
+  if (raw) raw.value = latexSourceFromExpression(source);
 }
 
 function toLatexPreview(source) {
   const normalized = normalizeExpressionText(source);
   return renderLatexExpression(normalized);
+}
+
+function latexSourceFromExpression(source) {
+  const normalized = normalizeExpressionText(source).trim();
+  const fraction = splitTopLevel(normalized, "/");
+  if (fraction) {
+    return `\\frac{${latexSourceFromExpression(fraction[0])}}{${latexSourceFromExpression(fraction[1])}}`;
+  }
+
+  const fracCall = parseFunctionCall(normalized, "frac");
+  if (fracCall && fracCall.length === 2) {
+    return `\\frac{${latexSourceFromExpression(fracCall[0])}}{${latexSourceFromExpression(fracCall[1])}}`;
+  }
+
+  const sqrtCall = parseFunctionCall(normalized, "sqrt");
+  if (sqrtCall && sqrtCall.length === 1) {
+    return `\\sqrt{${latexSourceFromExpression(sqrtCall[0])}}`;
+  }
+
+  return normalized
+    .replaceAll(/\bpi\b/g, "\\pi")
+    .replaceAll(/\b(sin|cos|tan|log|ln)\(/g, "\\$1{")
+    .replaceAll(/\)/g, "}");
+}
+
+function sourceFromLatexText(text) {
+  let source = text
+    .replace(/\u00a0/g, " ")
+    .replaceAll("π", "pi")
+    .replaceAll("√", "sqrt")
+    .trim();
+
+  source = replaceLatexCommand(source, "frac", (args) => `frac(${args[0] ?? ""},${args[1] ?? ""})`);
+  source = replaceLatexCommand(source, "sqrt", (args) => `sqrt(${args[0] ?? ""})`);
+  for (const fn of ["sin", "cos", "tan", "log", "ln"]) {
+    source = replaceLatexCommand(source, fn, (args) => `${fn}(${args[0] ?? ""})`);
+  }
+  return source.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\left|\\right/g, "");
+}
+
+function replaceLatexCommand(source, command, build) {
+  let output = source;
+  let marker = `\\${command}`;
+  let index = output.indexOf(marker);
+  while (index !== -1) {
+    const args = [];
+    let cursor = index + marker.length;
+    while (output[cursor] === "{") {
+      const end = matchingBrace(output, cursor);
+      if (end === -1) break;
+      args.push(output.slice(cursor + 1, end));
+      cursor = end + 1;
+    }
+    if (!args.length) {
+      index = output.indexOf(marker, index + marker.length);
+      continue;
+    }
+    output = `${output.slice(0, index)}${build(args)}${output.slice(cursor)}`;
+    index = output.indexOf(marker, index + 1);
+  }
+  return output;
+}
+
+function matchingBrace(source, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i += 1) {
+    if (source[i] === "{") depth += 1;
+    if (source[i] === "}") depth -= 1;
+    if (depth === 0) return i;
+  }
+  return -1;
 }
 
 function renderLatexExpression(source) {
@@ -996,6 +1153,62 @@ function normalizeExpressionText(value) {
 function parseAssignment(value) {
   const assignment = value.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.+)$/);
   return assignment ? { id: assignment[1], expression: assignment[2].trim() } : null;
+}
+
+function attachRuntimeGuard(env) {
+  Object.defineProperty(env, "__runtime", {
+    value: { depth: 0, maxDepth: recursionLimit() },
+    enumerable: false,
+    configurable: true
+  });
+  return env;
+}
+
+function recursionLimit() {
+  const raw = Number(scene.settings.maxRecursion);
+  return Math.max(1, Math.min(1000, Number.isFinite(raw) ? Math.trunc(raw) : 100));
+}
+
+function getCaretOffset(element) {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return element.textContent?.length ?? 0;
+  const range = selection.getRangeAt(0);
+  const clone = range.cloneRange();
+  clone.selectNodeContents(element);
+  clone.setEnd(range.endContainer, range.endOffset);
+  return clone.toString().length;
+}
+
+function setCaretOffset(element, offset) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  let remaining = offset;
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if (remaining <= node.textContent.length) {
+      range.setStart(node, remaining);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    remaining -= node.textContent.length;
+    node = walker.nextNode();
+  }
+  range.selectNodeContents(element);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function placeCaretAtEnd(element) {
+  setCaretOffset(element, element.textContent?.length ?? 0);
+}
+
+function cssEscape(value) {
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
 function splitFirst(text, delimiter) {
