@@ -23,6 +23,45 @@ const tabs = [
   ["settings", "Settings"]
 ];
 
+const BUILTIN_NAMES = new Set([
+  "x",
+  "y",
+  "z",
+  "pi",
+  "e",
+  "sin",
+  "cos",
+  "tan",
+  "asin",
+  "acos",
+  "atan",
+  "arcsin",
+  "arccos",
+  "arctan",
+  "sqrt",
+  "log",
+  "ln",
+  "abs",
+  "floor",
+  "ceil",
+  "round",
+  "min",
+  "max",
+  "exp",
+  "frac",
+  "clamp",
+  "sec",
+  "csc",
+  "cot",
+  "pow",
+  "Math",
+  "PI",
+  "ref",
+  "NaN"
+]);
+
+const RESERVED_FUNCTION_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x", "y", "z", "pi", "e", "Math", "ref", "NaN"].includes(name)));
+
 let scene = structuredClone(DEFAULT_SCENE);
 let activeTab = "functions";
 let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380");
@@ -264,6 +303,15 @@ function updateField(field) {
     return;
   }
 
+  if (collection === "functions" && property === "expression") {
+    const assignment = parseAssignment(value);
+    if (assignment) {
+      scene.functions[Number(rawIndex)].id = assignment.id;
+      scene.functions[Number(rawIndex)].expression = assignment.expression;
+      return;
+    }
+  }
+
   scene[collection][Number(rawIndex)][property] = value;
 }
 
@@ -453,6 +501,13 @@ function buildFragmentShader() {
     uniform vec2 u_resolution;
     uniform vec4 u_bounds;
 
+    float frac(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
+    float ln(float value) { return value > 0.0 ? log(value) : 0.0; }
+    float sec(float value) { return 1.0 / cos(value); }
+    float csc(float value) { return 1.0 / sin(value); }
+    float cot(float value) { return 1.0 / tan(value); }
+    float clamp3(float value, float low, float high) { return clamp(value, low, high); }
+
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
       float x = mix(u_bounds.x, u_bounds.y, uv.x);
@@ -564,18 +619,19 @@ function axis(min, max, count) {
 
 function compileExpression(source) {
   try {
-    let js = stripChannelPrefix(source)
+    let js = normalizeExpressionText(source)
+      .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
       .replaceAll("^", "**")
       .replaceAll("pi", "Math.PI")
       .replaceAll(/\be\b/g, "Math.E")
       .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sqrt|abs|floor|ceil|round|min|max|exp|log)\b/g, "Math.$1")
-      .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1")
-      .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)');
+      .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
 
     js = js.replaceAll(/(\d)([xy])/g, "$1*$2");
     js = js.replaceAll(/([xy])(\d)/g, "$1*$2");
     js = js.replaceAll(/(\d)\(/g, "$1*(");
     js = js.replaceAll(/\)(\d|[xy])/g, ")*$1");
+    js = rewriteBareIdentifiers(js, (name) => `ref("${name}", x, y)`, new Set(["Math"]));
 
     return new Function(
       "x",
@@ -598,8 +654,9 @@ function compileExpression(source) {
 }
 
 function expressionToGlsl(source, env = {}, zName = null, stack = []) {
-  let expression = stripChannelPrefix(source);
+  let expression = normalizeExpressionText(source);
   expression = inlineCustomVariables(expression, env, stack, zName);
+  expression = inlineBareVariables(expression, env, stack, zName);
   expression = expression
     .replaceAll(/\barcsin\b/g, "asin")
     .replaceAll(/\barccos\b/g, "acos")
@@ -647,6 +704,39 @@ function inlineCustomVariables(expression, env, stack, zName) {
   });
 }
 
+function inlineBareVariables(expression, env, stack, zName) {
+  return rewriteBareIdentifiers(
+    expression,
+    (name) => {
+      if (!env[name]) {
+        throw new Error(`Unknown variable: ${name}`);
+      }
+      if (stack.includes(name)) {
+        throw new Error(`Recursive reference: ${[...stack, name].join(" -> ")}`);
+      }
+      if (stack.length >= scene.settings.maxRecursion) {
+        throw new Error(`Recursion depth exceeded at ${name}`);
+      }
+      return `(${expressionToGlsl(env[name], env, zName, [...stack, name])})`;
+    },
+    new Set()
+  );
+}
+
+function rewriteBareIdentifiers(expression, replace, extraReserved) {
+  const stringRanges = [];
+  expression.replaceAll(/"[^"]*"/g, (match, offset) => {
+    stringRanges.push([offset, offset + match.length]);
+    return match;
+  });
+
+  return expression.replaceAll(/\b[A-Za-z_]\w*\b/g, (name, offset) => {
+    if (stringRanges.some(([start, end]) => offset >= start && offset < end)) return name;
+    if (BUILTIN_NAMES.has(name) || extraReserved.has(name)) return name;
+    return replace(name);
+  });
+}
+
 function convertPowers(expression) {
   let output = expression;
   const powerPattern = /([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]+\))\s*\^\s*([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]+\))/;
@@ -667,7 +757,13 @@ function validateScene() {
     summary: "GLSL ready"
   };
 
-  diagnostics.functions = scene.functions.map((entry) => validateExpression(entry.expression, env, [entry.id]));
+  diagnostics.functions = scene.functions.map((entry) => {
+    const result = validateExpression(entry.expression, env, [entry.id]);
+    if (result.status === "valid" && RESERVED_FUNCTION_NAMES.has(entry.id)) {
+      return { status: "warning", message: `"${entry.id}" shadows a built-in function name` };
+    }
+    return result;
+  });
   diagnostics.colors = scene.colors.map((entry) =>
     combineDiagnostics([
       validateExpression(entry.red, env),
@@ -688,8 +784,9 @@ function validateScene() {
 
   const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.draws];
   const firstError = all.find((item) => item.status === "invalid");
+  const firstWarning = all.find((item) => item.status === "warning");
   diagnostics.hasErrors = Boolean(firstError);
-  diagnostics.summary = firstError ? firstError.message : "GLSL ready";
+  diagnostics.summary = firstError ? firstError.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
 }
 
@@ -698,7 +795,7 @@ function validateExpression(source, env, stack = []) {
     if (/\b[A-Za-z]\w*\(\s*\)/.test(stripChannelPrefix(source))) {
       throw new Error("Empty function argument");
     }
-    expressionToGlsl(source, env, null, stack.slice(0, -1));
+    expressionToGlsl(source, env, null, stack);
     compileExpression(source)(1, 1, Object.fromEntries(Object.entries(env).map(([id, expr]) => [id, compileExpression(expr)])));
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
@@ -714,6 +811,7 @@ function updateStatusLights(diagnostics) {
     if (!status || !item) return;
     status.classList.toggle("valid", item.status === "valid");
     status.classList.toggle("invalid", item.status === "invalid");
+    status.classList.toggle("warning", item.status === "warning");
     status.setAttribute("aria-label", item.message);
     row.setAttribute("title", item.message);
   });
@@ -733,6 +831,17 @@ function combineDiagnostics(items) {
 function expandMathShortcut(field) {
   const cursor = field.selectionStart;
   const before = field.value.slice(0, cursor);
+  const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))(\/|÷)$/);
+  if (division) {
+    const numerator = division[1];
+    const start = cursor - division[0].length;
+    const replacement = `frac(${numerator},)`;
+    field.value = `${field.value.slice(0, start)}${replacement}${field.value.slice(cursor)}`;
+    const nextCursor = start + `frac(${numerator},`.length;
+    field.setSelectionRange(nextCursor, nextCursor);
+    return;
+  }
+
   const shortcut = before.match(/(?:^|[^A-Za-z])(sqrt|sin|cos|tan|log|ln)$/);
   if (!shortcut) return;
 
@@ -752,16 +861,71 @@ function updateLatexPreview(field) {
 }
 
 function toLatexPreview(source) {
-  const text = stripChannelPrefix(source)
-    .replaceAll(/sqrt\(([^()]*)\)/g, "√($1)")
-    .replaceAll(/sin/g, "sin")
-    .replaceAll(/cos/g, "cos")
-    .replaceAll(/tan/g, "tan")
-    .replaceAll(/pi/g, "π")
-    .replaceAll(/\^2/g, "²")
-    .replaceAll(/\^3/g, "³")
-    .replaceAll(/~([A-Za-z]\w*)~/g, "<span class=\"latex-ref\">$1</span>");
-  return escapeHtml(text).replaceAll("&lt;span class=&quot;latex-ref&quot;&gt;", "<span class=\"latex-ref\">").replaceAll("&lt;/span&gt;", "</span>");
+  const normalized = normalizeExpressionText(source);
+  return renderLatexExpression(normalized);
+}
+
+function renderLatexExpression(source) {
+  const trimmed = source.trim();
+  const fraction = splitTopLevel(trimmed, "/");
+  if (fraction) {
+    return fractionHtml(renderLatexExpression(fraction[0]), renderLatexExpression(fraction[1]));
+  }
+
+  const fracCall = parseFunctionCall(trimmed, "frac");
+  if (fracCall && fracCall.length === 2) {
+    return fractionHtml(renderLatexExpression(fracCall[0]), renderLatexExpression(fracCall[1]));
+  }
+
+  const sqrtCall = parseFunctionCall(trimmed, "sqrt");
+  if (sqrtCall && sqrtCall.length === 1) {
+    return `<span class="latex-radical"><span class="latex-radical-symbol">√</span><span class="latex-radicand">${renderLatexExpression(sqrtCall[0])}</span></span>`;
+  }
+
+  let text = escapeHtml(trimmed)
+    .replaceAll(/~([A-Za-z]\w*)~/g, "<span class=\"latex-ref\">$1</span>")
+    .replaceAll(/\bpi\b/g, "π")
+    .replaceAll(/\^2/g, "<sup>2</sup>")
+    .replaceAll(/\^3/g, "<sup>3</sup>");
+
+  text = text.replaceAll(/\b(sin|cos|tan|log|ln)\(([^()]*)\)/g, (_match, name, arg) => `${name}(${renderLatexExpression(arg)})`);
+  return text;
+}
+
+function fractionHtml(top, bottom) {
+  return `<span class="latex-frac"><span class="latex-num">${top || "&nbsp;"}</span><span class="latex-den">${bottom || "&nbsp;"}</span></span>`;
+}
+
+function splitTopLevel(source, operator) {
+  let depth = 0;
+  for (let i = source.length - 1; i >= 0; i -= 1) {
+    const char = source[i];
+    if (char === ")") depth += 1;
+    if (char === "(") depth -= 1;
+    if (depth === 0 && char === operator) {
+      return [source.slice(0, i), source.slice(i + 1)];
+    }
+  }
+  return null;
+}
+
+function parseFunctionCall(source, name) {
+  if (!source.startsWith(`${name}(`) || !source.endsWith(")")) return null;
+  const inner = source.slice(name.length + 1, -1);
+  const args = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < inner.length; i += 1) {
+    const char = inner[i];
+    if (char === "(") depth += 1;
+    if (char === ")") depth -= 1;
+    if (char === "," && depth === 0) {
+      args.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  args.push(inner.slice(start));
+  return args;
 }
 
 function exportScene() {
@@ -821,6 +985,17 @@ function importScene(raw) {
 
 function stripChannelPrefix(value) {
   return value.replace(/^[rgb]\s*=\s*/, "").trim();
+}
+
+function normalizeExpressionText(value) {
+  const stripped = stripChannelPrefix(value);
+  const assignment = parseAssignment(stripped);
+  return assignment ? assignment.expression : stripped;
+}
+
+function parseAssignment(value) {
+  const assignment = value.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.+)$/);
+  return assignment ? { id: assignment[1], expression: assignment[2].trim() } : null;
 }
 
 function splitFirst(text, delimiter) {

@@ -146,6 +146,40 @@ select {
   color: #2f5fba;
 }
 
+.latex-frac {
+  display: inline-grid;
+  grid-template-rows: auto auto;
+  min-width: 1.5em;
+  vertical-align: middle;
+  text-align: center;
+  line-height: 1.05;
+}
+
+.latex-num {
+  padding: 0 0.22em 0.12em;
+  border-bottom: 1px solid currentColor;
+}
+
+.latex-den {
+  padding: 0.12em 0.22em 0;
+}
+
+.latex-radical {
+  display: inline-flex;
+  align-items: stretch;
+  vertical-align: middle;
+}
+
+.latex-radical-symbol {
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+.latex-radicand {
+  border-top: 1px solid currentColor;
+  padding: 0 0.2em;
+}
+
 .math-box-small {
   min-height: 38px;
   font-size: 15px;
