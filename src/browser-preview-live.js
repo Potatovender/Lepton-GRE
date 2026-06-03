@@ -65,6 +65,8 @@ const RESERVED_FUNCTION_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x
 let scene = structuredClone(DEFAULT_SCENE);
 let activeTab = "functions";
 let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380");
+let viewport = loadViewport();
+let panRenderFrame = 0;
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -101,6 +103,7 @@ function renderApp() {
   `;
 
   bindEvents();
+  bindCanvasPan();
   renderScene(diagnostics);
 }
 
@@ -234,6 +237,7 @@ function bindEvents() {
   });
   root.querySelector('[data-action="reset"]')?.addEventListener("click", () => {
     scene = structuredClone(DEFAULT_SCENE);
+    viewport = loadViewport(true);
     renderApp();
   });
   root.querySelector('[data-action="export"]')?.addEventListener("click", () => {
@@ -309,7 +313,7 @@ function bindSidebarResize() {
   if (!resizer) return;
 
   const onMove = (event) => {
-    sidebarWidth = Math.max(280, Math.min(620, event.clientX));
+    sidebarWidth = Math.max(220, Math.min(Math.max(360, window.innerWidth - 260), event.clientX));
     localStorage.setItem("lepton-sidebar-width", String(sidebarWidth));
     root.querySelector(".app-shell")?.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
     renderScene(validateScene());
@@ -327,12 +331,69 @@ function bindSidebarResize() {
   });
 }
 
+function bindCanvasPan() {
+  const pane = root.querySelector(".renderer-pane");
+  const canvas = root.querySelector(".grid-canvas");
+  if (!pane || !canvas) return;
+
+  let drag = null;
+  pane.addEventListener("pointerdown", (event) => {
+    if (event.target !== canvas) return;
+    event.preventDefault();
+    pane.setPointerCapture(event.pointerId);
+    drag = {
+      x: event.clientX,
+      y: event.clientY,
+      start: { ...viewport }
+    };
+    pane.classList.add("is-panning");
+  });
+
+  pane.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    const rect = canvas.getBoundingClientRect();
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    const unitsX = (drag.start.xMax - drag.start.xMin) * (dx / Math.max(1, rect.width));
+    const unitsY = (drag.start.yMax - drag.start.yMin) * (dy / Math.max(1, rect.height));
+    viewport = {
+      xMin: drag.start.xMin - unitsX,
+      xMax: drag.start.xMax - unitsX,
+      yMin: drag.start.yMin - unitsY,
+      yMax: drag.start.yMax - unitsY
+    };
+    saveViewport();
+    schedulePanRender();
+  });
+
+  const stopPan = (event) => {
+    if (!drag) return;
+    pane.releasePointerCapture?.(event.pointerId);
+    pane.classList.remove("is-panning");
+    drag = null;
+  };
+  pane.addEventListener("pointerup", stopPan);
+  pane.addEventListener("pointercancel", stopPan);
+}
+
+function schedulePanRender() {
+  if (panRenderFrame) return;
+  panRenderFrame = requestAnimationFrame(() => {
+    panRenderFrame = 0;
+    renderScene(validateScene());
+  });
+}
+
 function updateField(field) {
   const [collection, rawIndex, property] = field.dataset.field.split(".");
   const value = readFieldValue(field);
 
   if (collection === "settings") {
     scene.settings[rawIndex] = rawIndex === "angleMode" ? value : Number(value);
+    if (["xMin", "xMax", "yMin", "yMax"].includes(rawIndex)) {
+      viewport = sceneViewport();
+      saveViewport();
+    }
     return;
   }
 
@@ -436,8 +497,8 @@ function renderSceneCpu(canvas) {
 
   const env = Object.fromEntries(scene.functions.map((entry) => [entry.id, compileExpression(entry.expression)]));
   attachRuntimeGuard(env);
-  const xPoints = axis(scene.settings.xMin, scene.settings.xMax, scene.settings.xPoints);
-  const yPoints = axis(scene.settings.yMin, scene.settings.yMax, scene.settings.yPoints);
+  const xPoints = axis(viewport.xMin, viewport.xMax, scene.settings.xPoints);
+  const yPoints = axis(viewport.yMin, viewport.yMax, scene.settings.yPoints);
   const pixelWidth = rect.width / Math.max(1, xPoints.length - 1);
   const pixelHeight = rect.height / Math.max(1, yPoints.length - 1);
 
@@ -509,10 +570,10 @@ function renderSceneWebGl(canvas) {
   gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
   gl.uniform4f(
     gl.getUniformLocation(program, "u_bounds"),
-    scene.settings.xMin,
-    scene.settings.xMax,
-    scene.settings.yMin,
-    scene.settings.yMax
+    viewport.xMin,
+    viewport.xMax,
+    viewport.yMin,
+    viewport.yMax
   );
   gl.clearColor(0.97, 0.98, 0.99, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
@@ -694,7 +755,8 @@ function compileExpression(source) {
         const cot = (value) => 1 / Math.tan(value);
         const runtime = env.__runtime ?? { depth: 0, maxDepth: ${recursionLimit()} };
         const ref = (name, rx, ry) => {
-          if (!env[name] || runtime.depth >= runtime.maxDepth) return NaN;
+          if (!env[name]) return NaN;
+          if (runtime.depth >= runtime.maxDepth) return rx + ry;
           runtime.depth += 1;
           try {
             return env[name](rx, ry, env);
@@ -712,7 +774,7 @@ function compileExpression(source) {
 
 function expressionToGlsl(source, env = {}, zName = null, stack = []) {
   if (stack.length > recursionLimit()) {
-    throw new Error(`Recursion depth exceeded at ${stack.at(-1) ?? "expression"}`);
+    return recursionBaseGlsl(zName);
   }
   let expression = normalizeExpressionText(source);
   expression = inlineCustomVariables(expression, env, stack, zName);
@@ -752,13 +814,17 @@ function normalizeGlslNumbers(expression) {
   return expression.replaceAll(/\b\d+(?:\.\d+)?\b/g, (match) => (match.includes(".") ? match : `${match}.0`));
 }
 
+function recursionBaseGlsl(zName) {
+  return zName ? `(${zName}+y)` : "(x+y)";
+}
+
 function inlineCustomVariables(expression, env, stack, zName) {
   return expression.replaceAll(/~([A-Za-z]\w*)~/g, (_, name) => {
     if (!env[name]) {
       throw new Error(`Unknown reference ~${name}~`);
     }
     if (stack.length >= recursionLimit()) {
-      throw new Error(`Recursion depth exceeded at ~${name}~`);
+      return `(${recursionBaseGlsl(zName)})`;
     }
     return `(${expressionToGlsl(env[name], env, zName, [...stack, name])})`;
   });
@@ -772,7 +838,7 @@ function inlineBareVariables(expression, env, stack, zName) {
         throw new Error(`Unknown variable: ${name}`);
       }
       if (stack.length >= recursionLimit()) {
-        throw new Error(`Recursion depth exceeded at ${name}`);
+        return `(${recursionBaseGlsl(zName)})`;
       }
       return `(${expressionToGlsl(env[name], env, zName, [...stack, name])})`;
     },
@@ -1024,6 +1090,16 @@ function matchingBrace(source, openIndex) {
 
 function renderLatexExpression(source) {
   const trimmed = source.trim();
+  const latexFrac = parseLatexCommand(trimmed, "frac", 2);
+  if (latexFrac) {
+    return fractionHtml(renderLatexExpression(latexFrac[0]), renderLatexExpression(latexFrac[1]));
+  }
+
+  const latexSqrt = parseLatexCommand(trimmed, "sqrt", 1);
+  if (latexSqrt) {
+    return `<span class="latex-radical"><span class="latex-radical-symbol">√</span><span class="latex-radicand">${renderLatexExpression(latexSqrt[0])}</span></span>`;
+  }
+
   const fraction = splitTopLevel(trimmed, "/");
   if (fraction) {
     return fractionHtml(renderLatexExpression(fraction[0]), renderLatexExpression(fraction[1]));
@@ -1047,6 +1123,20 @@ function renderLatexExpression(source) {
 
   text = text.replaceAll(/\b(sin|cos|tan|log|ln)\(([^()]*)\)/g, (_match, name, arg) => `${name}(${renderLatexExpression(arg)})`);
   return text;
+}
+
+function parseLatexCommand(source, command, expectedArgs) {
+  const marker = `\\${command}`;
+  if (!source.startsWith(marker)) return null;
+  const args = [];
+  let cursor = marker.length;
+  while (args.length < expectedArgs && source[cursor] === "{") {
+    const end = matchingBrace(source, cursor);
+    if (end === -1) return null;
+    args.push(source.slice(cursor + 1, end));
+    cursor = end + 1;
+  }
+  return args.length === expectedArgs && cursor === source.length ? args : null;
 }
 
 function fractionHtml(top, bottom) {
@@ -1162,6 +1252,35 @@ function attachRuntimeGuard(env) {
     configurable: true
   });
   return env;
+}
+
+function sceneViewport() {
+  return {
+    xMin: scene.settings.xMin,
+    xMax: scene.settings.xMax,
+    yMin: scene.settings.yMin,
+    yMax: scene.settings.yMax
+  };
+}
+
+function loadViewport(reset = false) {
+  if (reset) {
+    localStorage.removeItem("lepton-viewport");
+    return sceneViewport();
+  }
+  try {
+    const stored = JSON.parse(localStorage.getItem("lepton-viewport") ?? "null");
+    if (stored && ["xMin", "xMax", "yMin", "yMax"].every((key) => Number.isFinite(stored[key]))) {
+      return stored;
+    }
+  } catch {
+    localStorage.removeItem("lepton-viewport");
+  }
+  return sceneViewport();
+}
+
+function saveViewport() {
+  localStorage.setItem("lepton-viewport", JSON.stringify(viewport));
 }
 
 function recursionLimit() {

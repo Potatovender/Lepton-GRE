@@ -27,7 +27,7 @@ select {
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-columns: minmax(280px, var(--sidebar-width, 380px)) 6px 1fr;
+  grid-template-columns: minmax(220px, var(--sidebar-width, 380px)) 10px 1fr;
   overflow: hidden;
 }
 
@@ -321,23 +321,44 @@ select {
   min-height: 0;
   overflow: hidden;
   background: #f8fafc;
+  touch-action: none;
+  user-select: none;
 }
 
 .sidebar-resizer {
-  background: #e6eaf1;
+  position: relative;
+  background: #eef1f5;
   cursor: col-resize;
+}
+
+.sidebar-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0 3px;
+  border-radius: 999px;
+  background: #c8d0dc;
 }
 
 .sidebar-resizer:hover,
 .sidebar-resizer:focus {
-  background: #4f7dd9;
+  background: #d9e5ff;
   outline: none;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer:focus::before {
+  background: #4f7dd9;
 }
 
 .grid-canvas {
   width: 100%;
   height: 100%;
   display: block;
+  cursor: grab;
+}
+
+.renderer-pane.is-panning .grid-canvas {
+  cursor: grabbing;
 }
 
 .render-overlay {
