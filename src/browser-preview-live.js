@@ -254,16 +254,22 @@ function bindEvents() {
   root.querySelectorAll(".latex-editor[data-field]").forEach((field) => {
     field.addEventListener("focus", () => {
       field.dataset.editing = "true";
-      field.textContent = latexSourceFromExpression(field.dataset.source ?? "");
+      renderMathEditor(field);
       placeCaretAtEnd(field);
     });
     field.addEventListener("beforeinput", (event) => {
       handleLatexBeforeInput(field, event);
     });
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        field.blur();
+      }
+    });
     field.addEventListener("input", () => {
       expandLatexShortcut(field);
-      updateField(field);
       updateMathSource(field);
+      updateField(field);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
@@ -359,8 +365,8 @@ function bindCanvasPan() {
     viewport = {
       xMin: drag.start.xMin - unitsX,
       xMax: drag.start.xMax - unitsX,
-      yMin: drag.start.yMin - unitsY,
-      yMax: drag.start.yMax - unitsY
+      yMin: drag.start.yMin + unitsY,
+      yMax: drag.start.yMax + unitsY
     };
     saveViewport();
     schedulePanRender();
@@ -374,6 +380,29 @@ function bindCanvasPan() {
   };
   pane.addEventListener("pointerup", stopPan);
   pane.addEventListener("pointercancel", stopPan);
+  pane.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const xRatio = (event.clientX - rect.left) / Math.max(1, rect.width);
+      const yRatio = 1 - (event.clientY - rect.top) / Math.max(1, rect.height);
+      const width = viewport.xMax - viewport.xMin;
+      const height = viewport.yMax - viewport.yMin;
+      const centerX = viewport.xMin + width * xRatio;
+      const centerY = viewport.yMin + height * yRatio;
+      const zoom = Math.max(0.2, Math.min(5, Math.exp(event.deltaY * 0.001)));
+      viewport = {
+        xMin: centerX - (centerX - viewport.xMin) * zoom,
+        xMax: centerX + (viewport.xMax - centerX) * zoom,
+        yMin: centerY - (centerY - viewport.yMin) * zoom,
+        yMax: centerY + (viewport.yMax - centerY) * zoom
+      };
+      saveViewport();
+      schedulePanRender();
+    },
+    { passive: false }
+  );
 }
 
 function schedulePanRender() {
@@ -418,7 +447,7 @@ function readFieldValue(field) {
     if (field.dataset.editing !== "true" && document.activeElement !== field) {
       return field.dataset.source ?? sourceFromLatexText(field.textContent ?? "");
     }
-    return sourceFromLatexText(field.textContent ?? field.dataset.source ?? "");
+    return sourceFromLatexText(editorSourceText(field));
   }
   return stripChannelPrefix(field.value);
 }
@@ -915,7 +944,7 @@ function validateScene() {
 
 function validateExpression(source, env, stack = []) {
   try {
-    if (/\b[A-Za-z]\w*\(\s*\)/.test(stripChannelPrefix(source))) {
+    if (/\b[A-Za-z]\w*\(\s*\)/.test(normalizeExpressionText(source))) {
       throw new Error("Empty function argument");
     }
     expressionToGlsl(source, env, null, stack);
@@ -956,7 +985,7 @@ function combineDiagnostics(items) {
 function handleLatexBeforeInput(field, event) {
   if (!["/", "÷"].includes(event.data)) return;
   const cursor = getCaretOffset(field);
-  const text = field.textContent ?? "";
+  const text = editorSourceText(field);
   const before = text.slice(0, cursor);
   const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\)|\{[^{}]*\})$/);
   if (!division) return;
@@ -965,21 +994,23 @@ function handleLatexBeforeInput(field, event) {
   const numerator = division[1].replace(/^\{|\}$/g, "");
   const start = cursor - division[1].length;
   const replacement = `\\frac{${numerator}}{}`;
-  field.textContent = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  field.dataset.source = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  renderMathEditor(field);
   setCaretOffset(field, start + replacement.length - 1);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
 
 function expandLatexShortcut(field) {
   const cursor = getCaretOffset(field);
-  const text = field.textContent ?? "";
+  const text = editorSourceText(field);
   const before = text.slice(0, cursor);
   const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))(\/|÷)$/);
   if (division) {
     const numerator = division[1];
     const start = cursor - division[0].length;
     const replacement = `\\frac{${numerator}}{}`;
-    field.textContent = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+    field.dataset.source = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+    renderMathEditor(field);
     setCaretOffset(field, start + replacement.length - 1);
     return;
   }
@@ -990,12 +1021,13 @@ function expandLatexShortcut(field) {
   const name = shortcut[1];
   const start = cursor - name.length;
   const replacement = `\\${name}{}`;
-  field.textContent = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  field.dataset.source = `${text.slice(0, start)}${replacement}${text.slice(cursor)}`;
+  renderMathEditor(field);
   setCaretOffset(field, start + replacement.length - 1);
 }
 
 function updateMathSource(field) {
-  const source = sourceFromLatexText(field.textContent ?? "");
+  const source = sourceFromLatexText(editorSourceText(field));
   field.dataset.source = source;
   const raw = root.querySelector(`textarea[data-source-field="${cssEscape(field.dataset.field)}"]`);
   if (raw) raw.value = latexSourceFromExpression(source);
@@ -1004,6 +1036,7 @@ function updateMathSource(field) {
 function renderMathEditor(field) {
   const source = field.dataset.source ?? "";
   field.innerHTML = toLatexPreview(source);
+  field.dataset.rendered = "true";
   updateMathSourceDisplay(field, source);
 }
 
@@ -1013,12 +1046,13 @@ function updateMathSourceDisplay(field, source) {
 }
 
 function toLatexPreview(source) {
-  const normalized = normalizeExpressionText(source);
+  const normalized = normalizeExpressionDisplayText(source);
   return renderLatexExpression(normalized);
 }
 
 function latexSourceFromExpression(source) {
-  const normalized = normalizeExpressionText(source).trim();
+  const normalized = normalizeExpressionDisplayText(source).trim();
+  if (normalized.startsWith("\\")) return normalized;
   const fraction = splitTopLevel(normalized, "/");
   if (fraction) {
     return `\\frac{${latexSourceFromExpression(fraction[0])}}{${latexSourceFromExpression(fraction[1])}}`;
@@ -1041,18 +1075,18 @@ function latexSourceFromExpression(source) {
 }
 
 function sourceFromLatexText(text) {
-  let source = text
+  return text
     .replace(/\u00a0/g, " ")
     .replaceAll("π", "pi")
     .replaceAll("√", "sqrt")
     .trim();
+}
 
-  source = replaceLatexCommand(source, "frac", (args) => `frac(${args[0] ?? ""},${args[1] ?? ""})`);
-  source = replaceLatexCommand(source, "sqrt", (args) => `sqrt(${args[0] ?? ""})`);
-  for (const fn of ["sin", "cos", "tan", "log", "ln"]) {
-    source = replaceLatexCommand(source, fn, (args) => `${fn}(${args[0] ?? ""})`);
+function editorSourceText(field) {
+  if (field.dataset.rendered === "true" && field.querySelector(".latex-frac, .latex-radical")) {
+    return field.dataset.source ?? "";
   }
-  return source.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\left|\\right/g, "");
+  return field.textContent ?? field.dataset.source ?? "";
 }
 
 function replaceLatexCommand(source, command, build) {
@@ -1090,6 +1124,16 @@ function matchingBrace(source, openIndex) {
 
 function renderLatexExpression(source) {
   const trimmed = source.trim();
+  if (!trimmed) return "";
+
+  const commandIndex = nextLatexCommandIndex(trimmed);
+  if (commandIndex !== -1) {
+    const parsed = parseLatexCommandAt(trimmed, commandIndex);
+    if (parsed) {
+      return `${renderLatexExpression(trimmed.slice(0, commandIndex))}${parsed.html}${renderLatexExpression(trimmed.slice(parsed.end))}`;
+    }
+  }
+
   const latexFrac = parseLatexCommand(trimmed, "frac", 2);
   if (latexFrac) {
     return fractionHtml(renderLatexExpression(latexFrac[0]), renderLatexExpression(latexFrac[1]));
@@ -1123,6 +1167,34 @@ function renderLatexExpression(source) {
 
   text = text.replaceAll(/\b(sin|cos|tan|log|ln)\(([^()]*)\)/g, (_match, name, arg) => `${name}(${renderLatexExpression(arg)})`);
   return text;
+}
+
+function nextLatexCommandIndex(source) {
+  const indexes = ["\\frac", "\\sqrt"].map((command) => source.indexOf(command)).filter((index) => index !== -1);
+  return indexes.length ? Math.min(...indexes) : -1;
+}
+
+function parseLatexCommandAt(source, index) {
+  for (const command of ["frac", "sqrt"]) {
+    const marker = `\\${command}`;
+    if (!source.startsWith(marker, index)) continue;
+    const expectedArgs = command === "frac" ? 2 : 1;
+    const args = [];
+    let cursor = index + marker.length;
+    while (args.length < expectedArgs && source[cursor] === "{") {
+      const end = matchingBrace(source, cursor);
+      if (end === -1) return null;
+      args.push(source.slice(cursor + 1, end));
+      cursor = end + 1;
+    }
+    if (args.length !== expectedArgs) return null;
+    const html =
+      command === "frac"
+        ? fractionHtml(renderLatexExpression(args[0]), renderLatexExpression(args[1]))
+        : `<span class="latex-radical"><span class="latex-radical-symbol">√</span><span class="latex-radicand">${renderLatexExpression(args[0])}</span></span>`;
+    return { end: cursor, html };
+  }
+  return null;
 }
 
 function parseLatexCommand(source, command, expectedArgs) {
@@ -1235,9 +1307,29 @@ function stripChannelPrefix(value) {
 }
 
 function normalizeExpressionText(value) {
+  const display = normalizeExpressionDisplayText(value);
+  return latexToExpression(display);
+}
+
+function normalizeExpressionDisplayText(value) {
   const stripped = stripChannelPrefix(value);
   const assignment = parseAssignment(stripped);
   return assignment ? assignment.expression : stripped;
+}
+
+function latexToExpression(value) {
+  let source = String(value)
+    .replace(/\u00a0/g, " ")
+    .replaceAll("π", "pi")
+    .replaceAll(/\\left|\\right/g, "")
+    .trim();
+
+  source = replaceLatexCommand(source, "frac", (args) => `frac(${latexToExpression(args[0] ?? "")},${latexToExpression(args[1] ?? "")})`);
+  source = replaceLatexCommand(source, "sqrt", (args) => `sqrt(${latexToExpression(args[0] ?? "")})`);
+  for (const fn of ["sin", "cos", "tan", "log", "ln"]) {
+    source = replaceLatexCommand(source, fn, (args) => `${fn}(${latexToExpression(args[0] ?? "")})`);
+  }
+  return source.replaceAll(/\\pi\b/g, "pi");
 }
 
 function parseAssignment(value) {
