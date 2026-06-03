@@ -106,7 +106,7 @@ function renderApp() {
         <header class="panel-header">
           <div class="brand-row">
             <strong>Lepton-GRE</strong>
-            <button class="toolbar-button primary" data-action="render">Render</button>
+            <button class="toolbar-button primary" data-action="render">Refresh</button>
           </div>
         </header>
         <nav class="tab-row" aria-label="Editor sections">
