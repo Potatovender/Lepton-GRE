@@ -345,6 +345,27 @@ select {
   gap: 12px;
 }
 
+.display-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.display-button {
+  border: 0;
+  border-radius: 5px;
+  padding: 7px 9px;
+  background: #eef1f5;
+  color: #4c5668;
+  cursor: pointer;
+}
+
+.display-button[aria-selected="true"] {
+  background: #26364f;
+  color: #ffffff;
+}
+
 .loading-note {
   color: #667085;
   font-size: 12px;
@@ -374,7 +395,14 @@ select {
   border-radius: 5px;
   background: #eef1f5;
   color: #596273;
-  cursor: default;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.row-action:hover {
+  background: #f5d9d7;
+  color: #9f2f2a;
 }
 
 .add-row {
@@ -406,6 +434,33 @@ select {
   display: grid;
   gap: 12px;
   padding: 12px;
+}
+
+.text-mode-panel {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+  padding: 12px;
+}
+
+.scene-textarea {
+  width: 100%;
+  min-height: 100%;
+  resize: none;
+  border: 1px solid #cfd5df;
+  border-radius: 6px;
+  padding: 12px;
+  background: #ffffff;
+  color: #202938;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.text-mode-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .settings-row {

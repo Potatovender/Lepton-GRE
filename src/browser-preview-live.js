@@ -1,7 +1,13 @@
 const DEFAULT_SCENE = {
-  functions: [{ id: "eq", expression: "sin(x)+cos(y)" }],
-  colors: [{ id: "rgb", red: "128+127*sin(x)", green: "128+127*cos(x)", blue: "180" }],
-  restrictions: [{ id: "rest", expression: "1", checkSmaller: false }],
+  functions: [
+    { id: "eq", expression: "sin(x)+cos(y)" },
+    { id: "r", expression: "128+127*sin(x)" },
+    { id: "g", expression: "128+127*cos(x)" },
+    { id: "b", expression: "180" },
+    { id: "rest", expression: "1" }
+  ],
+  colors: [{ id: "rgb", red: "r", green: "g", blue: "b" }],
+  restrictions: [{ id: "rest", expression: "rest", checkSmaller: false }],
   draws: [{ equationId: "eq", colorId: "rgb", restrictionId: "rest" }],
   settings: {
     xMin: -15,
@@ -38,10 +44,27 @@ const BUILTIN_NAMES = new Set([
   "arcsin",
   "arccos",
   "arctan",
+  "arcsec",
+  "arccsc",
+  "arccot",
+  "sinh",
+  "cosh",
+  "tanh",
+  "sech",
+  "csch",
+  "coth",
+  "arcsinh",
+  "arccosh",
+  "arctanh",
+  "arcsech",
+  "arccsch",
+  "arccoth",
   "sqrt",
+  "cbrt",
   "log",
   "ln",
   "abs",
+  "sign",
   "floor",
   "ceil",
   "round",
@@ -71,10 +94,27 @@ const LATEX_FUNCTIONS = {
   arcsin: { internal: "arcsin", args: 1, display: "arcsin" },
   arccos: { internal: "arccos", args: 1, display: "arccos" },
   arctan: { internal: "arctan", args: 1, display: "arctan" },
+  arcsec: { internal: "arcsec", args: 1, display: "arcsec" },
+  arccsc: { internal: "arccsc", args: 1, display: "arccsc" },
+  arccot: { internal: "arccot", args: 1, display: "arccot" },
+  sinh: { internal: "sinh", args: 1, display: "sinh" },
+  cosh: { internal: "cosh", args: 1, display: "cosh" },
+  tanh: { internal: "tanh", args: 1, display: "tanh" },
+  sech: { internal: "sech", args: 1, display: "sech" },
+  csch: { internal: "csch", args: 1, display: "csch" },
+  coth: { internal: "coth", args: 1, display: "coth" },
+  arcsinh: { internal: "arcsinh", args: 1, display: "arcsinh" },
+  arccosh: { internal: "arccosh", args: 1, display: "arccosh" },
+  arctanh: { internal: "arctanh", args: 1, display: "arctanh" },
+  arcsech: { internal: "arcsech", args: 1, display: "arcsech" },
+  arccsch: { internal: "arccsch", args: 1, display: "arccsch" },
+  arccoth: { internal: "arccoth", args: 1, display: "arccoth" },
   sqrt: { internal: "sqrt", args: 1, display: "sqrt" },
+  cbrt: { internal: "cbrt", args: 1, display: "cbrt" },
   log: { internal: "log", args: 1, display: "log" },
   ln: { internal: "ln", args: 1, display: "ln" },
   abs: { internal: "abs", args: 1, display: "abs" },
+  sign: { internal: "sign", args: 1, display: "sign" },
   floor: { internal: "floor", args: 1, display: "floor" },
   ceil: { internal: "ceil", args: 1, display: "ceil" },
   round: { internal: "round", args: 1, display: "round" },
@@ -90,10 +130,12 @@ const LATEX_FUNCTIONS = {
 const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
 
 let scene = structuredClone(DEFAULT_SCENE);
+let displayMode = "standard";
 let activeTab = "functions";
 let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380");
 let viewport = loadViewport();
 let panRenderFrame = 0;
+const editorHistory = new Map();
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -108,8 +150,12 @@ function renderApp() {
             <strong>Lepton-GRE</strong>
             <button class="toolbar-button primary" data-action="render">Refresh</button>
           </div>
+          <div class="display-row" aria-label="Display mode">
+            <button class="display-button" data-display-mode="standard" aria-selected="${displayMode === "standard"}">Standard</button>
+            <button class="display-button" data-display-mode="text" aria-selected="${displayMode === "text"}">Text</button>
+          </div>
         </header>
-        <nav class="tab-row" aria-label="Editor sections">
+        <nav class="tab-row" aria-label="Editor sections" ${displayMode === "text" ? "hidden" : ""}>
           ${tabs
             .map(([id, label]) => `<button class="tab-button" data-tab="${id}" aria-selected="${id === activeTab}">${label}</button>`)
             .join("")}
@@ -137,13 +183,25 @@ function renderApp() {
 function renderPanel() {
   const diagnostics = validateScene();
 
+  if (displayMode === "text") {
+    return `
+      <div class="text-mode-panel">
+        <textarea class="scene-textarea" data-scene-text spellcheck="false">${escapeHtml(exportScene())}</textarea>
+        <div class="text-mode-actions">
+          <button class="toolbar-button primary" data-action="apply-text">Apply</button>
+          <button class="toolbar-button" data-action="refresh-text">Refresh text</button>
+        </div>
+      </div>
+    `;
+  }
+
   if (activeTab === "functions") {
     return [
       ...scene.functions.map(
         (entry, index) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", `
           <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Function id" />
           ${mathEditor(`functions.${index}.expression`, entry.expression, "Function expression")}
-        `)
+        `, "functions", index)
       ),
       addRow("Add function", "functions")
     ].join("");
@@ -154,10 +212,10 @@ function renderPanel() {
       ...scene.colors.map(
         (entry, index) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
           <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Color id" />
-          <label class="channel-row"><span class="channel-label">r =</span>${mathEditor(`colors.${index}.red`, entry.red, "Red expression", true)}</label>
-          <label class="channel-row"><span class="channel-label">g =</span>${mathEditor(`colors.${index}.green`, entry.green, "Green expression", true)}</label>
-          <label class="channel-row"><span class="channel-label">b =</span>${mathEditor(`colors.${index}.blue`, entry.blue, "Blue expression", true)}</label>
-        `)
+          <label class="channel-row"><span class="channel-label">r</span><select class="compact-field" data-field="colors.${index}.red">${options(scene.functions, entry.red)}</select></label>
+          <label class="channel-row"><span class="channel-label">g</span><select class="compact-field" data-field="colors.${index}.green">${options(scene.functions, entry.green)}</select></label>
+          <label class="channel-row"><span class="channel-label">b</span><select class="compact-field" data-field="colors.${index}.blue">${options(scene.functions, entry.blue)}</select></label>
+        `, "colors", index)
       ),
       addRow("Add color", "colors")
     ].join("");
@@ -168,9 +226,9 @@ function renderPanel() {
       ...scene.restrictions.map(
         (entry, index) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
           <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Restriction id" />
-          ${mathEditor(`restrictions.${index}.expression`, entry.expression, "Restriction expression")}
+          <label class="settings-row"><span>Function reference</span><select class="compact-field" data-field="restrictions.${index}.expression">${options(scene.functions, entry.expression)}</select></label>
           <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> <= 0</label>
-        `)
+        `, "restrictions", index)
       ),
       addRow("Add boundary", "restrictions")
     ].join("");
@@ -183,7 +241,7 @@ function renderPanel() {
           <select class="compact-field" data-field="draws.${index}.equationId">${options(scene.functions, entry.equationId)}</select>
           <select class="compact-field" data-field="draws.${index}.colorId">${options(scene.colors, entry.colorId)}</select>
           <select class="compact-field" data-field="draws.${index}.restrictionId">${options(scene.restrictions, entry.restrictionId)}</select>
-        `)
+        `, "draws", index)
       ),
       addRow("Add draw layer", "draws")
     ].join("");
@@ -219,12 +277,12 @@ function mathEditor(field, value, label, small = false) {
   `;
 }
 
-function expressionRow(status, message, content) {
+function expressionRow(status, message, content, kind = null, index = null) {
   return `
     <div class="expression-row" title="${escapeHtml(message)}">
       <span class="entry-status ${status}" aria-label="${escapeHtml(message || status)}"></span>
       <div class="entry-content">${content}</div>
-      <button class="row-action" title="More options" aria-label="More options">⋯</button>
+      ${kind ? `<button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
     </div>
   `;
 }
@@ -248,7 +306,11 @@ function settingsField(key, label) {
 }
 
 function options(entries, selected) {
-  return entries.map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === selected ? "selected" : ""}>${escapeHtml(entry.id)}</option>`).join("");
+  const hasSelected = entries.some((entry) => entry.id === selected);
+  return [
+    ...(hasSelected || !selected ? [] : [`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (missing)</option>`]),
+    ...entries.map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === selected ? "selected" : ""}>${escapeHtml(entry.id)}</option>`)
+  ].join("");
 }
 
 function bindEvents() {
@@ -261,9 +323,28 @@ function bindEvents() {
     });
   });
 
+  root.querySelectorAll("[data-display-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      displayMode = button.dataset.displayMode;
+      renderApp();
+    });
+  });
+
   root.querySelector('[data-action="render"]')?.addEventListener("click", () => {
     syncFields();
     renderApp();
+  });
+  root.querySelector('[data-action="apply-text"]')?.addEventListener("click", () => {
+    const text = root.querySelector("[data-scene-text]")?.value ?? "";
+    scene = importScene(text);
+    viewport = sceneViewport();
+    saveViewport();
+    renderApp();
+  });
+  root.querySelector('[data-action="refresh-text"]')?.addEventListener("click", () => {
+    const field = root.querySelector("[data-scene-text]");
+    if (field) field.value = exportScene();
   });
   root.querySelector('[data-action="reset"]')?.addEventListener("click", () => {
     scene = structuredClone(DEFAULT_SCENE);
@@ -284,6 +365,7 @@ function bindEvents() {
   root.querySelectorAll(".mq-root[data-field]").forEach((field) => {
     field.addEventListener("focus", () => {
       field.dataset.editing = "true";
+      ensureEditorHistory(field);
     });
     field.addEventListener("beforeinput", (event) => {
       if (event.inputType === "deleteContentBackward" && handleMathBackspace(field, event)) return;
@@ -292,6 +374,16 @@ function bindEvents() {
       handlePlainMathInsert(field, event);
     });
     field.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        restoreEditorHistory(field, event.shiftKey ? "redo" : "undo");
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        restoreEditorHistory(field, "redo");
+        return;
+      }
       if (event.key === "Enter") {
         event.preventDefault();
         field.blur();
@@ -318,6 +410,12 @@ function bindEvents() {
       event.preventDefault();
       event.clipboardData?.setData("text/plain", serializeMathField(field));
     });
+    field.addEventListener("paste", (event) => {
+      event.preventDefault();
+      pushEditorHistory(field);
+      insertTextAtSelection(event.clipboardData?.getData("text/plain") ?? "");
+      field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    });
   });
 
   root.querySelectorAll("input.entry-id[data-field]").forEach((field) => {
@@ -340,6 +438,14 @@ function bindEvents() {
     button.addEventListener("click", () => {
       syncFields();
       addEntry(button.dataset.add);
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-delete]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      deleteEntry(button.dataset.delete, Number(button.dataset.index));
       renderApp();
     });
   });
@@ -487,8 +593,8 @@ function syncFields() {
 
 function addEntry(kind) {
   if (kind === "functions") scene.functions.push({ id: `f${scene.functions.length + 1}`, expression: "x+y" });
-  if (kind === "colors") scene.colors.push({ id: `c${scene.colors.length + 1}`, red: "255", green: "255", blue: "255" });
-  if (kind === "restrictions") scene.restrictions.push({ id: `r${scene.restrictions.length + 1}`, expression: "1", checkSmaller: false });
+  if (kind === "colors") scene.colors.push({ id: `c${scene.colors.length + 1}`, red: scene.functions[0]?.id ?? "", green: scene.functions[0]?.id ?? "", blue: scene.functions[0]?.id ?? "" });
+  if (kind === "restrictions") scene.restrictions.push({ id: `r${scene.restrictions.length + 1}`, expression: scene.functions[0]?.id ?? "", checkSmaller: false });
   if (kind === "draws") {
     scene.draws.push({
       equationId: scene.functions[0]?.id ?? "",
@@ -498,16 +604,43 @@ function addEntry(kind) {
   }
 }
 
+function deleteEntry(kind, index) {
+  if (!Array.isArray(scene[kind]) || !scene[kind][index]) return;
+  const removed = scene[kind][index];
+  scene[kind].splice(index, 1);
+  if (kind === "functions") {
+    const replacement = scene.functions[0]?.id ?? "";
+    scene.draws.forEach((draw) => {
+      if (draw.equationId === removed.id) draw.equationId = replacement;
+    });
+    scene.colors.forEach((color) => {
+      if (color.red === removed.id) color.red = replacement;
+      if (color.green === removed.id) color.green = replacement;
+      if (color.blue === removed.id) color.blue = replacement;
+    });
+    scene.restrictions.forEach((restriction) => {
+      if (restriction.expression === removed.id) restriction.expression = replacement;
+    });
+  }
+  if (kind === "colors") {
+    const replacement = scene.colors[0]?.id ?? "";
+    scene.draws.forEach((draw) => {
+      if (draw.colorId === removed.id) draw.colorId = replacement;
+    });
+  }
+  if (kind === "restrictions") {
+    const replacement = scene.restrictions[0]?.id ?? "";
+    scene.draws.forEach((draw) => {
+      if (draw.restrictionId === removed.id) draw.restrictionId = replacement;
+    });
+  }
+}
+
 function renderScene(diagnostics = validateScene()) {
   try {
     window.__leptonRenderHit = (window.__leptonRenderHit ?? 0) + 1;
     const canvas = root.querySelector(".grid-canvas");
     if (!canvas) return;
-
-    if (diagnostics.hasErrors) {
-      drawErrorState(canvas, diagnostics.summary);
-      return;
-    }
 
     if (renderSceneWebGl(canvas)) {
       return;
@@ -566,11 +699,20 @@ function renderSceneCpu(canvas) {
     const restriction = scene.restrictions.find((entry) => entry.id === draw.restrictionId);
     if (!fn || !color || !restriction) continue;
 
-    const evaluate = compileExpression(fn.expression);
-    const red = compileExpression(color.red);
-    const green = compileExpression(color.green);
-    const blue = compileExpression(color.blue);
-    const boundary = compileExpression(restriction.expression);
+    let evaluate;
+    let red;
+    let green;
+    let blue;
+    let boundary;
+    try {
+      evaluate = compileExpression(fn.expression);
+      red = compileExpression(color.red);
+      green = compileExpression(color.green);
+      blue = compileExpression(color.blue);
+      boundary = compileExpression(restriction.expression);
+    } catch {
+      continue;
+    }
 
     for (let yi = 0; yi < yPoints.length; yi += 1) {
       for (let xi = 0; xi < xPoints.length; xi += 1) {
@@ -651,17 +793,43 @@ function buildFragmentShader() {
     `;
   }
 
-  const draw = scene.draws[0];
-  const fn = scene.functions.find((entry) => entry.id === draw?.equationId) ?? scene.functions[0];
-  const color = scene.colors.find((entry) => entry.id === draw?.colorId) ?? scene.colors[0];
-  const restriction = scene.restrictions.find((entry) => entry.id === draw?.restrictionId) ?? scene.restrictions[0];
   const env = Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression]));
-  const expr = expressionToGlsl(fn?.expression ?? "0", env);
-  const red = expressionToGlsl(color?.red ?? "0", env, "z");
-  const green = expressionToGlsl(color?.green ?? "0", env, "z");
-  const blue = expressionToGlsl(color?.blue ?? "0", env, "z");
-  const bound = expressionToGlsl(restriction?.expression ?? "1", env);
-  const boundCheck = restriction?.checkSmaller ? "boundValue <= 0.0" : "boundValue >= 0.0";
+  const layers = scene.draws
+    .map((draw) => {
+      const fn = scene.functions.find((entry) => entry.id === draw?.equationId);
+      const color = scene.colors.find((entry) => entry.id === draw?.colorId);
+      const restriction = scene.restrictions.find((entry) => entry.id === draw?.restrictionId);
+      if (!fn || !color || !restriction) return null;
+      try {
+        return {
+          expr: expressionToGlsl(fn.expression, env),
+          red: expressionToGlsl(color.red, env, "z"),
+          green: expressionToGlsl(color.green, env, "z"),
+          blue: expressionToGlsl(color.blue, env, "z"),
+          bound: expressionToGlsl(restriction.expression, env),
+          boundCheck: restriction.checkSmaller ? "boundValue <= 0.0" : "boundValue >= 0.0"
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  const layerShader = layers.length
+    ? layers
+        .map(
+          (layer, index) => `
+      {
+        float boundValue = ${layer.bound};
+        if (${layer.boundCheck}) {
+          float z = ${layer.expr};
+          color = clamp(vec3(${layer.red}, ${layer.green}, ${layer.blue}) / 255.0, 0.0, 1.0);
+          painted = true;
+        }
+      }`
+        )
+        .join("\n")
+    : "";
 
   return `
     precision highp float;
@@ -673,19 +841,31 @@ function buildFragmentShader() {
     float sec(float value) { return 1.0 / cos(value); }
     float csc(float value) { return 1.0 / sin(value); }
     float cot(float value) { return 1.0 / tan(value); }
+    float arccot(float value) { return 1.5707963267948966 - atan(value); }
+    float arcsec(float value) { return acos(1.0 / value); }
+    float arccsc(float value) { return asin(1.0 / value); }
+    float cbrt(float value) { return sign(value) * pow(abs(value), 1.0 / 3.0); }
+    float sinh1(float value) { return (exp(value) - exp(-value)) / 2.0; }
+    float cosh1(float value) { return (exp(value) + exp(-value)) / 2.0; }
+    float tanh1(float value) { float p = exp(2.0 * value); return (p - 1.0) / (p + 1.0); }
+    float sech(float value) { return 1.0 / cosh1(value); }
+    float csch(float value) { return 1.0 / sinh1(value); }
+    float coth(float value) { return 1.0 / tanh1(value); }
+    float arcsinh(float value) { return log(value + sqrt(value * value + 1.0)); }
+    float arccosh(float value) { return log(value + sqrt(value - 1.0) * sqrt(value + 1.0)); }
+    float arctanh(float value) { return 0.5 * log((1.0 + value) / (1.0 - value)); }
+    float arcsech(float value) { return arccosh(1.0 / value); }
+    float arccsch(float value) { return arcsinh(1.0 / value); }
+    float arccoth(float value) { return arctanh(1.0 / value); }
     float clamp3(float value, float low, float high) { return clamp(value, low, high); }
 
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
       float x = mix(u_bounds.x, u_bounds.y, uv.x);
       float y = mix(u_bounds.z, u_bounds.w, uv.y);
-      float boundValue = ${bound};
-      if (!(${boundCheck})) {
-        gl_FragColor = vec4(0.97, 0.98, 0.99, 1.0);
-        return;
-      }
-      float z = ${expr};
-      vec3 color = clamp(vec3(${red}, ${green}, ${blue}) / 255.0, 0.0, 1.0);
+      vec3 color = vec3(0.97, 0.98, 0.99);
+      bool painted = false;
+      ${layerShader}
       gl_FragColor = vec4(color, 1.0);
     }
   `;
@@ -791,13 +971,13 @@ function compileExpression(source) {
       .replaceAll("^", "**")
       .replaceAll("pi", "Math.PI")
       .replaceAll(/\be\b/g, "Math.E")
-      .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sqrt|abs|floor|ceil|round|min|max|exp|log)\b/g, "Math.$1")
+      .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log)\b/g, "Math.$1")
       .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
 
-    js = js.replaceAll(/(\d)([xy])/g, "$1*$2");
+    js = js.replaceAll(/(\d)([A-Za-z_])/g, "$1*$2");
     js = js.replaceAll(/([xy])(\d)/g, "$1*$2");
     js = js.replaceAll(/(\d)\(/g, "$1*(");
-    js = js.replaceAll(/\)(\d|[xy])/g, ")*$1");
+    js = js.replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
     js = rewriteBareIdentifiers(js, (name) => `ref("${name}", x, y)`, new Set(["Math"]));
 
     return new Function(
@@ -811,6 +991,19 @@ function compileExpression(source) {
         const sec = (value) => 1 / Math.cos(value);
         const csc = (value) => 1 / Math.sin(value);
         const cot = (value) => 1 / Math.tan(value);
+        const arccot = (value) => Math.PI / 2 - Math.atan(value);
+        const arcsec = (value) => Math.acos(1 / value);
+        const arccsc = (value) => Math.asin(1 / value);
+        const cbrt = (value) => Math.cbrt(value);
+        const sech = (value) => 1 / Math.cosh(value);
+        const csch = (value) => 1 / Math.sinh(value);
+        const coth = (value) => 1 / Math.tanh(value);
+        const arcsinh = (value) => Math.asinh(value);
+        const arccosh = (value) => Math.acosh(value);
+        const arctanh = (value) => Math.atanh(value);
+        const arcsech = (value) => Math.acosh(1 / value);
+        const arccsch = (value) => Math.asinh(1 / value);
+        const arccoth = (value) => Math.atanh(1 / value);
         const runtime = env.__runtime ?? { depth: 0, maxDepth: ${recursionLimit()} };
         const ref = (name, rx, ry) => {
           if (!env[name]) return NaN;
@@ -841,6 +1034,10 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
     .replaceAll(/\barcsin\b/g, "asin")
     .replaceAll(/\barccos\b/g, "acos")
     .replaceAll(/\barctan\b/g, "atan")
+    .replaceAll(/\barccot\b/g, "arccot")
+    .replaceAll(/\bsinh\b/g, "sinh1")
+    .replaceAll(/\bcosh\b/g, "cosh1")
+    .replaceAll(/\btanh\b/g, "tanh1")
     .replaceAll(/\bln\b/g, "log")
     .replaceAll(/\blog\b/g, "log")
     .replaceAll(/\bmin\b/g, "min")
@@ -848,10 +1045,10 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
     .replaceAll(/\bclamp\b/g, "clamp3")
     .replaceAll(/\bpi\b/g, "3.141592653589793")
     .replaceAll(/\be\b/g, "2.718281828459045")
-    .replaceAll(/(\d)([xy])/g, "$1*$2")
+    .replaceAll(/(\d)([A-Za-z_])/g, "$1*$2")
     .replaceAll(/([xy])(\d)/g, "$1*$2")
     .replaceAll(/(\d)\(/g, "$1*(")
-    .replaceAll(/\)(\d|[xy])/g, ")*$1");
+    .replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
 
   if (zName) {
     expression = expression.replaceAll(/\bx\b/g, zName);
@@ -920,11 +1117,58 @@ function rewriteBareIdentifiers(expression, replace, extraReserved) {
 
 function convertPowers(expression) {
   let output = expression;
-  const powerPattern = /([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]+\))\s*\^\s*([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]+\))/;
-  while (powerPattern.test(output)) {
-    output = output.replace(powerPattern, "pow($1,$2)");
+  let guard = 0;
+  while (output.includes("^") && guard < 200) {
+    guard += 1;
+    const index = output.indexOf("^");
+    const left = findLeftOperand(output, index - 1);
+    const right = findRightOperand(output, index + 1);
+    if (!left || !right) break;
+    output = `${output.slice(0, left.start)}pow(${left.value},${right.value})${output.slice(right.end)}`;
   }
   return output;
+}
+
+function findLeftOperand(source, index) {
+  let i = skipSpacesLeft(source, index);
+  if (i < 0) return null;
+  if (source[i] === ")") {
+    let depth = 0;
+    for (let j = i; j >= 0; j -= 1) {
+      if (source[j] === ")") depth += 1;
+      if (source[j] === "(") depth -= 1;
+      if (depth === 0) return { start: j, end: i + 1, value: source.slice(j, i + 1) };
+    }
+    return null;
+  }
+  const end = i + 1;
+  while (i >= 0 && /[\w.]/.test(source[i])) i -= 1;
+  return { start: i + 1, end, value: source.slice(i + 1, end) };
+}
+
+function findRightOperand(source, index) {
+  let i = skipSpacesRight(source, index);
+  if (i >= source.length) return null;
+  if (source[i] === "(") {
+    const end = matchingParen(source, i);
+    return end === -1 ? null : { start: i, end: end + 1, value: source.slice(i, end + 1) };
+  }
+  const start = i;
+  if (source[i] === "-") i += 1;
+  while (i < source.length && /[\w.]/.test(source[i])) i += 1;
+  return i === start ? null : { start, end: i, value: source.slice(start, i) };
+}
+
+function skipSpacesLeft(source, index) {
+  let i = index;
+  while (i >= 0 && /\s/.test(source[i])) i -= 1;
+  return i;
+}
+
+function skipSpacesRight(source, index) {
+  let i = index;
+  while (i < source.length && /\s/.test(source[i])) i += 1;
+  return i;
 }
 
 function validateScene() {
@@ -1019,7 +1263,7 @@ function updateStatusLights(diagnostics) {
   const overlay = root.querySelector(".render-overlay");
   if (overlay) {
     overlay.textContent = diagnostics.hasErrors
-      ? `Expression error: ${diagnostics.summary}`
+      ? `Some layers skipped: ${diagnostics.summary}`
       : `${scene.settings.xPoints} x ${scene.settings.yPoints} · ${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}`;
   }
 }
@@ -1040,6 +1284,7 @@ function handleMathBeforeInput(field, event) {
   if (!division) return;
 
   event.preventDefault();
+  pushEditorHistory(field);
   const numerator = division[1];
   textNode.textContent = `${before.slice(0, -numerator.length)}${textNode.textContent.slice(range.startOffset)}`;
   const frac = createMathAtom("frac", [numerator, ""]);
@@ -1052,6 +1297,7 @@ function handleMathBeforeInput(field, event) {
 function handlePlainMathInsert(field, event) {
   if (event.defaultPrevented || event.inputType !== "insertText" || !event.data) return;
   event.preventDefault();
+  pushEditorHistory(field);
   insertTextAtSelection(event.data);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
@@ -1151,7 +1397,7 @@ function syncMathField(field) {
 }
 
 function hasRenderableLatex(source) {
-  return /\\(?:frac|sqrt|left\||lvert|lfloor|lceil|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|min|max|exp|sec|csc|cot|round|clamp)\b/.test(source);
+  return /\\(?:operatorname|frac|sqrt|left\||lvert|lfloor|lceil|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|min|max|exp|sec|csc|cot|round|clamp)\b/.test(source);
 }
 
 function hasInternalRenderableCall(source) {
@@ -1310,6 +1556,7 @@ function handleMathBackspace(field, event) {
     const atom = slot.closest(".mq-atom");
     if (!atom) return false;
     event.preventDefault();
+    pushEditorHistory(field);
     if (slot.textContent.trim() === "") {
       if (atom.dataset.command === "frac" && slot.dataset.slot === "1") {
         replaceAtomWithText(atom, serializeMathNode(atom.querySelector('.mq-slot[data-slot="0"]') ?? atom));
@@ -1331,10 +1578,43 @@ function handleMathBackspace(field, event) {
   const atom = previous?.classList?.contains("mq-atom") ? previous : null;
   if (!atom) return false;
   event.preventDefault();
+  pushEditorHistory(field);
   atom.remove();
   syncMathField(field);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
   return true;
+}
+
+function ensureEditorHistory(field) {
+  const key = field.dataset.field;
+  if (!editorHistory.has(key)) {
+    editorHistory.set(key, { undo: [], redo: [] });
+  }
+  return editorHistory.get(key);
+}
+
+function pushEditorHistory(field) {
+  const history = ensureEditorHistory(field);
+  history.undo.push(serializeMathField(field));
+  if (history.undo.length > 100) history.undo.shift();
+  history.redo = [];
+}
+
+function restoreEditorHistory(field, direction) {
+  const history = ensureEditorHistory(field);
+  const from = direction === "undo" ? history.undo : history.redo;
+  const to = direction === "undo" ? history.redo : history.undo;
+  if (!from.length) return;
+  to.push(serializeMathField(field));
+  const source = from.pop();
+  field.innerHTML = renderEditableLatex(source);
+  field.dataset.source = source;
+  syncMathField(field);
+  updateField(field);
+  placeCaretAtEnd(field);
+  const diagnostics = validateScene();
+  updateStatusLights(diagnostics);
+  renderScene(diagnostics);
 }
 
 function replaceAtomWithText(atom, text) {
@@ -1749,11 +2029,11 @@ function matchingParen(source, openIndex) {
 
 function exportScene() {
   return [
-    ...scene.functions.map((entry) => `F:${entry.id}~${entry.expression}`),
+    ...scene.functions.map((entry) => `F:${entry.id}~${textModeExpression(entry.expression)}`),
     "~~~~~",
-    ...scene.colors.map((entry) => `C:${entry.id}~${entry.red}~${entry.green}~${entry.blue}`),
+    ...scene.colors.map((entry) => `C:${entry.id}~${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
     "~~~~~",
-    ...scene.restrictions.map((entry) => `R:${entry.id}~${entry.expression}~${entry.checkSmaller ? 1 : 0}`),
+    ...scene.restrictions.map((entry) => `R:${entry.id}~${textModeExpression(entry.expression)}~${entry.checkSmaller ? 1 : 0}`),
     "~~~~~",
     ...scene.draws.map((entry) => `D~${entry.equationId}~${entry.colorId}~${entry.restrictionId}`),
     "~~~~~",
@@ -1766,6 +2046,10 @@ function exportScene() {
     `S:max_recursion~${scene.settings.maxRecursion}`,
     `S:angle_mode~${scene.settings.angleMode}`
   ].join("\n");
+}
+
+function textModeExpression(source) {
+  return normalizeExpressionText(source);
 }
 
 function importScene(raw) {
@@ -1799,6 +2083,32 @@ function importScene(raw) {
     }
   }
 
+  return normalizeSceneReferences(next);
+}
+
+function normalizeSceneReferences(next) {
+  const hasFunction = (id) => next.functions.some((entry) => entry.id === id);
+  const ensureFunction = (preferredId, expression) => {
+    const trimmed = String(expression ?? "").trim();
+    if (hasFunction(trimmed)) return trimmed;
+    let id = preferredId;
+    let suffix = 2;
+    while (hasFunction(id)) {
+      id = `${preferredId}${suffix}`;
+      suffix += 1;
+    }
+    next.functions.push({ id, expression: trimmed || "0" });
+    return id;
+  };
+
+  next.colors.forEach((color) => {
+    color.red = ensureFunction(`${color.id}_r`, color.red);
+    color.green = ensureFunction(`${color.id}_g`, color.green);
+    color.blue = ensureFunction(`${color.id}_b`, color.blue);
+  });
+  next.restrictions.forEach((restriction) => {
+    restriction.expression = ensureFunction(`${restriction.id}_fn`, restriction.expression);
+  });
   return next;
 }
 
@@ -1821,6 +2131,7 @@ function latexToExpression(value) {
   let source = String(value)
     .replace(/\u00a0/g, " ")
     .replaceAll("π", "pi")
+    .replaceAll(/\\operatorname\{([A-Za-z]\w*)\}/g, "$1")
     .trim();
 
   source = replaceLatexDelimited(source, "\\left|", "\\right|", (inner) => `abs(${latexToExpression(inner)})`);
@@ -1832,7 +2143,41 @@ function latexToExpression(value) {
   for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
     source = replaceLatexCommand(source, command, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
   }
-  return source.replaceAll(/\\left|\\right/g, "").replaceAll(/\\pi\b/g, "pi");
+  source = replaceBareBraceCommand(source, "frac", 2, (args) => `frac(${args.map((arg) => latexToExpression(arg)).join(",")})`);
+  source = replaceBareBraceCommand(source, "sqrt", 1, (args) => `sqrt(${latexToExpression(args[0])})`);
+  for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
+    if (["frac", "sqrt"].includes(command)) continue;
+    source = replaceBareBraceCommand(source, command, config.args, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
+  }
+  source = source.replaceAll(/\^\{([^{}]+)\}/g, "^($1)");
+  return source.replaceAll(/\\left|\\right/g, "").replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
+}
+
+function replaceBareBraceCommand(source, command, expectedArgs, build) {
+  let output = source;
+  let index = output.indexOf(`${command}{`);
+  while (index !== -1) {
+    const before = output[index - 1] ?? "";
+    if (/[A-Za-z_\\]/.test(before)) {
+      index = output.indexOf(`${command}{`, index + command.length);
+      continue;
+    }
+    const args = [];
+    let cursor = index + command.length;
+    while (args.length < expectedArgs && output[cursor] === "{") {
+      const end = matchingBrace(output, cursor);
+      if (end === -1) break;
+      args.push(output.slice(cursor + 1, end));
+      cursor = end + 1;
+    }
+    if (args.length !== expectedArgs) {
+      index = output.indexOf(`${command}{`, index + command.length);
+      continue;
+    }
+    output = `${output.slice(0, index)}${build(args)}${output.slice(cursor)}`;
+    index = output.indexOf(`${command}{`, index + 1);
+  }
+  return output;
 }
 
 function replaceLatexDelimited(source, open, close, build) {
