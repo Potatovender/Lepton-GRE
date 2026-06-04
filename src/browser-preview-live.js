@@ -144,7 +144,7 @@ function renderApp() {
   const diagnostics = validateScene();
   root.innerHTML = `
     <main class="app-shell" style="--sidebar-width: ${sidebarWidth}px">
-      <section class="expression-panel" aria-label="Expression editor">
+      <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
         <header class="panel-header">
           <div class="brand-row">
             <strong>Lepton-GRE</strong>
@@ -160,7 +160,7 @@ function renderApp() {
             .map(([id, label]) => `<button class="tab-button" data-tab="${id}" aria-selected="${id === activeTab}">${label}</button>`)
             .join("")}
         </nav>
-        <div class="entry-list">${renderPanel()}</div>
+        <div class="entry-list ${displayMode === "text" ? "entry-list-text" : ""}">${renderPanel()}</div>
       </section>
       <div class="sidebar-resizer" role="separator" aria-label="Resize expression panel" tabindex="0"></div>
       <section class="renderer-pane" aria-label="Grid renderer">
@@ -263,12 +263,12 @@ function renderPanel() {
 }
 
 function mathEditor(field, value, label, small = false) {
-  const latex = latexSourceFromExpression(value);
+  const source = normalizeExpressionDisplayText(value);
   return `
     <div class="mathquill-editor ${small ? "mathquill-editor-small" : ""}">
-      <div class="mq-root latex-preview ${small ? "latex-editor-small" : ""}" data-field="${field}" data-source="${escapeHtml(latex)}" contenteditable="true" role="textbox" aria-label="${escapeHtml(label)}" spellcheck="false">${renderEditableLatex(latex)}</div>
+      <div class="mq-root latex-preview ${small ? "latex-editor-small" : ""}" data-field="${field}" data-source="${escapeHtml(source)}" contenteditable="true" role="textbox" aria-label="${escapeHtml(label)}" spellcheck="false">${renderEditableLatex(source)}</div>
     </div>
-    <textarea class="math-box math-source" data-source-field="${field}" tabindex="-1" aria-hidden="true">${escapeHtml(latex)}</textarea>
+    <textarea class="math-box math-source" data-source-field="${field}" tabindex="-1" aria-hidden="true">${escapeHtml(source)}</textarea>
   `;
 }
 
@@ -393,6 +393,7 @@ function bindEvents() {
       expandTrailingFraction(field);
       syncMathField(field);
       updateField(field);
+      refreshMathFieldDisplay(field);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
@@ -400,6 +401,7 @@ function bindEvents() {
     field.addEventListener("blur", () => {
       field.dataset.editing = "false";
       syncMathField(field);
+      renderMathFieldDisplay(field);
     });
     field.addEventListener("copy", (event) => {
       event.preventDefault();
@@ -490,10 +492,11 @@ function bindCanvasPan() {
   pane.addEventListener("pointermove", (event) => {
     if (!drag) return;
     const rect = canvas.getBoundingClientRect();
+    const startViewport = displayViewportForSize(drag.start, rect.width, rect.height);
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
-    const unitsX = (drag.start.xMax - drag.start.xMin) * (dx / Math.max(1, rect.width));
-    const unitsY = (drag.start.yMax - drag.start.yMin) * (dy / Math.max(1, rect.height));
+    const unitsX = (startViewport.xMax - startViewport.xMin) * (dx / Math.max(1, rect.width));
+    const unitsY = (startViewport.yMax - startViewport.yMin) * (dy / Math.max(1, rect.height));
     viewport = {
       xMin: drag.start.xMin - unitsX,
       xMax: drag.start.xMax - unitsX,
@@ -517,18 +520,19 @@ function bindCanvasPan() {
     (event) => {
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
+      const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
       const xRatio = (event.clientX - rect.left) / Math.max(1, rect.width);
       const yRatio = 1 - (event.clientY - rect.top) / Math.max(1, rect.height);
-      const width = viewport.xMax - viewport.xMin;
-      const height = viewport.yMax - viewport.yMin;
-      const centerX = viewport.xMin + width * xRatio;
-      const centerY = viewport.yMin + height * yRatio;
+      const width = visibleViewport.xMax - visibleViewport.xMin;
+      const height = visibleViewport.yMax - visibleViewport.yMin;
+      const centerX = visibleViewport.xMin + width * xRatio;
+      const centerY = visibleViewport.yMin + height * yRatio;
       const zoom = Math.max(0.2, Math.min(5, Math.exp(event.deltaY * 0.001)));
       viewport = {
-        xMin: centerX - (centerX - viewport.xMin) * zoom,
-        xMax: centerX + (viewport.xMax - centerX) * zoom,
-        yMin: centerY - (centerY - viewport.yMin) * zoom,
-        yMax: centerY + (viewport.yMax - centerY) * zoom
+        xMin: centerX - (centerX - visibleViewport.xMin) * zoom,
+        xMax: centerX + (visibleViewport.xMax - centerX) * zoom,
+        yMin: centerY - (centerY - visibleViewport.yMin) * zoom,
+        yMax: centerY + (visibleViewport.yMax - centerY) * zoom
       };
       saveViewport();
       schedulePanRender();
@@ -577,7 +581,7 @@ function updateField(field) {
 function readFieldValue(field) {
   if (field.type === "checkbox") return field.checked;
   if (field.classList?.contains("mq-root")) {
-    return sourceFromLatexText(serializeMathField(field));
+    return field.dataset.source ?? sourceFromLatexText(serializeMathField(field));
   }
   return stripChannelPrefix(field.value);
 }
@@ -682,13 +686,11 @@ function renderSceneCpu(canvas) {
   drawGrid(ctx, rect.width, rect.height);
 
   const env = buildRuntimeEnv(Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression])));
-  const xPoints = axis(viewport.xMin, viewport.xMax, scene.settings.xPoints);
-  const yPoints = axis(viewport.yMin, viewport.yMax, scene.settings.yPoints);
-  const plotSize = Math.min(rect.width, rect.height);
-  const plotX = (rect.width - plotSize) / 2;
-  const plotY = (rect.height - plotSize) / 2;
-  const pixelWidth = plotSize / Math.max(1, xPoints.length - 1);
-  const pixelHeight = plotSize / Math.max(1, yPoints.length - 1);
+  const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
+  const xPoints = axis(visibleViewport.xMin, visibleViewport.xMax, scene.settings.xPoints);
+  const yPoints = axis(visibleViewport.yMin, visibleViewport.yMax, scene.settings.yPoints);
+  const pixelWidth = rect.width / Math.max(1, xPoints.length - 1);
+  const pixelHeight = rect.height / Math.max(1, yPoints.length - 1);
 
   for (const draw of scene.draws) {
     const fn = scene.functions.find((entry) => entry.id === draw.equationId);
@@ -723,7 +725,7 @@ function renderSceneCpu(canvas) {
         if (!Number.isFinite(z)) continue;
 
         ctx.fillStyle = `rgb(${channel(red(z, 0, env))}, ${channel(green(z, 0, env))}, ${channel(blue(z, 0, env))})`;
-        ctx.fillRect(plotX + xi * pixelWidth, plotY + plotSize - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
+        ctx.fillRect(xi * pixelWidth, rect.height - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
       }
     }
   }
@@ -737,8 +739,8 @@ function renderSceneWebGl(canvas) {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.max(1, Math.floor(rect.width * dpr));
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-  const plot = plotViewport(canvas);
-  gl.viewport(plot.x, plot.y, plot.size, plot.size);
+  const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
+  gl.viewport(0, 0, canvas.width, canvas.height);
 
   const fragmentSource = buildFragmentShader();
   window.__leptonFragmentSource = fragmentSource;
@@ -765,14 +767,13 @@ function renderSceneWebGl(canvas) {
   gl.enableVertexAttribArray(position);
   gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
 
-  gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), plot.size, plot.size);
-  gl.uniform2f(gl.getUniformLocation(program, "u_plot_origin"), plot.x, plot.y);
+  gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
   gl.uniform4f(
     gl.getUniformLocation(program, "u_bounds"),
-    viewport.xMin,
-    viewport.xMax,
-    viewport.yMin,
-    viewport.yMax
+    visibleViewport.xMin,
+    visibleViewport.xMax,
+    visibleViewport.yMin,
+    visibleViewport.yMax
   );
   gl.clearColor(0.97, 0.98, 0.99, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
@@ -785,9 +786,8 @@ function buildFragmentShader() {
     return `
       precision highp float;
       uniform vec2 u_resolution;
-      uniform vec2 u_plot_origin;
       void main() {
-        vec2 uv = (gl_FragCoord.xy - u_plot_origin) / u_resolution;
+        vec2 uv = gl_FragCoord.xy / u_resolution;
         gl_FragColor = vec4(uv.x, uv.y, 0.65, 1.0);
       }
     `;
@@ -843,7 +843,6 @@ function buildFragmentShader() {
   return `
       precision highp float;
       uniform vec2 u_resolution;
-      uniform vec2 u_plot_origin;
       uniform vec4 u_bounds;
 
     float frac(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
@@ -870,7 +869,7 @@ function buildFragmentShader() {
     float clamp3(float value, float low, float high) { return clamp(value, low, high); }
 
     void main() {
-      vec2 uv = (gl_FragCoord.xy - u_plot_origin) / u_resolution;
+      vec2 uv = gl_FragCoord.xy / u_resolution;
       float x = mix(u_bounds.x, u_bounds.y, uv.x);
       float y = mix(u_bounds.z, u_bounds.w, uv.y);
       vec3 color = vec3(0.97, 0.98, 0.99);
@@ -911,12 +910,30 @@ function drawGrid(ctx, width, height) {
   ctx.stroke();
 }
 
-function plotViewport(canvas) {
-  const size = Math.min(canvas.width, canvas.height);
+function displayViewportForSize(baseViewport, width, height) {
+  const targetAspect = Math.max(1, width) / Math.max(1, height);
+  const xRange = baseViewport.xMax - baseViewport.xMin;
+  const yRange = baseViewport.yMax - baseViewport.yMin;
+  const currentAspect = xRange / Math.max(Number.EPSILON, yRange);
+  const centerX = (baseViewport.xMin + baseViewport.xMax) / 2;
+  const centerY = (baseViewport.yMin + baseViewport.yMax) / 2;
+
+  if (currentAspect < targetAspect) {
+    const adjustedX = yRange * targetAspect;
+    return {
+      xMin: centerX - adjustedX / 2,
+      xMax: centerX + adjustedX / 2,
+      yMin: baseViewport.yMin,
+      yMax: baseViewport.yMax
+    };
+  }
+
+  const adjustedY = xRange / targetAspect;
   return {
-    x: Math.floor((canvas.width - size) / 2),
-    y: Math.floor((canvas.height - size) / 2),
-    size
+    xMin: baseViewport.xMin,
+    xMax: baseViewport.xMax,
+    yMin: centerY - adjustedY / 2,
+    yMax: centerY + adjustedY / 2
   };
 }
 
@@ -1324,6 +1341,8 @@ function combineDiagnostics(items) {
 
 function handleMathBeforeInput(field, event) {
   if (!["/", "÷"].includes(event.data)) return;
+  const currentSource = serializeMathField(field);
+  if (/[+\-*^/]/.test(currentSource)) return;
   const selection = window.getSelection();
   if (!selection || !selection.rangeCount) return;
   const range = selection.getRangeAt(0);
@@ -1405,6 +1424,8 @@ function expandTrailingFraction(field) {
   const range = selection.getRangeAt(0);
   const textNode = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer : null;
   if (!textNode) return;
+  const currentSource = serializeMathField(field);
+  if (/[+\-*^/]/.test(currentSource.replace(/\/$/, ""))) return;
   const before = textNode.textContent.slice(0, range.startOffset);
   const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))\/$/);
   if (!division) return;
@@ -1443,7 +1464,60 @@ function syncMathField(field) {
   const source = serializeMathField(field);
   field.dataset.source = source;
   const raw = root.querySelector(`textarea[data-source-field="${cssEscape(field.dataset.field)}"]`);
-  if (raw) raw.value = latexSourceFromExpression(source);
+  if (raw) raw.value = source;
+}
+
+function refreshMathFieldDisplay(field) {
+  const source = field.dataset.source ?? "";
+  if (!isReadyForVisualRefresh(source)) return;
+  if (!shouldAutoRefreshVisualSource(source)) return;
+  renderMathFieldDisplay(field);
+}
+
+function renderMathFieldDisplay(field) {
+  const source = field.dataset.source ?? "";
+  const html = renderEditableLatex(source);
+  if (field.innerHTML === html) return;
+  field.innerHTML = html;
+  field.dataset.source = source;
+  placeCaretAtEnd(field);
+}
+
+function shouldAutoRefreshVisualSource(source) {
+  const value = String(source ?? "").trim();
+  if (!value) return true;
+  if (/^[A-Za-z_]\w*\^(?:[A-Za-z_]\w*|\d+(?:\.\d+)?)$/.test(value)) return true;
+  if (/^(?:sqrt|cbrt|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|exp|sec|csc|cot)\([^()]*\)$/.test(value)) return true;
+  if (/^frac\{[^{}]*\}\{[^{}]*\}$/.test(value)) return true;
+  return false;
+}
+
+function isReadyForVisualRefresh(source) {
+  const value = String(source ?? "");
+  if (!value.trim()) return true;
+  if (hasUnmatchedGrouping(value)) return false;
+  if (hasIncompletePower(value)) return false;
+  return true;
+}
+
+function hasUnmatchedGrouping(source) {
+  let parenDepth = 0;
+  let braceDepth = 0;
+  for (const char of String(source ?? "")) {
+    if (char === "(") parenDepth += 1;
+    if (char === ")") parenDepth -= 1;
+    if (char === "{") braceDepth += 1;
+    if (char === "}") braceDepth -= 1;
+    if (parenDepth < 0 || braceDepth < 0) return true;
+  }
+  return parenDepth !== 0 || braceDepth !== 0;
+}
+
+function hasIncompletePower(source) {
+  const power = splitTopLevel(String(source ?? ""), "^");
+  if (!power) return false;
+  const grouped = splitPowerOperands(source, power.index);
+  return !grouped.exponent.trim();
 }
 
 function hasRenderableLatex(source) {
@@ -1455,14 +1529,48 @@ function hasInternalRenderableCall(source) {
 }
 
 function renderEditableLatex(source) {
-  return renderEditableExpression(latexToExpression(source));
+  return renderEditableExpression(normalizeExpressionDisplayText(source));
 }
 
 function renderEditableExpression(source) {
   const trimmed = String(source ?? "");
   if (!trimmed) return "";
 
+  const additive = splitTopLevelAdditive(trimmed);
+  if (additive) {
+    return `${renderEditableExpression(additive.left)}${escapeHtml(additive.operator)}${renderEditableExpression(additive.right)}`;
+  }
+
+  const fraction = splitTopLevelFraction(trimmed);
+  if (fraction) {
+    return `${renderEditableExpression(fraction.prefix)}${atomEditableHtml("frac", [fraction.numerator, fraction.denominator])}${renderEditableExpression(fraction.suffix)}`;
+  }
+
+  const power = splitTopLevel(trimmed, "^");
+  if (power) {
+    const grouped = splitPowerOperands(trimmed, power.index);
+    if (!grouped.exponent.trim()) return escapeHtml(trimmed).replaceAll(/\bpi\b/g, "π");
+    return `${renderEditableExpression(grouped.prefix)}<span class="mq-power" data-command="power"><span class="mq-base">${renderEditableExpression(grouped.base)}</span><span class="mq-exponent">${renderEditableExpression(stripWrappingGroup(grouped.exponent))}</span></span>${renderEditableExpression(grouped.suffix)}`;
+  }
+
+  const commandIndex = nextLatexCommandIndex(trimmed);
   const internalIndex = nextInternalCallIndex(trimmed);
+  const parenIndex = nextParentheticalIndex(trimmed);
+
+  if (parenIndex !== -1 && (commandIndex === -1 || parenIndex < commandIndex) && (internalIndex === -1 || parenIndex < internalIndex)) {
+    const closeIndex = matchingParen(trimmed, parenIndex);
+    if (closeIndex !== -1) {
+      return `${renderEditableExpression(trimmed.slice(0, parenIndex))}(${renderEditableExpression(trimmed.slice(parenIndex + 1, closeIndex))})${renderEditableExpression(trimmed.slice(closeIndex + 1))}`;
+    }
+  }
+
+  if (commandIndex !== -1) {
+    const parsed = parseEditableLatexCommandAt(trimmed, commandIndex);
+    if (parsed) {
+      return `${renderEditableExpression(trimmed.slice(0, commandIndex))}${parsed.html}${renderEditableExpression(trimmed.slice(parsed.end))}`;
+    }
+  }
+
   if (internalIndex !== -1) {
     const parsed = parseEditableInternalCallAt(trimmed, internalIndex);
     if (parsed) {
@@ -1470,23 +1578,73 @@ function renderEditableExpression(source) {
     }
   }
 
-  const additive = splitTopLevelAdditive(trimmed);
-  if (additive) {
-    return `${renderEditableExpression(additive.left)}${escapeHtml(additive.operator)}${renderEditableExpression(additive.right)}`;
+  if (parenIndex !== -1) {
+    const closeIndex = matchingParen(trimmed, parenIndex);
+    if (closeIndex !== -1) {
+      return `${renderEditableExpression(trimmed.slice(0, parenIndex))}(${renderEditableExpression(trimmed.slice(parenIndex + 1, closeIndex))})${renderEditableExpression(trimmed.slice(closeIndex + 1))}`;
+    }
   }
 
-  const fraction = splitTopLevel(trimmed, "/");
-  if (fraction) {
-    const [prefix, numerator] = splitFractionPrefix(fraction[0]);
-    return `${renderEditableExpression(prefix)}${atomEditableHtml("frac", [numerator, fraction[1]])}`;
+  const bareFrac = parseBareBraceArgs(trimmed, "frac", 2);
+  if (bareFrac) {
+    return atomEditableHtml("frac", bareFrac);
   }
 
-  const power = splitTopLevel(trimmed, "^");
-  if (power) {
-    return `${renderEditableExpression(power[0])}<span class="mq-power">^<span class="mq-exponent">${renderEditableExpression(stripWrappingParens(power[1]))}</span></span>`;
+  const bareSqrt = parseBareBraceArgs(trimmed, "sqrt", 1);
+  if (bareSqrt) {
+    return atomEditableHtml("sqrt", bareSqrt);
   }
 
   return escapeHtml(trimmed).replaceAll(/\bpi\b/g, "π");
+}
+
+function parseEditableLatexCommandAt(source, index) {
+  for (const command of Object.keys(LATEX_FUNCTIONS)) {
+    const marker = `\\${command}`;
+    if (!source.startsWith(marker, index)) continue;
+    const expectedArgs = LATEX_FUNCTIONS[command].args;
+    const args = [];
+    let cursor = index + marker.length;
+    while (args.length < expectedArgs && source[cursor] === "{") {
+      const end = matchingBrace(source, cursor);
+      if (end === -1) {
+        args.push(source.slice(cursor + 1));
+        cursor = source.length;
+        break;
+      }
+      args.push(source.slice(cursor + 1, end));
+      cursor = end + 1;
+    }
+    while (args.length < expectedArgs) args.push("");
+    return { end: cursor, html: atomEditableHtml(command, args) };
+  }
+
+  const paired = parseEditablePairedLatexDelimiterAt(source, index);
+  if (paired) return paired;
+  return null;
+}
+
+function parseEditablePairedLatexDelimiterAt(source, index) {
+  const pairs = [
+    { open: "\\left|", close: "\\right|", fallbackClose: "\\right", command: "abs" },
+    { open: "\\lvert", close: "\\rvert", command: "abs" },
+    { open: "\\lfloor", close: "\\rfloor", command: "floor" },
+    { open: "\\lceil", close: "\\rceil", command: "ceil" }
+  ];
+
+  for (const pair of pairs) {
+    if (!source.startsWith(pair.open, index)) continue;
+    const start = index + pair.open.length;
+    let end = source.indexOf(pair.close, start);
+    let closeLength = pair.close.length;
+    if (end === -1 && pair.fallbackClose) {
+      end = source.indexOf(pair.fallbackClose, start);
+      closeLength = pair.fallbackClose.length;
+    }
+    if (end === -1) return null;
+    return { end: end + closeLength, html: atomEditableHtml(pair.command, [source.slice(start, end)]) };
+  }
+  return null;
 }
 
 function parseEditableInternalCallAt(source, index) {
@@ -1501,22 +1659,6 @@ function parseEditableInternalCallAt(source, index) {
     return { end: closeIndex + 1, html: atomEditableHtml(name, args) };
   }
   return null;
-}
-
-function splitFractionPrefix(left) {
-  if ((left[0] === "+" || left[0] === "-") && left.length > 1) {
-    return [left[0], left.slice(1)];
-  }
-  let depth = 0;
-  for (let i = left.length - 1; i > 0; i -= 1) {
-    const char = left[i];
-    if (char === ")") depth += 1;
-    if (char === "(") depth -= 1;
-    if (depth === 0 && (char === "+" || char === "-")) {
-      return [left.slice(0, i + 1), left.slice(i + 1)];
-    }
-  }
-  return ["", left];
 }
 
 function atomEditableHtml(command, args) {
@@ -1700,14 +1842,32 @@ function serializeMathNode(node) {
     const slots = Array.from(node.querySelectorAll(":scope > .mq-slot, :scope > .mq-num > .mq-slot, :scope > .mq-den > .mq-slot, :scope > .mq-radicand > .mq-slot")).map((slot) =>
       Array.from(slot.childNodes).map(serializeMathNode).join("")
     );
-    if (command === "frac") return `\\frac{${slots[0] ?? ""}}{${slots[1] ?? ""}}`;
-    if (command === "sqrt") return `\\sqrt{${slots[0] ?? ""}}`;
-    if (command === "abs") return `\\left|${slots[0] ?? ""}\\right|`;
-    if (command === "floor") return `\\lfloor${slots[0] ?? ""}\\rfloor`;
-    if (command === "ceil") return `\\lceil${slots[0] ?? ""}\\rceil`;
-    return `\\${command}${slots.map((value) => `{${value}}`).join("")}`;
+    if (command === "frac") return `frac{${slots[0] ?? ""}}{${slots[1] ?? ""}}`;
+    if (command === "sqrt") return `sqrt(${slots[0] ?? ""})`;
+    if (command === "abs") return `abs(${slots[0] ?? ""})`;
+    if (command === "floor") return `floor(${slots[0] ?? ""})`;
+    if (command === "ceil") return `ceil(${slots[0] ?? ""})`;
+    const internal = LATEX_FUNCTIONS[command]?.internal ?? command;
+    return `${internal}(${slots.join(",")})`;
+  }
+  if (node.classList.contains("mq-power")) {
+    const base = node.querySelector(":scope > .mq-base");
+    const exponent = node.querySelector(":scope > .mq-exponent");
+    const baseSource = base ? Array.from(base.childNodes).map(serializeMathNode).join("") : "";
+    const exponentSource = exponent ? Array.from(exponent.childNodes).map(serializeMathNode).join("") : "";
+    return `${baseSource}^${formatPowerExponentSource(exponentSource)}`;
   }
   return Array.from(node.childNodes).map(serializeMathNode).join("");
+}
+
+function formatPowerExponentSource(source) {
+  const exponent = String(source ?? "").trim();
+  if (!exponent) return "";
+  if (/^[A-Za-z_]\w*$|^\d+(?:\.\d+)?$/.test(exponent)) return exponent;
+  if ((exponent.startsWith("(") && matchingParen(exponent, 0) === exponent.length - 1) || (exponent.startsWith("{") && matchingBrace(exponent, 0) === exponent.length - 1)) {
+    return exponent;
+  }
+  return `(${exponent})`;
 }
 
 function updateMathSourceDisplay(field, source) {
@@ -1823,7 +1983,33 @@ function renderLatexExpression(source) {
   const trimmed = source.trim();
   if (!trimmed) return "";
 
+  const additive = splitTopLevelAdditive(trimmed);
+  if (additive) {
+    return `${renderLatexExpression(additive.left)}${escapeHtml(additive.operator)}${renderLatexExpression(additive.right)}`;
+  }
+
+  const fraction = splitTopLevelFraction(trimmed);
+  if (fraction) {
+    return `${renderLatexExpression(fraction.prefix)}${fractionHtml(renderLatexExpression(fraction.numerator), renderLatexExpression(fraction.denominator), `\\frac{${fraction.numerator}}{${fraction.denominator}}`)}${renderLatexExpression(fraction.suffix)}`;
+  }
+
+  const power = splitTopLevel(trimmed, "^");
+  if (power) {
+    const grouped = splitPowerOperands(trimmed, power.index);
+    return `${renderLatexExpression(grouped.prefix)}${powerHtml(renderLatexExpression(grouped.base), renderLatexExpression(stripWrappingGroup(grouped.exponent)), `${grouped.base}^{${grouped.exponent}}`)}${renderLatexExpression(grouped.suffix)}`;
+  }
+
   const commandIndex = nextLatexCommandIndex(trimmed);
+  const internalIndex = nextInternalCallIndex(trimmed);
+  const parenIndex = nextParentheticalIndex(trimmed);
+
+  if (parenIndex !== -1 && (commandIndex === -1 || parenIndex < commandIndex) && (internalIndex === -1 || parenIndex < internalIndex)) {
+    const closeIndex = matchingParen(trimmed, parenIndex);
+    if (closeIndex !== -1) {
+      return `${renderLatexExpression(trimmed.slice(0, parenIndex))}(${renderLatexExpression(trimmed.slice(parenIndex + 1, closeIndex))})${renderLatexExpression(trimmed.slice(closeIndex + 1))}`;
+    }
+  }
+
   if (commandIndex !== -1) {
     const parsed = parseLatexCommandAt(trimmed, commandIndex);
     if (parsed) {
@@ -1831,7 +2017,6 @@ function renderLatexExpression(source) {
     }
   }
 
-  const internalIndex = nextInternalCallIndex(trimmed);
   if (internalIndex !== -1) {
     const parsed = parseInternalCallAt(trimmed, internalIndex);
     if (parsed) {
@@ -1839,9 +2024,11 @@ function renderLatexExpression(source) {
     }
   }
 
-  const additive = splitTopLevelAdditive(trimmed);
-  if (additive) {
-    return `${renderLatexExpression(additive.left)}${escapeHtml(additive.operator)}${renderLatexExpression(additive.right)}`;
+  if (parenIndex !== -1) {
+    const closeIndex = matchingParen(trimmed, parenIndex);
+    if (closeIndex !== -1) {
+      return `${renderLatexExpression(trimmed.slice(0, parenIndex))}(${renderLatexExpression(trimmed.slice(parenIndex + 1, closeIndex))})${renderLatexExpression(trimmed.slice(closeIndex + 1))}`;
+    }
   }
 
   const latexFrac = parseLatexCommand(trimmed, "frac", 2);
@@ -1860,16 +2047,6 @@ function renderLatexExpression(source) {
   const bareSqrt = parseBareBraceArgs(trimmed, "sqrt", 1);
   if (bareSqrt) {
     return renderLatexFunction("sqrt", bareSqrt);
-  }
-
-  const fraction = splitTopLevel(trimmed, "/");
-  if (fraction) {
-    return fractionHtml(renderLatexExpression(fraction[0]), renderLatexExpression(fraction[1]), `\\frac{${fraction[0]}}{${fraction[1]}}`);
-  }
-
-  const power = splitTopLevel(trimmed, "^");
-  if (power) {
-    return powerHtml(renderLatexExpression(power[0]), renderLatexExpression(stripWrappingParens(power[1])), `${power[0]}^{${power[1]}}`);
   }
 
   const fracCall = parseFunctionCall(trimmed, "frac");
@@ -1931,6 +2108,16 @@ function nextInternalCallIndex(source) {
     .map((config) => source.indexOf(`${config.internal}(`))
     .filter((index) => index !== -1);
   return indexes.length ? Math.min(...indexes) : -1;
+}
+
+function nextParentheticalIndex(source) {
+  let index = source.indexOf("(");
+  while (index !== -1) {
+    const previous = source.slice(0, index).match(/[A-Za-z_]\w*$/)?.[0] ?? "";
+    if (!Object.values(LATEX_FUNCTIONS).some((config) => config.internal === previous)) return index;
+    index = source.indexOf("(", index + 1);
+  }
+  return -1;
 }
 
 function parseInternalCallAt(source, index) {
@@ -2073,24 +2260,145 @@ function sourceFromRenderedHtml(html) {
 
 function splitTopLevel(source, operator) {
   let depth = 0;
+  let braceDepth = 0;
   for (let i = source.length - 1; i >= 0; i -= 1) {
     const char = source[i];
     if (char === ")") depth += 1;
     if (char === "(") depth -= 1;
-    if (depth === 0 && char === operator) {
-      return [source.slice(0, i), source.slice(i + 1)];
+    if (char === "}") braceDepth += 1;
+    if (char === "{") braceDepth -= 1;
+    if (depth === 0 && braceDepth === 0 && char === operator) {
+      return Object.assign([source.slice(0, i), source.slice(i + 1)], { index: i });
     }
   }
   return null;
 }
 
+function splitTopLevelFraction(source) {
+  const division = splitTopLevel(source, "/");
+  if (!division) return null;
+  const left = splitPreviousOperand(source, division.index);
+  const right = splitNextOperand(source, division.index + 1);
+  return {
+    prefix: source.slice(0, left.start),
+    numerator: source.slice(left.start, division.index),
+    denominator: source.slice(division.index + 1, right.end),
+    suffix: source.slice(right.end)
+  };
+}
+
+function splitPowerOperands(source, operatorIndex) {
+  const left = splitPreviousOperand(source, operatorIndex);
+  const right = splitNextOperand(source, operatorIndex + 1, { includeSignedNumber: true });
+  return {
+    prefix: source.slice(0, left.start),
+    base: source.slice(left.start, operatorIndex),
+    exponent: source.slice(operatorIndex + 1, right.end),
+    suffix: source.slice(right.end)
+  };
+}
+
+function splitPreviousOperand(source, operatorIndex) {
+  let cursor = operatorIndex - 1;
+  while (cursor >= 0 && /\s/.test(source[cursor])) cursor -= 1;
+  if (cursor < 0) return { start: 0 };
+
+  if (source[cursor] === ")" || source[cursor] === "}") {
+    const close = source[cursor];
+    const open = close === ")" ? "(" : "{";
+    let depth = 0;
+    for (let i = cursor; i >= 0; i -= 1) {
+      if (source[i] === close) depth += 1;
+      if (source[i] === open) depth -= 1;
+      if (depth === 0) {
+        const nameStart = scanIdentifierStart(source, i - 1);
+        let start = nameStart ?? i;
+        if (source[start - 1] === "^") {
+          start = splitPreviousOperand(source, start - 1).start;
+        }
+        return { start };
+      }
+    }
+    return { start: 0 };
+  }
+
+  if (isIdentifierChar(source[cursor])) {
+    return { start: scanIdentifierStart(source, cursor) ?? cursor };
+  }
+
+  while (cursor >= 0 && /[\d.]/.test(source[cursor])) cursor -= 1;
+  return { start: cursor + 1 };
+}
+
+function splitNextOperand(source, startIndex, options = {}) {
+  let cursor = startIndex;
+  while (cursor < source.length && /\s/.test(source[cursor])) cursor += 1;
+
+  if (options.includeSignedNumber && (source[cursor] === "+" || source[cursor] === "-")) {
+    const next = source[cursor + 1];
+    if (next === "(" || next === "{" || /[\d.A-Za-z_\\]/.test(next ?? "")) cursor += 1;
+  }
+
+  if (source[cursor] === "(" || source[cursor] === "{") {
+    const end = source[cursor] === "(" ? matchingParen(source, cursor) : matchingBrace(source, cursor);
+    return { end: end === -1 ? source.length : end + 1 };
+  }
+
+  if (source[cursor] === "\\") {
+    const command = source.slice(cursor + 1).match(/^[A-Za-z]+/)?.[0] ?? "";
+    let end = cursor + 1 + command.length;
+    while (source[end] === "{") {
+      const close = matchingBrace(source, end);
+      if (close === -1) return { end: source.length };
+      end = close + 1;
+    }
+    return { end };
+  }
+
+  if (isIdentifierStart(source[cursor])) {
+    let end = cursor + 1;
+    while (isIdentifierChar(source[end])) end += 1;
+    if (source[end] === "(") {
+      const close = matchingParen(source, end);
+      return { end: close === -1 ? source.length : close + 1 };
+    }
+    while (source[end] === "{") {
+      const close = matchingBrace(source, end);
+      if (close === -1) return { end: source.length };
+      end = close + 1;
+    }
+    return { end };
+  }
+
+  while (cursor < source.length && /[\d.]/.test(source[cursor])) cursor += 1;
+  return { end: cursor };
+}
+
+function scanIdentifierStart(source, index) {
+  if (!isIdentifierChar(source[index])) return null;
+  let cursor = index;
+  while (cursor >= 0 && isIdentifierChar(source[cursor])) cursor -= 1;
+  return cursor + 1;
+}
+
+function isIdentifierStart(char) {
+  return /[A-Za-z_]/.test(char ?? "");
+}
+
+function isIdentifierChar(char) {
+  return /[A-Za-z0-9_]/.test(char ?? "");
+}
+
 function splitTopLevelAdditive(source) {
   let depth = 0;
+  let braceDepth = 0;
   for (let i = source.length - 1; i > 0; i -= 1) {
     const char = source[i];
-    if (char === ")" || char === "}") depth += 1;
-    if (char === "(" || char === "{") depth -= 1;
-    if (depth === 0 && (char === "+" || char === "-") && !isUnaryOperator(source, i)) {
+    if (char === ")") depth += 1;
+    if (char === "(") depth -= 1;
+    if (char === "}") braceDepth += 1;
+    if (char === "{") braceDepth -= 1;
+    if (depth === 0 && braceDepth === 0 && (char === "+" || char === "-") && !isUnaryOperator(source, i)) {
       return { left: source.slice(0, i), operator: char, right: source.slice(i + 1) };
     }
   }
@@ -2102,9 +2410,11 @@ function isUnaryOperator(source, index) {
   return !previous || "+-*/^(,".includes(previous);
 }
 
-function stripWrappingParens(source) {
+function stripWrappingGroup(source) {
   const trimmed = String(source ?? "").trim();
-  return trimmed.startsWith("(") && matchingParen(trimmed, 0) === trimmed.length - 1 ? trimmed.slice(1, -1) : trimmed;
+  if (trimmed.startsWith("(") && matchingParen(trimmed, 0) === trimmed.length - 1) return trimmed.slice(1, -1);
+  if (trimmed.startsWith("{") && matchingBrace(trimmed, 0) === trimmed.length - 1) return trimmed.slice(1, -1);
+  return trimmed;
 }
 
 function parseFunctionCall(source, name) {
@@ -2118,12 +2428,15 @@ function parseFunctionCall(source, name) {
 function splitFunctionArgs(inner) {
   const args = [];
   let depth = 0;
+  let braceDepth = 0;
   let start = 0;
   for (let i = 0; i < inner.length; i += 1) {
     const char = inner[i];
     if (char === "(") depth += 1;
     if (char === ")") depth -= 1;
-    if (char === "," && depth === 0) {
+    if (char === "{") braceDepth += 1;
+    if (char === "}") braceDepth -= 1;
+    if (char === "," && depth === 0 && braceDepth === 0) {
       args.push(inner.slice(start, i));
       start = i + 1;
     }
@@ -2164,7 +2477,7 @@ function exportScene() {
 }
 
 function textModeExpression(source) {
-  return normalizeExpressionText(source);
+  return normalizeExpressionDisplayText(source);
 }
 
 function importScene(raw) {

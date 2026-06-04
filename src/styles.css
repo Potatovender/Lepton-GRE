@@ -44,6 +44,10 @@ select {
   border-right: 1px solid #d7dce5;
 }
 
+.expression-panel-text {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .panel-header,
 .panel-footer {
   padding: 12px;
@@ -83,6 +87,11 @@ select {
 .entry-list {
   min-height: 0;
   overflow: auto;
+}
+
+.entry-list-text {
+  display: grid;
+  overflow: hidden;
 }
 
 .expression-row {
@@ -224,8 +233,27 @@ select {
   line-height: 1;
 }
 
+.mq-radical {
+  align-items: stretch;
+  max-width: 100%;
+}
+
 .mq-radicand {
+  display: inline-flex;
+  align-items: center;
+  min-width: 1.2em;
+  max-width: 100%;
   border-top: 1px solid currentColor;
+  padding: 0 0.2em;
+  overflow: visible;
+}
+
+.mq-radicand > .mq-slot {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
 }
 
 .mq-delimited,
@@ -460,16 +488,18 @@ select {
 }
 
 .text-mode-panel {
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 12px;
 }
 
 .scene-textarea {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   resize: none;
   border: 1px solid #cfd5df;
   border-radius: 6px;
