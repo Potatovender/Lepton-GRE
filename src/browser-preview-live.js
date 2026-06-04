@@ -286,6 +286,8 @@ function bindEvents() {
       field.dataset.editing = "true";
     });
     field.addEventListener("beforeinput", (event) => {
+      if (event.inputType === "deleteContentBackward" && handleMathBackspace(field, event)) return;
+      if (handleSlotExitInput(field, event)) return;
       handleMathBeforeInput(field, event);
     });
     field.addEventListener("keydown", (event) => {
@@ -298,7 +300,7 @@ function bindEvents() {
       }
     });
     field.addEventListener("input", () => {
-      expandMathShortcut(field);
+      expandCompletedFunctionCall(field);
       syncMathField(field);
       updateField(field);
       const diagnostics = validateScene();
@@ -1044,25 +1046,48 @@ function handleMathBeforeInput(field, event) {
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
 
-function expandMathShortcut(field) {
+function expandCompletedFunctionCall(field) {
   const selection = window.getSelection();
   if (!selection || !selection.rangeCount) return;
   const range = selection.getRangeAt(0);
   const textNode = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer : null;
   if (!textNode) return;
   const before = textNode.textContent.slice(0, range.startOffset);
-  const shortcut = before.match(/(?:^|[^A-Za-z\\])([A-Za-z]+)$/);
-  if (!shortcut) return;
+  const call = before.match(/(?:^|[^A-Za-z\\])([A-Za-z]+)\(([^()]*)\)$/);
+  if (!call) return;
 
-  const name = shortcut[1];
+  const name = call[1];
   if (!LATEX_SHORTCUTS.has(name)) return;
-  const start = range.startOffset - name.length;
+  const rawCall = `${name}(${call[2]})`;
+  const start = range.startOffset - rawCall.length;
+  const args = splitFunctionArgs(call[2]);
+  if (args.length !== LATEX_FUNCTIONS[name].args) return;
   textNode.textContent = `${textNode.textContent.slice(0, start)}${textNode.textContent.slice(range.startOffset)}`;
-  const atom = createMathAtom(name, Array.from({ length: LATEX_FUNCTIONS[name].args }, () => ""));
+  const atom = createMathAtom(name, args);
   range.setStart(textNode, start);
   range.collapse(true);
   range.insertNode(atom);
-  focusMathSlot(atom, 0);
+  placeCaretAfterNode(atom);
+}
+
+function handleSlotExitInput(field, event) {
+  if (!event.data || !/[)+\-*]/.test(event.data)) return false;
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return false;
+  const range = selection.getRangeAt(0);
+  const slot = closestMathSlot(range.startContainer);
+  if (!slot || !isCaretAtEndOf(slot, range)) return false;
+
+  const atom = slot.closest(".mq-atom");
+  if (!atom) return false;
+  event.preventDefault();
+  placeCaretAfterNode(atom);
+  if (event.data !== ")") {
+    insertTextAtSelection(event.data);
+  }
+  syncMathField(field);
+  field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  return true;
 }
 
 function syncMathField(field) {
@@ -1098,7 +1123,8 @@ function renderEditableExpression(source) {
 
   const fraction = splitTopLevel(trimmed, "/");
   if (fraction) {
-    return atomEditableHtml("frac", fraction);
+    const [prefix, numerator] = splitFractionPrefix(fraction[0]);
+    return `${renderEditableExpression(prefix)}${atomEditableHtml("frac", [numerator, fraction[1]])}`;
   }
 
   return escapeHtml(trimmed).replaceAll(/\bpi\b/g, "π");
@@ -1118,25 +1144,41 @@ function parseEditableInternalCallAt(source, index) {
   return null;
 }
 
+function splitFractionPrefix(left) {
+  if ((left[0] === "+" || left[0] === "-") && left.length > 1) {
+    return [left[0], left.slice(1)];
+  }
+  let depth = 0;
+  for (let i = left.length - 1; i > 0; i -= 1) {
+    const char = left[i];
+    if (char === ")") depth += 1;
+    if (char === "(") depth -= 1;
+    if (depth === 0 && (char === "+" || char === "-")) {
+      return [left.slice(0, i + 1), left.slice(i + 1)];
+    }
+  }
+  return ["", left];
+}
+
 function atomEditableHtml(command, args) {
   const slot = (arg, index) => `<span class="mq-slot" data-slot="${index}" contenteditable="true">${renderEditableExpression(arg)}</span>`;
   if (command === "frac") {
-    return `<span class="mq-atom mq-frac" data-command="frac"><span class="mq-num">${slot(args[0] ?? "", 0)}</span><span class="mq-den">${slot(args[1] ?? "", 1)}</span></span>`;
+    return `<span class="mq-atom mq-frac" data-command="frac" contenteditable="false"><span class="mq-num">${slot(args[0] ?? "", 0)}</span><span class="mq-den">${slot(args[1] ?? "", 1)}</span></span>`;
   }
   if (command === "sqrt") {
-    return `<span class="mq-atom mq-radical" data-command="sqrt"><span class="mq-radical-symbol">√</span><span class="mq-radicand">${slot(args[0] ?? "", 0)}</span></span>`;
+    return `<span class="mq-atom mq-radical" data-command="sqrt" contenteditable="false"><span class="mq-radical-symbol">√</span><span class="mq-radicand">${slot(args[0] ?? "", 0)}</span></span>`;
   }
   if (command === "abs") {
-    return `<span class="mq-atom mq-delimited" data-command="abs"><span class="mq-delimiter">|</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">|</span></span>`;
+    return `<span class="mq-atom mq-delimited" data-command="abs" contenteditable="false"><span class="mq-delimiter">|</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">|</span></span>`;
   }
   if (command === "floor") {
-    return `<span class="mq-atom mq-delimited" data-command="floor"><span class="mq-delimiter">⌊</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">⌋</span></span>`;
+    return `<span class="mq-atom mq-delimited" data-command="floor" contenteditable="false"><span class="mq-delimiter">⌊</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">⌋</span></span>`;
   }
   if (command === "ceil") {
-    return `<span class="mq-atom mq-delimited" data-command="ceil"><span class="mq-delimiter">⌈</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">⌉</span></span>`;
+    return `<span class="mq-atom mq-delimited" data-command="ceil" contenteditable="false"><span class="mq-delimiter">⌈</span>${slot(args[0] ?? "", 0)}<span class="mq-delimiter">⌉</span></span>`;
   }
   const renderedArgs = args.map((arg, index) => slot(arg, index)).join('<span class="mq-separator">, </span>');
-  return `<span class="mq-atom mq-call" data-command="${escapeHtml(command)}"><span class="mq-operator">${escapeHtml(LATEX_FUNCTIONS[command].display)}</span><span class="mq-paren">(</span>${renderedArgs}<span class="mq-paren">)</span></span>`;
+  return `<span class="mq-atom mq-call" data-command="${escapeHtml(command)}" contenteditable="false"><span class="mq-operator">${escapeHtml(LATEX_FUNCTIONS[command].display)}</span><span class="mq-paren">(</span>${renderedArgs}<span class="mq-paren">)</span></span>`;
 }
 
 function createMathAtom(command, args) {
@@ -1156,19 +1198,84 @@ function focusMathSlot(atom, index) {
   selection.addRange(range);
 }
 
+function closestMathSlot(node) {
+  const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+  return element?.closest?.(".mq-slot") ?? null;
+}
+
+function isCaretAtEndOf(container, range) {
+  const probe = range.cloneRange();
+  probe.selectNodeContents(container);
+  probe.setStart(range.endContainer, range.endOffset);
+  return probe.toString().length === 0;
+}
+
+function isCaretAtStartOf(container, range) {
+  const probe = range.cloneRange();
+  probe.selectNodeContents(container);
+  probe.setEnd(range.startContainer, range.startOffset);
+  return probe.toString().length === 0;
+}
+
+function placeCaretAfterNode(node) {
+  const range = document.createRange();
+  range.setStartAfter(node);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function placeCaretBeforeNode(node) {
+  const range = document.createRange();
+  range.setStartBefore(node);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function insertTextAtSelection(text) {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const node = document.createTextNode(text);
+  range.insertNode(node);
+  range.setStart(node, node.textContent.length);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 function handleMathBackspace(field, event) {
   const selection = window.getSelection();
-  if (!selection || !selection.rangeCount || !selection.isCollapsed) return;
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return false;
   const range = selection.getRangeAt(0);
-  if (range.startContainer.nodeType === Node.TEXT_NODE && range.startOffset > 0) return;
+  const slot = closestMathSlot(range.startContainer);
+  if (slot && isCaretAtStartOf(slot, range)) {
+    const atom = slot.closest(".mq-atom");
+    if (!atom) return false;
+    event.preventDefault();
+    if (slot.textContent.trim() === "" && atom.querySelectorAll(".mq-slot").length === 1) {
+      atom.remove();
+    } else {
+      placeCaretBeforeNode(atom);
+    }
+    syncMathField(field);
+    field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    return true;
+  }
+  if (range.startContainer.nodeType === Node.TEXT_NODE && range.startOffset > 0) return false;
   const container = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
   const previous = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.previousSibling : container.childNodes[range.startOffset - 1];
   const atom = previous?.classList?.contains("mq-atom") ? previous : null;
-  if (!atom) return;
+  if (!atom) return false;
   event.preventDefault();
   atom.remove();
   syncMathField(field);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  return true;
 }
 
 function serializeMathField(field) {
