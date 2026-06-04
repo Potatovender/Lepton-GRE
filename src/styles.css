@@ -2,6 +2,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body,
 #app {
@@ -33,6 +37,7 @@ select {
 
 .expression-panel {
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   background: #ffffff;
@@ -76,6 +81,7 @@ select {
 }
 
 .entry-list {
+  min-height: 0;
   overflow: auto;
 }
 

@@ -686,8 +686,7 @@ function renderSceneCpu(canvas) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   drawGrid(ctx, rect.width, rect.height);
 
-  const env = Object.fromEntries(scene.functions.map((entry) => [entry.id, compileExpression(entry.expression)]));
-  attachRuntimeGuard(env);
+  const env = buildRuntimeEnv(Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression])));
   const xPoints = axis(viewport.xMin, viewport.xMax, scene.settings.xPoints);
   const yPoints = axis(viewport.yMin, viewport.yMax, scene.settings.yPoints);
   const pixelWidth = rect.width / Math.max(1, xPoints.length - 1);
@@ -800,6 +799,15 @@ function buildFragmentShader() {
       const color = scene.colors.find((entry) => entry.id === draw?.colorId);
       const restriction = scene.restrictions.find((entry) => entry.id === draw?.restrictionId);
       if (!fn || !color || !restriction) return null;
+      if (
+        validateExpression(fn.expression, env, [fn.id]).status === "invalid" ||
+        validateExpression(color.red, env).status === "invalid" ||
+        validateExpression(color.green, env).status === "invalid" ||
+        validateExpression(color.blue, env).status === "invalid" ||
+        validateExpression(restriction.expression, env).status === "invalid"
+      ) {
+        return null;
+      }
       try {
         return {
           expr: expressionToGlsl(fn.expression, env),
@@ -965,62 +973,66 @@ function axis(min, max, count) {
 }
 
 function compileExpression(source) {
-  try {
-    let js = normalizeExpressionText(source)
-      .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
-      .replaceAll("^", "**")
-      .replaceAll("pi", "Math.PI")
-      .replaceAll(/\be\b/g, "Math.E")
-      .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log)\b/g, "Math.$1")
-      .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
+  let js = normalizeExpressionText(source)
+    .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
+    .replaceAll("^", "**")
+    .replaceAll("pi", "Math.PI")
+    .replaceAll(/\be\b/g, "Math.E")
+    .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log)\b/g, "Math.$1")
+    .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
 
-    js = js.replaceAll(/(\d)([A-Za-z_])/g, "$1*$2");
-    js = js.replaceAll(/([xy])(\d)/g, "$1*$2");
-    js = js.replaceAll(/(\d)\(/g, "$1*(");
-    js = js.replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
-    js = rewriteBareIdentifiers(js, (name) => `ref("${name}", x, y)`, new Set(["Math"]));
+  js = js.replaceAll(/(\d)([A-Za-z_])/g, "$1*$2");
+  js = js.replaceAll(/([xy])(\d)/g, "$1*$2");
+  js = js.replaceAll(/(\d)\(/g, "$1*(");
+  js = js.replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
+  js = rewriteBareIdentifiers(js, (name) => `ref("${name}", x, y)`, new Set(["Math"]));
 
-    return new Function(
-      "x",
-      "y",
-      "env",
-      `
-        const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-        const frac = (a, b) => b === 0 ? NaN : a / b;
-        const ln = (value) => value > 0 ? Math.log(value) : NaN;
-        const sec = (value) => 1 / Math.cos(value);
-        const csc = (value) => 1 / Math.sin(value);
-        const cot = (value) => 1 / Math.tan(value);
-        const arccot = (value) => Math.PI / 2 - Math.atan(value);
-        const arcsec = (value) => Math.acos(1 / value);
-        const arccsc = (value) => Math.asin(1 / value);
-        const cbrt = (value) => Math.cbrt(value);
-        const sech = (value) => 1 / Math.cosh(value);
-        const csch = (value) => 1 / Math.sinh(value);
-        const coth = (value) => 1 / Math.tanh(value);
-        const arcsinh = (value) => Math.asinh(value);
-        const arccosh = (value) => Math.acosh(value);
-        const arctanh = (value) => Math.atanh(value);
-        const arcsech = (value) => Math.acosh(1 / value);
-        const arccsch = (value) => Math.asinh(1 / value);
-        const arccoth = (value) => Math.atanh(1 / value);
-        const runtime = env.__runtime ?? { depth: 0, maxDepth: ${recursionLimit()} };
-        const ref = (name, rx, ry) => {
-          if (!env[name]) return NaN;
-          if (runtime.depth >= runtime.maxDepth) return rx + ry;
-          runtime.depth += 1;
-          try {
-            return env[name](rx, ry, env);
-          } finally {
-            runtime.depth -= 1;
-          }
-        };
-        return ${js};
-      `
-    );
-  } catch {
-    return () => NaN;
+  return new Function(
+    "x",
+    "y",
+    "env",
+    `
+      const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+      const frac = (a, b) => b === 0 ? NaN : a / b;
+      const ln = (value) => value > 0 ? Math.log(value) : NaN;
+      const sec = (value) => 1 / Math.cos(value);
+      const csc = (value) => 1 / Math.sin(value);
+      const cot = (value) => 1 / Math.tan(value);
+      const arccot = (value) => Math.PI / 2 - Math.atan(value);
+      const arcsec = (value) => Math.acos(1 / value);
+      const arccsc = (value) => Math.asin(1 / value);
+      const cbrt = (value) => Math.cbrt(value);
+      const sech = (value) => 1 / Math.cosh(value);
+      const csch = (value) => 1 / Math.sinh(value);
+      const coth = (value) => 1 / Math.tanh(value);
+      const arcsinh = (value) => Math.asinh(value);
+      const arccosh = (value) => Math.acosh(value);
+      const arctanh = (value) => Math.atanh(value);
+      const arcsech = (value) => Math.acosh(1 / value);
+      const arccsch = (value) => Math.asinh(1 / value);
+      const arccoth = (value) => Math.atanh(1 / value);
+      const runtime = env.__runtime ?? { depth: 0, maxDepth: ${recursionLimit()} };
+      const ref = (name, rx, ry) => {
+        if (!env[name]) return NaN;
+        if (runtime.depth >= runtime.maxDepth) return rx + ry;
+        runtime.depth += 1;
+        try {
+          return env[name](rx, ry, env);
+        } finally {
+          runtime.depth -= 1;
+        }
+      };
+      return ${js};
+    `
+  );
+}
+
+function buildRuntimeEnv(expressions) {
+  const runtimeEnv = {};
+  for (const [id, expression] of Object.entries(expressions)) {
+    runtimeEnv[id] = (x, y, env) => compileExpression(expression)(x, y, env);
   }
+  return attachRuntimeGuard(runtimeEnv);
 }
 
 function expressionToGlsl(source, env = {}, zName = null, stack = []) {
@@ -1206,11 +1218,20 @@ function validateScene() {
   });
   diagnostics.draws = scene.draws.map((entry) => {
     const missing = [];
-    if (!scene.functions.some((candidate) => candidate.id === entry.equationId)) missing.push("function");
-    if (!scene.colors.some((candidate) => candidate.id === entry.colorId)) missing.push("color");
-    if (!scene.restrictions.some((candidate) => candidate.id === entry.restrictionId)) missing.push("boundary");
-    return missing.length
-      ? { status: "invalid", message: `Missing ${missing.join(", ")}` }
+    const functionIndex = scene.functions.findIndex((candidate) => candidate.id === entry.equationId);
+    const colorIndex = scene.colors.findIndex((candidate) => candidate.id === entry.colorId);
+    const restrictionIndex = scene.restrictions.findIndex((candidate) => candidate.id === entry.restrictionId);
+    if (functionIndex === -1) missing.push("function");
+    if (colorIndex === -1) missing.push("color");
+    if (restrictionIndex === -1) missing.push("boundary");
+    if (missing.length) return { status: "invalid", message: `Missing ${missing.join(", ")}` };
+    const affected = [
+      diagnostics.functions[functionIndex],
+      diagnostics.colors[colorIndex],
+      diagnostics.restrictions[restrictionIndex]
+    ].find((item) => item?.status === "invalid");
+    return affected
+      ? { status: "invalid", message: `Draw layer skipped: ${affected.message}` }
       : { status: "valid", message: "Draw layer is valid" };
   });
 
@@ -1234,17 +1255,34 @@ function validateEntryId(id, label) {
 
 function validateExpression(source, env, stack = []) {
   try {
-    if (/\b[A-Za-z]\w*\(\s*\)/.test(normalizeExpressionText(source))) {
+    const normalized = normalizeExpressionText(source);
+    assertCompleteExpression(normalized);
+    if (/\b[A-Za-z]\w*\(\s*\)/.test(normalized)) {
       throw new Error("Empty function argument");
     }
     expressionToGlsl(source, env, null, stack);
-    const runtimeEnv = Object.fromEntries(Object.entries(env).map(([id, expr]) => [id, compileExpression(expr)]));
-    attachRuntimeGuard(runtimeEnv);
+    const runtimeEnv = buildRuntimeEnv(env);
     compileExpression(source)(1, 1, runtimeEnv);
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
     return { status: "invalid", message: error.message };
   }
+}
+
+function assertCompleteExpression(source) {
+  const trimmed = String(source ?? "").trim();
+  if (!trimmed) throw new Error("Expression is blank");
+  if (/[+\-*/^,]$/.test(trimmed)) throw new Error("Expression ends with an operator");
+  let parenDepth = 0;
+  let braceDepth = 0;
+  for (const char of trimmed) {
+    if (char === "(") parenDepth += 1;
+    if (char === ")") parenDepth -= 1;
+    if (char === "{") braceDepth += 1;
+    if (char === "}") braceDepth -= 1;
+    if (parenDepth < 0 || braceDepth < 0) throw new Error("Expression has unmatched closing bracket");
+  }
+  if (parenDepth || braceDepth) throw new Error("Expression has unmatched opening bracket");
 }
 
 function updateStatusLights(diagnostics) {
@@ -1701,10 +1739,7 @@ function latexSourceFromExpression(source) {
     }
   }
 
-  return normalized
-    .replaceAll(/\bpi\b/g, "\\pi")
-    .replaceAll(/\b(sin|cos|tan|log|ln)\(/g, "\\$1{")
-    .replaceAll(/\)/g, "}");
+  return normalized;
 }
 
 function sourceFromLatexText(text) {
