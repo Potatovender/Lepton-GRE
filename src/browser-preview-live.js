@@ -289,6 +289,7 @@ function bindEvents() {
       if (event.inputType === "deleteContentBackward" && handleMathBackspace(field, event)) return;
       if (handleSlotExitInput(field, event)) return;
       handleMathBeforeInput(field, event);
+      handlePlainMathInsert(field, event);
     });
     field.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -300,7 +301,9 @@ function bindEvents() {
       }
     });
     field.addEventListener("input", () => {
+      normalizeMathFieldDom(field);
       expandCompletedFunctionCall(field);
+      expandTrailingFraction(field);
       syncMathField(field);
       updateField(field);
       const diagnostics = validateScene();
@@ -1046,6 +1049,36 @@ function handleMathBeforeInput(field, event) {
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
 
+function handlePlainMathInsert(field, event) {
+  if (event.defaultPrevented || event.inputType !== "insertText" || !event.data) return;
+  event.preventDefault();
+  insertTextAtSelection(event.data);
+  field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+}
+
+function normalizeMathFieldDom(field) {
+  const lists = Array.from(field.querySelectorAll("ul, ol")).reverse();
+  if (!lists.length) return;
+
+  for (const list of lists) {
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(document.createTextNode("+"));
+    for (const child of Array.from(list.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE && child.textContent.trim() === "") continue;
+      if (child.nodeType === Node.ELEMENT_NODE && child.tagName === "LI") {
+        for (const liChild of Array.from(child.childNodes)) {
+          if (liChild.nodeType === Node.TEXT_NODE && liChild.textContent.trim() === "") continue;
+          fragment.appendChild(liChild);
+        }
+        continue;
+      }
+      fragment.appendChild(child);
+    }
+    list.replaceWith(fragment);
+  }
+  placeCaretAtEnd(field);
+}
+
 function expandCompletedFunctionCall(field) {
   const selection = window.getSelection();
   if (!selection || !selection.rangeCount) return;
@@ -1068,6 +1101,26 @@ function expandCompletedFunctionCall(field) {
   range.collapse(true);
   range.insertNode(atom);
   placeCaretAfterNode(atom);
+}
+
+function expandTrailingFraction(field) {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const textNode = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer : null;
+  if (!textNode) return;
+  const before = textNode.textContent.slice(0, range.startOffset);
+  const division = before.match(/([A-Za-z_]\w*|\d+(?:\.\d+)?|\([^()]*\))\/$/);
+  if (!division) return;
+
+  const numerator = division[1];
+  const start = range.startOffset - numerator.length - 1;
+  textNode.textContent = `${textNode.textContent.slice(0, start)}${textNode.textContent.slice(range.startOffset)}`;
+  range.setStart(textNode, start);
+  range.collapse(true);
+  const frac = createMathAtom("frac", [numerator, ""]);
+  range.insertNode(frac);
+  focusMathSlot(frac, 1);
 }
 
 function handleSlotExitInput(field, event) {
@@ -1257,8 +1310,14 @@ function handleMathBackspace(field, event) {
     const atom = slot.closest(".mq-atom");
     if (!atom) return false;
     event.preventDefault();
-    if (slot.textContent.trim() === "" && atom.querySelectorAll(".mq-slot").length === 1) {
-      atom.remove();
+    if (slot.textContent.trim() === "") {
+      if (atom.dataset.command === "frac" && slot.dataset.slot === "1") {
+        replaceAtomWithText(atom, serializeMathNode(atom.querySelector('.mq-slot[data-slot="0"]') ?? atom));
+      } else if (atom.querySelectorAll(".mq-slot").length === 1) {
+        atom.remove();
+      } else {
+        placeCaretBeforeNode(atom);
+      }
     } else {
       placeCaretBeforeNode(atom);
     }
@@ -1276,6 +1335,17 @@ function handleMathBackspace(field, event) {
   syncMathField(field);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
   return true;
+}
+
+function replaceAtomWithText(atom, text) {
+  const node = document.createTextNode(text);
+  atom.replaceWith(node);
+  const range = document.createRange();
+  range.setStart(node, node.textContent.length);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 function serializeMathField(field) {
