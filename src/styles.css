@@ -39,7 +39,7 @@ select {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   background: #ffffff;
   border-right: 1px solid #d7dce5;
 }
@@ -243,6 +243,18 @@ select {
   line-height: 1;
 }
 
+.mq-power {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.02em;
+}
+
+.mq-power > .mq-exponent {
+  font-size: 0.72em;
+  line-height: 1;
+  transform: translateY(-0.45em);
+}
+
 .latex-editor {
   min-height: 48px;
   border: 1px solid #cfd5df;
@@ -323,6 +335,11 @@ select {
 .latex-delimited-inner {
   display: inline-block;
   padding: 0 0.08em;
+}
+
+.latex-power sup {
+  font-size: 0.72em;
+  line-height: 1;
 }
 
 .math-box-small {

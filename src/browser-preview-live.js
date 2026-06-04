@@ -161,11 +161,6 @@ function renderApp() {
             .join("")}
         </nav>
         <div class="entry-list">${renderPanel()}</div>
-        <footer class="panel-footer">
-          <button class="toolbar-button" data-action="import">Import</button>
-          <button class="toolbar-button" data-action="export">Export</button>
-          <button class="toolbar-button" data-action="reset">Reset</button>
-        </footer>
       </section>
       <div class="sidebar-resizer" role="separator" aria-label="Resize expression panel" tabindex="0"></div>
       <section class="renderer-pane" aria-label="Grid renderer">
@@ -689,8 +684,11 @@ function renderSceneCpu(canvas) {
   const env = buildRuntimeEnv(Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression])));
   const xPoints = axis(viewport.xMin, viewport.xMax, scene.settings.xPoints);
   const yPoints = axis(viewport.yMin, viewport.yMax, scene.settings.yPoints);
-  const pixelWidth = rect.width / Math.max(1, xPoints.length - 1);
-  const pixelHeight = rect.height / Math.max(1, yPoints.length - 1);
+  const plotSize = Math.min(rect.width, rect.height);
+  const plotX = (rect.width - plotSize) / 2;
+  const plotY = (rect.height - plotSize) / 2;
+  const pixelWidth = plotSize / Math.max(1, xPoints.length - 1);
+  const pixelHeight = plotSize / Math.max(1, yPoints.length - 1);
 
   for (const draw of scene.draws) {
     const fn = scene.functions.find((entry) => entry.id === draw.equationId);
@@ -725,7 +723,7 @@ function renderSceneCpu(canvas) {
         if (!Number.isFinite(z)) continue;
 
         ctx.fillStyle = `rgb(${channel(red(z, 0, env))}, ${channel(green(z, 0, env))}, ${channel(blue(z, 0, env))})`;
-        ctx.fillRect(xi * pixelWidth, rect.height - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
+        ctx.fillRect(plotX + xi * pixelWidth, plotY + plotSize - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
       }
     }
   }
@@ -739,7 +737,8 @@ function renderSceneWebGl(canvas) {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.max(1, Math.floor(rect.width * dpr));
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  const plot = plotViewport(canvas);
+  gl.viewport(plot.x, plot.y, plot.size, plot.size);
 
   const fragmentSource = buildFragmentShader();
   window.__leptonFragmentSource = fragmentSource;
@@ -766,7 +765,8 @@ function renderSceneWebGl(canvas) {
   gl.enableVertexAttribArray(position);
   gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
 
-  gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
+  gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), plot.size, plot.size);
+  gl.uniform2f(gl.getUniformLocation(program, "u_plot_origin"), plot.x, plot.y);
   gl.uniform4f(
     gl.getUniformLocation(program, "u_bounds"),
     viewport.xMin,
@@ -785,8 +785,9 @@ function buildFragmentShader() {
     return `
       precision highp float;
       uniform vec2 u_resolution;
+      uniform vec2 u_plot_origin;
       void main() {
-        vec2 uv = gl_FragCoord.xy / u_resolution;
+        vec2 uv = (gl_FragCoord.xy - u_plot_origin) / u_resolution;
         gl_FragColor = vec4(uv.x, uv.y, 0.65, 1.0);
       }
     `;
@@ -840,9 +841,10 @@ function buildFragmentShader() {
     : "";
 
   return `
-    precision highp float;
-    uniform vec2 u_resolution;
-    uniform vec4 u_bounds;
+      precision highp float;
+      uniform vec2 u_resolution;
+      uniform vec2 u_plot_origin;
+      uniform vec4 u_bounds;
 
     float frac(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
     float ln(float value) { return value > 0.0 ? log(value) : 0.0; }
@@ -868,7 +870,7 @@ function buildFragmentShader() {
     float clamp3(float value, float low, float high) { return clamp(value, low, high); }
 
     void main() {
-      vec2 uv = gl_FragCoord.xy / u_resolution;
+      vec2 uv = (gl_FragCoord.xy - u_plot_origin) / u_resolution;
       float x = mix(u_bounds.x, u_bounds.y, uv.x);
       float y = mix(u_bounds.z, u_bounds.w, uv.y);
       vec3 color = vec3(0.97, 0.98, 0.99);
@@ -907,6 +909,15 @@ function drawGrid(ctx, width, height) {
   ctx.moveTo(0, height / 2);
   ctx.lineTo(width, height / 2);
   ctx.stroke();
+}
+
+function plotViewport(canvas) {
+  const size = Math.min(canvas.width, canvas.height);
+  return {
+    x: Math.floor((canvas.width - size) / 2),
+    y: Math.floor((canvas.height - size) / 2),
+    size
+  };
 }
 
 function drawErrorCanvas(canvas, message) {
@@ -973,19 +984,15 @@ function axis(min, max, count) {
 }
 
 function compileExpression(source) {
-  let js = normalizeExpressionText(source)
+  let js = normalizeMathSyntax(normalizeExpressionText(source));
+  js = convertPowers(js)
     .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
-    .replaceAll("^", "**")
     .replaceAll("pi", "Math.PI")
     .replaceAll(/\be\b/g, "Math.E")
-    .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log)\b/g, "Math.$1")
+    .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log|pow)\b/g, "Math.$1")
     .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
 
-  js = js.replaceAll(/(\d)([A-Za-z_])/g, "$1*$2");
-  js = js.replaceAll(/([xy])(\d)/g, "$1*$2");
-  js = js.replaceAll(/(\d)\(/g, "$1*(");
-  js = js.replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
-  js = rewriteBareIdentifiers(js, (name) => `ref("${name}", x, y)`, new Set(["Math"]));
+  js = rewriteBareIdentifiers(js, (name) => `ref("${name}", x, y)`, new Set(["Math", "E", "PI"]));
 
   return new Function(
     "x",
@@ -1042,6 +1049,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
   let expression = normalizeExpressionText(source);
   expression = inlineCustomVariables(expression, env, stack, zName);
   expression = inlineBareVariables(expression, env, stack, zName);
+  expression = normalizeMathSyntax(expression);
   expression = expression
     .replaceAll(/\barcsin\b/g, "asin")
     .replaceAll(/\barccos\b/g, "acos")
@@ -1056,11 +1064,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
     .replaceAll(/\bmax\b/g, "max")
     .replaceAll(/\bclamp\b/g, "clamp3")
     .replaceAll(/\bpi\b/g, "3.141592653589793")
-    .replaceAll(/\be\b/g, "2.718281828459045")
-    .replaceAll(/(\d)([A-Za-z_])/g, "$1*$2")
-    .replaceAll(/([xy])(\d)/g, "$1*$2")
-    .replaceAll(/(\d)\(/g, "$1*(")
-    .replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
+    .replaceAll(/\be\b/g, "2.718281828459045");
 
   if (zName) {
     expression = expression.replaceAll(/\bx\b/g, zName);
@@ -1075,6 +1079,14 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
     throw new Error(`Unsupported GLSL expression: ${source}`);
   }
   return expression;
+}
+
+function normalizeMathSyntax(expression) {
+  return String(expression)
+    .replaceAll(/(\d|\))([A-Za-z_])/g, "$1*$2")
+    .replaceAll(/([xy])(\d)/g, "$1*$2")
+    .replaceAll(/(\d|[xy]|\))\(/g, "$1*(")
+    .replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
 }
 
 function normalizeGlslNumbers(expression) {
@@ -1458,10 +1470,20 @@ function renderEditableExpression(source) {
     }
   }
 
+  const additive = splitTopLevelAdditive(trimmed);
+  if (additive) {
+    return `${renderEditableExpression(additive.left)}${escapeHtml(additive.operator)}${renderEditableExpression(additive.right)}`;
+  }
+
   const fraction = splitTopLevel(trimmed, "/");
   if (fraction) {
     const [prefix, numerator] = splitFractionPrefix(fraction[0]);
     return `${renderEditableExpression(prefix)}${atomEditableHtml("frac", [numerator, fraction[1]])}`;
+  }
+
+  const power = splitTopLevel(trimmed, "^");
+  if (power) {
+    return `${renderEditableExpression(power[0])}<span class="mq-power">^<span class="mq-exponent">${renderEditableExpression(stripWrappingParens(power[1]))}</span></span>`;
   }
 
   return escapeHtml(trimmed).replaceAll(/\bpi\b/g, "π");
@@ -1817,19 +1839,37 @@ function renderLatexExpression(source) {
     }
   }
 
+  const additive = splitTopLevelAdditive(trimmed);
+  if (additive) {
+    return `${renderLatexExpression(additive.left)}${escapeHtml(additive.operator)}${renderLatexExpression(additive.right)}`;
+  }
+
   const latexFrac = parseLatexCommand(trimmed, "frac", 2);
   if (latexFrac) {
     return renderLatexFunction("frac", latexFrac);
+  }
+  const bareFrac = parseBareBraceArgs(trimmed, "frac", 2);
+  if (bareFrac) {
+    return renderLatexFunction("frac", bareFrac);
   }
 
   const latexSqrt = parseLatexCommand(trimmed, "sqrt", 1);
   if (latexSqrt) {
     return renderLatexFunction("sqrt", latexSqrt);
   }
+  const bareSqrt = parseBareBraceArgs(trimmed, "sqrt", 1);
+  if (bareSqrt) {
+    return renderLatexFunction("sqrt", bareSqrt);
+  }
 
   const fraction = splitTopLevel(trimmed, "/");
   if (fraction) {
     return fractionHtml(renderLatexExpression(fraction[0]), renderLatexExpression(fraction[1]), `\\frac{${fraction[0]}}{${fraction[1]}}`);
+  }
+
+  const power = splitTopLevel(trimmed, "^");
+  if (power) {
+    return powerHtml(renderLatexExpression(power[0]), renderLatexExpression(stripWrappingParens(power[1])), `${power[0]}^{${power[1]}}`);
   }
 
   const fracCall = parseFunctionCall(trimmed, "frac");
@@ -1947,6 +1987,19 @@ function parseLatexCommand(source, command, expectedArgs) {
   return args.length === expectedArgs && cursor === source.length ? args : null;
 }
 
+function parseBareBraceArgs(source, command, expectedArgs) {
+  if (!source.startsWith(`${command}{`)) return null;
+  const args = [];
+  let cursor = command.length;
+  while (args.length < expectedArgs && source[cursor] === "{") {
+    const end = matchingBrace(source, cursor);
+    if (end === -1) return null;
+    args.push(source.slice(cursor + 1, end));
+    cursor = end + 1;
+  }
+  return args.length === expectedArgs && cursor === source.length ? args : null;
+}
+
 function parsePairedLatexDelimiterAt(source, index) {
   const pairs = [
     { open: "\\left|", close: "\\right|", fallbackClose: "\\right", render: (inner) => delimiterHtml("|", inner, "|", `\\left|${inner}\\right|`) },
@@ -1993,6 +2046,10 @@ function renderLatexFunction(command, args) {
   return `<span class="latex-call" data-latex="${escapeHtml(latex)}"><span class="latex-operator">${escapeHtml(LATEX_FUNCTIONS[command].display)}</span><span class="latex-paren">(</span>${renderedArgs}<span class="latex-paren">)</span></span>`;
 }
 
+function powerHtml(base, exponent, latex) {
+  return `<span class="latex-power" data-latex="${escapeHtml(latex)}">${base}<sup>${exponent || "&nbsp;"}</sup></span>`;
+}
+
 function fractionHtml(top, bottom, latex = null) {
   latex ??= `\\frac{${sourceFromRenderedHtml(top)}}{${sourceFromRenderedHtml(bottom)}}`;
   return `<span class="latex-frac" data-latex="${escapeHtml(latex)}"><span class="latex-num">${top || "&nbsp;"}</span><span class="latex-den">${bottom || "&nbsp;"}</span></span>`;
@@ -2025,6 +2082,29 @@ function splitTopLevel(source, operator) {
     }
   }
   return null;
+}
+
+function splitTopLevelAdditive(source) {
+  let depth = 0;
+  for (let i = source.length - 1; i > 0; i -= 1) {
+    const char = source[i];
+    if (char === ")" || char === "}") depth += 1;
+    if (char === "(" || char === "{") depth -= 1;
+    if (depth === 0 && (char === "+" || char === "-") && !isUnaryOperator(source, i)) {
+      return { left: source.slice(0, i), operator: char, right: source.slice(i + 1) };
+    }
+  }
+  return null;
+}
+
+function isUnaryOperator(source, index) {
+  const previous = source.slice(0, index).trim().at(-1);
+  return !previous || "+-*/^(,".includes(previous);
+}
+
+function stripWrappingParens(source) {
+  const trimmed = String(source ?? "").trim();
+  return trimmed.startsWith("(") && matchingParen(trimmed, 0) === trimmed.length - 1 ? trimmed.slice(1, -1) : trimmed;
 }
 
 function parseFunctionCall(source, name) {
