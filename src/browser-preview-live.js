@@ -2570,8 +2570,56 @@ function exportScene() {
   ].join("\n");
 }
 
+function wrapIfNeeded(expr) {
+  const trimmed = expr.trim();
+  if (trimmed.startsWith("(") && matchingParen(trimmed, 0) === trimmed.length - 1) {
+    return trimmed;
+  }
+  let depth = 0;
+  let braceDepth = 0;
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    if (char === "{") braceDepth++;
+    if (char === "}") braceDepth--;
+    if (depth === 0 && braceDepth === 0) {
+      if (char === "+" || char === "-" || char === "*" || char === "/") {
+        return `(${trimmed})`;
+      }
+    }
+  }
+  return trimmed;
+}
+
+function convertFracToDivisions(source) {
+  let output = "";
+  let i = 0;
+  while (i < source.length) {
+    if (source.startsWith("frac(", i)) {
+      const startParen = i + 4;
+      const endParen = matchingParen(source, startParen);
+      if (endParen !== -1) {
+        const inner = source.slice(startParen + 1, endParen);
+        const args = splitFunctionArgs(inner);
+        if (args.length === 2) {
+          const num = convertFracToDivisions(args[0]);
+          const den = convertFracToDivisions(args[1]);
+          output += `${wrapIfNeeded(num)}/${wrapIfNeeded(den)}`;
+          i = endParen + 1;
+          continue;
+        }
+      }
+    }
+    output += source[i];
+    i++;
+  }
+  return output;
+}
+
 function textModeExpression(source) {
-  return normalizeExpressionDisplayText(source);
+  const normalized = normalizeExpressionDisplayText(source);
+  return convertFracToDivisions(normalized);
 }
 
 function importScene(raw) {
