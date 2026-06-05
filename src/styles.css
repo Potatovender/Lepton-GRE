@@ -158,29 +158,55 @@ select {
 }
 
 .mathquill-editor {
-  min-height: 52px;
-  border: 1px solid #cfd5df;
-  border-radius: 6px;
-  background: #ffffff;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.mathquill-editor-small {
+  min-height: 0;
+}
+
+.mathquill-field {
+  display: block;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+  color: #202938 !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  border: 1px solid #cfd5df !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  margin: 0 !important;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-.mathquill-editor-small {
-  min-height: 42px;
+.mathquill-field:not(.mathquill-field-small) {
+  min-height: 46px;
+  padding: 10px 12px !important;
+  font-size: 17px !important;
+}
+
+.mathquill-field-small {
+  min-height: 38px;
+  padding: 8px 10px !important;
+  font-size: 15px !important;
+}
+
+.mathquill-field.mq-focused {
+  outline: 2px solid #4f7dd9 !important;
+  outline-offset: 1px !important;
 }
 
 .mq-root {
   min-width: 100%;
   width: max-content;
-  min-height: 50px;
-  border-radius: 6px;
-  padding: 6px 8px;
-  background: #ffffff;
-  color: #1f2937;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 18px;
-  line-height: 1.35;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
   white-space: nowrap;
   cursor: text;
 }
@@ -551,7 +577,6 @@ select {
 
 .math-box:focus,
 .latex-editor:focus,
-.mathquill-editor:focus-within,
 .compact-field:focus,
 .entry-id:focus {
   outline: 2px solid #4f7dd9;

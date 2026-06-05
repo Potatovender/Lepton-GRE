@@ -172,8 +172,6 @@ function renderApp() {
 
   bindEvents();
   bindCanvasPan();
-  reflowMathLayout(root);
-  requestAnimationFrame(() => reflowMathLayout(root));
   renderScene(diagnostics);
 }
 
@@ -266,11 +264,11 @@ function renderPanel() {
 
 function mathEditor(field, value, label, small = false) {
   const source = normalizeExpressionDisplayText(value);
+  const latex = latexSourceFromExpression(source);
   return `
     <div class="mathquill-editor ${small ? "mathquill-editor-small" : ""}">
-      <div class="mq-root latex-preview ${small ? "latex-editor-small" : ""}" data-field="${field}" data-source="${escapeHtml(source)}" contenteditable="true" role="textbox" aria-label="${escapeHtml(label)}" spellcheck="false">${renderEditableLatex(source)}</div>
+      <span class="mathquill-field ${small ? "mathquill-field-small" : ""}" data-field="${field}" data-value="${escapeHtml(latex)}" aria-label="${escapeHtml(label)}"></span>
     </div>
-    <textarea class="math-box math-source" data-source-field="${field}" tabindex="-1" aria-hidden="true">${escapeHtml(source)}</textarea>
   `;
 }
 
@@ -359,69 +357,45 @@ function bindEvents() {
     }
   });
 
-  root.querySelectorAll(".mq-root[data-field]").forEach((field) => {
-    field.addEventListener("focus", () => {
-      field.dataset.editing = "true";
-      ensureEditorHistory(field);
-    });
-    field.addEventListener("beforeinput", (event) => {
-      if (event.inputType === "deleteContentBackward" && handleMathBackspace(field, event)) return;
-      if (handleAbsoluteDelimiterInput(field, event)) return;
-      if (handleSlotExitInput(field, event)) return;
-      handleMathBeforeInput(field, event);
-      handlePlainMathInsert(field, event);
-    });
-    field.addEventListener("keydown", (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        restoreEditorHistory(field, event.shiftKey ? "redo" : "undo");
-        return;
+  const MQ = window.MathQuill.getInterface(3);
+  root.querySelectorAll(".mathquill-field[data-field]").forEach((el) => {
+    const fieldName = el.dataset.field;
+    const initialValue = el.dataset.value ?? "";
+
+    const mathField = MQ.MathField(el, {
+      autoCommands: "pi theta sqrt sum",
+      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot",
+      handlers: {
+        edit: () => {
+          const latex = mathField.latex();
+          el.dataset.value = latex;
+
+          const cleanExpr = latexToExpression(latex);
+
+          const [collection, rawIndex, property] = fieldName.split(".");
+          const index = Number(rawIndex);
+          if (collection === "functions" && property === "expression") {
+            const assignment = parseAssignment(cleanExpr);
+            if (assignment) {
+              scene.functions[index].id = assignment.id;
+              scene.functions[index].expression = assignment.expression;
+              const idInput = root.querySelector(`[data-field="functions.${index}.id"]`);
+              if (idInput) idInput.value = assignment.id;
+            } else {
+              scene.functions[index].expression = cleanExpr;
+            }
+          } else {
+            scene[collection][index][property] = cleanExpr;
+          }
+
+          const diagnostics = validateScene();
+          updateStatusLights(diagnostics);
+          renderScene(diagnostics);
+        }
       }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
-        event.preventDefault();
-        restoreEditorHistory(field, "redo");
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        field.blur();
-      }
-      if (event.key === "Backspace") {
-        handleMathBackspace(field, event);
-      }
     });
-    field.addEventListener("input", () => {
-      const preserveVisualCaret = field.dataset.preserveVisualCaret === "true";
-      delete field.dataset.preserveVisualCaret;
-      normalizeMathFieldDom(field);
-      expandCompletedFunctionCall(field);
-      expandTrailingFraction(field);
-      syncMathField(field);
-      updateField(field);
-      if (preserveVisualCaret) {
-        reflowMathLayout(field);
-      } else {
-        refreshMathFieldDisplay(field);
-      }
-      const diagnostics = validateScene();
-      updateStatusLights(diagnostics);
-      renderScene(diagnostics);
-    });
-    field.addEventListener("blur", () => {
-      field.dataset.editing = "false";
-      syncMathField(field);
-      renderMathFieldDisplay(field);
-    });
-    field.addEventListener("copy", (event) => {
-      event.preventDefault();
-      event.clipboardData?.setData("text/plain", serializeMathField(field));
-    });
-    field.addEventListener("paste", (event) => {
-      event.preventDefault();
-      pushEditorHistory(field);
-      insertTextAtSelection(event.clipboardData?.getData("text/plain") ?? "");
-      field.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    });
+
+    mathField.latex(initialValue);
   });
 
   root.querySelectorAll("input.entry-id[data-field]").forEach((field) => {
@@ -582,15 +556,15 @@ function updateField(field) {
   }
 
   scene[collection][Number(rawIndex)][property] = value;
-  if (field.classList?.contains("mq-root")) {
-    field.dataset.source = value;
+  if (field.classList?.contains("mathquill-field")) {
+    field.dataset.value = latexSourceFromExpression(value);
   }
 }
 
 function readFieldValue(field) {
   if (field.type === "checkbox") return field.checked;
-  if (field.classList?.contains("mq-root")) {
-    return field.dataset.source ?? sourceFromLatexText(serializeMathField(field));
+  if (field.classList?.contains("mathquill-field") || field.classList?.contains("mq-editable-field")) {
+    return latexToExpression(field.dataset.value ?? "");
   }
   return stripChannelPrefix(field.value);
 }
@@ -1959,48 +1933,89 @@ function toLatexPreview(source) {
   return renderLatexExpression(normalized);
 }
 
+function convertDivisionsToFrac(source) {
+  const fraction = splitTopLevelFraction(source);
+  if (fraction) {
+    const prefix = convertDivisionsToFrac(fraction.prefix);
+    const num = convertDivisionsToFrac(fraction.numerator);
+    const den = convertDivisionsToFrac(fraction.denominator);
+    const suffix = convertDivisionsToFrac(fraction.suffix);
+    return `${prefix}frac(${num},${den})${suffix}`;
+  }
+  return source;
+}
+
 function latexSourceFromExpression(source) {
   const normalized = normalizeExpressionDisplayText(source).trim();
   if (normalized.startsWith("\\")) return normalized;
-  const fraction = splitTopLevel(normalized, "/");
-  if (fraction) {
-    return `\\frac{${latexSourceFromExpression(fraction[0])}}{${latexSourceFromExpression(fraction[1])}}`;
-  }
 
-  const fracCall = parseFunctionCall(normalized, "frac");
-  if (fracCall && fracCall.length === 2) {
-    return `\\frac{${latexSourceFromExpression(fracCall[0])}}{${latexSourceFromExpression(fracCall[1])}}`;
-  }
+  const withFrac = convertDivisionsToFrac(normalized);
 
-  const sqrtCall = parseFunctionCall(normalized, "sqrt");
-  if (sqrtCall && sqrtCall.length === 1) {
-    return `\\sqrt{${latexSourceFromExpression(sqrtCall[0])}}`;
-  }
+  let output = "";
+  let i = 0;
+  const functionNames = ["frac", "sqrt", "abs", "floor", "ceil", ...Object.keys(LATEX_FUNCTIONS)];
 
-  const absCall = parseFunctionCall(normalized, "abs");
-  if (absCall && absCall.length === 1) {
-    return `\\left|${latexSourceFromExpression(absCall[0])}\\right|`;
-  }
-
-  const floorCall = parseFunctionCall(normalized, "floor");
-  if (floorCall && floorCall.length === 1) {
-    return `\\lfloor${latexSourceFromExpression(floorCall[0])}\\rfloor`;
-  }
-
-  const ceilCall = parseFunctionCall(normalized, "ceil");
-  if (ceilCall && ceilCall.length === 1) {
-    return `\\lceil${latexSourceFromExpression(ceilCall[0])}\\rceil`;
-  }
-
-  for (const [name, config] of Object.entries(LATEX_FUNCTIONS)) {
-    if (["frac", "sqrt", "abs", "floor", "ceil"].includes(name)) continue;
-    const call = parseFunctionCall(normalized, config.internal);
-    if (call && call.length === config.args) {
-      return `\\${name}${call.map((arg) => `{${latexSourceFromExpression(arg)}}`).join("")}`;
+  while (i < withFrac.length) {
+    let matchedCall = false;
+    for (const name of functionNames) {
+      if (withFrac.startsWith(`${name}(`, i)) {
+        const startParen = i + name.length;
+        const endParen = matchingParen(withFrac, startParen);
+        if (endParen !== -1) {
+          const inner = withFrac.slice(startParen + 1, endParen);
+          const args = splitFunctionArgs(inner);
+          const latexArgs = args.map(latexSourceFromExpression);
+          
+          if (name === "frac" && latexArgs.length === 2) {
+            output += `\\frac{${latexArgs[0]}}{${latexArgs[1]}}`;
+          } else if (name === "sqrt" && latexArgs.length === 1) {
+            output += `\\sqrt{${latexArgs[0]}}`;
+          } else if (name === "abs" && latexArgs.length === 1) {
+            output += `\\left|${latexArgs[0]}\\right|`;
+          } else if (name === "floor" && latexArgs.length === 1) {
+            output += `\\lfloor{${latexArgs[0]}}\\rfloor`;
+          } else if (name === "ceil" && latexArgs.length === 1) {
+            output += `\\lceil{${latexArgs[0]}}\\rceil`;
+          } else {
+            output += `\\${name}\\left(${latexArgs.join(",")}\\right)`;
+          }
+          i = endParen + 1;
+          matchedCall = true;
+          break;
+        }
+      }
     }
+    if (matchedCall) continue;
+
+    const char = withFrac[i];
+    if (char === "^") {
+      if (withFrac[i + 1] === "(") {
+        const endParen = matchingParen(withFrac, i + 1);
+        if (endParen !== -1) {
+          const inner = withFrac.slice(i + 2, endParen);
+          output += `^{${latexSourceFromExpression(inner)}}`;
+          i = endParen + 1;
+          continue;
+        }
+      } else if (withFrac[i + 1] === "{") {
+        const endBrace = matchingBrace(withFrac, i + 1);
+        if (endBrace !== -1) {
+          const inner = withFrac.slice(i + 2, endBrace);
+          output += `^{${latexSourceFromExpression(inner)}}`;
+          i = endBrace + 1;
+          continue;
+        }
+      }
+    }
+
+    output += char;
+    i++;
   }
 
-  return normalized;
+  output = output.replaceAll(/(?<!\\)\bpi\b/g, "\\pi");
+  output = output.replaceAll(/(?<!\\)\btheta\b/g, "\\theta");
+
+  return output;
 }
 
 function sourceFromLatexText(text) {
@@ -2687,6 +2702,8 @@ function latexToExpression(value) {
   let source = String(value)
     .replace(/\u00a0/g, " ")
     .replaceAll("π", "pi")
+    .replaceAll(/\\cdot\b/g, "*")
+    .replaceAll(/\\times\b/g, "*")
     .replaceAll(/\\operatorname\{([A-Za-z]\w*)\}/g, "$1")
     .trim();
 
@@ -2698,6 +2715,12 @@ function latexToExpression(value) {
   source = replaceLatexDelimited(source, "\\lfloor", "\\rfloor", (inner) => `floor(${latexToExpression(inner)})`);
   source = replaceLatexDelimited(source, "\\lceil", "\\rceil", (inner) => `ceil(${latexToExpression(inner)})`);
 
+  // Strip \left and \right first
+  source = source.replaceAll(/\\left|\\right/g, "");
+
+  // Strip remaining backslashes from commands (e.g. \frac -> frac, \sin -> sin, \theta -> theta)
+  source = source.replaceAll(/\\([A-Za-z]+)/g, "$1");
+
   for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
     source = replaceLatexCommand(source, command, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
   }
@@ -2708,7 +2731,7 @@ function latexToExpression(value) {
     source = replaceBareBraceCommand(source, command, config.args, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
   }
   source = source.replaceAll(/\^\{([^{}]+)\}/g, "^($1)");
-  return source.replaceAll(/\\left|\\right/g, "").replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
+  return source.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
 }
 
 function replaceBareBraceCommand(source, command, expectedArgs, build) {
