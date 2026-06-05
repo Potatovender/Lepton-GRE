@@ -172,6 +172,8 @@ function renderApp() {
 
   bindEvents();
   bindCanvasPan();
+  reflowMathLayout(root);
+  requestAnimationFrame(() => reflowMathLayout(root));
   renderScene(diagnostics);
 }
 
@@ -364,6 +366,7 @@ function bindEvents() {
     });
     field.addEventListener("beforeinput", (event) => {
       if (event.inputType === "deleteContentBackward" && handleMathBackspace(field, event)) return;
+      if (handleAbsoluteDelimiterInput(field, event)) return;
       if (handleSlotExitInput(field, event)) return;
       handleMathBeforeInput(field, event);
       handlePlainMathInsert(field, event);
@@ -388,12 +391,18 @@ function bindEvents() {
       }
     });
     field.addEventListener("input", () => {
+      const preserveVisualCaret = field.dataset.preserveVisualCaret === "true";
+      delete field.dataset.preserveVisualCaret;
       normalizeMathFieldDom(field);
       expandCompletedFunctionCall(field);
       expandTrailingFraction(field);
       syncMathField(field);
       updateField(field);
-      refreshMathFieldDisplay(field);
+      if (preserveVisualCaret) {
+        reflowMathLayout(field);
+      } else {
+        refreshMathFieldDisplay(field);
+      }
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
@@ -866,6 +875,7 @@ function buildFragmentShader() {
     float arcsech(float value) { return arccosh(1.0 / value); }
     float arccsch(float value) { return arcsinh(1.0 / value); }
     float arccoth(float value) { return arctanh(1.0 / value); }
+    float round1(float value) { return floor(value + 0.5); }
     float clamp3(float value, float low, float high) { return clamp(value, low, high); }
 
     void main() {
@@ -1077,6 +1087,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
     .replaceAll(/\btanh\b/g, "tanh1")
     .replaceAll(/\bln\b/g, "log")
     .replaceAll(/\blog\b/g, "log")
+    .replaceAll(/\bround\b/g, "round1")
     .replaceAll(/\bmin\b/g, "min")
     .replaceAll(/\bmax\b/g, "max")
     .replaceAll(/\bclamp\b/g, "clamp3")
@@ -1101,8 +1112,8 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
 function normalizeMathSyntax(expression) {
   return String(expression)
     .replaceAll(/(\d|\))([A-Za-z_])/g, "$1*$2")
-    .replaceAll(/([xy])(\d)/g, "$1*$2")
-    .replaceAll(/(\d|[xy]|\))\(/g, "$1*(")
+    .replaceAll(/\b([xy])(\d)/g, "$1*$2")
+    .replaceAll(/(\d|\b[xy]\b|\))\(/g, "$1*(")
     .replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
 }
 
@@ -1359,8 +1370,47 @@ function handleMathBeforeInput(field, event) {
   const frac = createMathAtom("frac", [numerator, ""]);
   range.insertNode(frac);
   focusMathSlot(frac, 1);
+  field.dataset.preserveVisualCaret = "true";
   syncMathField(field);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+}
+
+function handleAbsoluteDelimiterInput(field, event) {
+  if (event.defaultPrevented || event.inputType !== "insertText" || event.data !== "|") return false;
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return false;
+  const range = selection.getRangeAt(0);
+  const slot = closestMathSlot(range.startContainer);
+  const atom = slot?.closest(".mq-atom");
+
+  if (slot && atom?.dataset.command === "abs" && isCaretAtEndOf(slot, range) && !isOpeningAbsoluteContext(slot, range)) {
+    event.preventDefault();
+    placeCaretAfterNode(atom);
+    field.dataset.preserveVisualCaret = "true";
+    syncMathField(field);
+    field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    return true;
+  }
+
+  event.preventDefault();
+  pushEditorHistory(field);
+  const selectedSource = range.toString();
+  range.deleteContents();
+  const abs = createMathAtom("abs", [selectedSource]);
+  range.insertNode(abs);
+  focusMathSlot(abs, 0);
+  field.dataset.preserveVisualCaret = "true";
+  syncMathField(field);
+  field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  return true;
+}
+
+function isOpeningAbsoluteContext(slot, range) {
+  const before = range.cloneRange();
+  before.selectNodeContents(slot);
+  before.setEnd(range.startContainer, range.startOffset);
+  const text = before.toString().trim();
+  return !text || /[+\-*/^(,]$/.test(text);
 }
 
 function handlePlainMathInsert(field, event) {
@@ -1416,6 +1466,7 @@ function expandCompletedFunctionCall(field) {
   range.collapse(true);
   range.insertNode(atom);
   placeCaretAfterNode(atom);
+  field.dataset.preserveVisualCaret = "true";
 }
 
 function expandTrailingFraction(field) {
@@ -1438,6 +1489,7 @@ function expandTrailingFraction(field) {
   const frac = createMathAtom("frac", [numerator, ""]);
   range.insertNode(frac);
   focusMathSlot(frac, 1);
+  field.dataset.preserveVisualCaret = "true";
 }
 
 function handleSlotExitInput(field, event) {
@@ -1455,6 +1507,7 @@ function handleSlotExitInput(field, event) {
   if (event.data !== ")") {
     insertTextAtSelection(event.data);
   }
+  field.dataset.preserveVisualCaret = "true";
   syncMathField(field);
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
   return true;
@@ -1470,7 +1523,6 @@ function syncMathField(field) {
 function refreshMathFieldDisplay(field) {
   const source = field.dataset.source ?? "";
   if (!isReadyForVisualRefresh(source)) return;
-  if (!shouldAutoRefreshVisualSource(source)) return;
   renderMathFieldDisplay(field);
 }
 
@@ -1480,7 +1532,22 @@ function renderMathFieldDisplay(field) {
   if (field.innerHTML === html) return;
   field.innerHTML = html;
   field.dataset.source = source;
+  reflowMathLayout(field);
+  requestAnimationFrame(() => reflowMathLayout(field));
   placeCaretAtEnd(field);
+}
+
+function reflowMathLayout(container = root) {
+  container.querySelectorAll(".mq-radical, .latex-radical").forEach((radical) => {
+    const prefix = radical.querySelector(":scope > .mq-radical-symbol, :scope > .latex-radical-symbol");
+    const stem = radical.querySelector(":scope > .mq-radicand, :scope > .latex-radicand");
+    if (!prefix || !stem) return;
+    prefix.style.transform = "none";
+    const stemHeight = stem.getBoundingClientRect().height;
+    const symbolHeight = prefix.getBoundingClientRect().height || parseFloat(getComputedStyle(prefix).fontSize) || 16;
+    const scaleY = Math.max(1, stemHeight / symbolHeight);
+    prefix.style.transform = `scale(1, ${scaleY.toFixed(3)})`;
+  });
 }
 
 function shouldAutoRefreshVisualSource(source) {
@@ -1496,6 +1563,7 @@ function isReadyForVisualRefresh(source) {
   const value = String(source ?? "");
   if (!value.trim()) return true;
   if (hasUnmatchedGrouping(value)) return false;
+  if (hasUnmatchedAbsoluteBars(value)) return false;
   if (hasIncompletePower(value)) return false;
   return true;
 }
@@ -1511,6 +1579,17 @@ function hasUnmatchedGrouping(source) {
     if (parenDepth < 0 || braceDepth < 0) return true;
   }
   return parenDepth !== 0 || braceDepth !== 0;
+}
+
+function hasUnmatchedAbsoluteBars(source) {
+  const bareBars = String(source ?? "")
+    .replaceAll(/\\left\|/g, "")
+    .replaceAll(/\\right\|/g, "")
+    .replaceAll(/\\lvert/g, "")
+    .replaceAll(/\\rvert/g, "")
+    .split("")
+    .filter((char) => char === "|").length;
+  return bareBars % 2 !== 0;
 }
 
 function hasIncompletePower(source) {
@@ -1529,7 +1608,7 @@ function hasInternalRenderableCall(source) {
 }
 
 function renderEditableLatex(source) {
-  return renderEditableExpression(normalizeExpressionDisplayText(source));
+  return renderEditableExpression(normalizeBareAbsoluteBars(normalizeExpressionDisplayText(source)));
 }
 
 function renderEditableExpression(source) {
@@ -1551,6 +1630,16 @@ function renderEditableExpression(source) {
     const grouped = splitPowerOperands(trimmed, power.index);
     if (!grouped.exponent.trim()) return escapeHtml(trimmed).replaceAll(/\bpi\b/g, "π");
     return `${renderEditableExpression(grouped.prefix)}<span class="mq-power" data-command="power"><span class="mq-base">${renderEditableExpression(grouped.base)}</span><span class="mq-exponent">${renderEditableExpression(stripWrappingGroup(grouped.exponent))}</span></span>${renderEditableExpression(grouped.suffix)}`;
+  }
+
+  const bareFrac = parseBareBraceArgs(trimmed, "frac", 2);
+  if (bareFrac) {
+    return atomEditableHtml("frac", bareFrac);
+  }
+
+  const bareSqrt = parseBareBraceArgs(trimmed, "sqrt", 1);
+  if (bareSqrt) {
+    return atomEditableHtml("sqrt", bareSqrt);
   }
 
   const commandIndex = nextLatexCommandIndex(trimmed);
@@ -1583,16 +1672,6 @@ function renderEditableExpression(source) {
     if (closeIndex !== -1) {
       return `${renderEditableExpression(trimmed.slice(0, parenIndex))}(${renderEditableExpression(trimmed.slice(parenIndex + 1, closeIndex))})${renderEditableExpression(trimmed.slice(closeIndex + 1))}`;
     }
-  }
-
-  const bareFrac = parseBareBraceArgs(trimmed, "frac", 2);
-  if (bareFrac) {
-    return atomEditableHtml("frac", bareFrac);
-  }
-
-  const bareSqrt = parseBareBraceArgs(trimmed, "sqrt", 1);
-  if (bareSqrt) {
-    return atomEditableHtml("sqrt", bareSqrt);
   }
 
   return escapeHtml(trimmed).replaceAll(/\bpi\b/g, "π");
@@ -1980,7 +2059,7 @@ function matchingBrace(source, openIndex) {
 }
 
 function renderLatexExpression(source) {
-  const trimmed = source.trim();
+  const trimmed = normalizeBareAbsoluteBars(source).trim();
   if (!trimmed) return "";
 
   const additive = splitTopLevelAdditive(trimmed);
@@ -1997,6 +2076,24 @@ function renderLatexExpression(source) {
   if (power) {
     const grouped = splitPowerOperands(trimmed, power.index);
     return `${renderLatexExpression(grouped.prefix)}${powerHtml(renderLatexExpression(grouped.base), renderLatexExpression(stripWrappingGroup(grouped.exponent)), `${grouped.base}^{${grouped.exponent}}`)}${renderLatexExpression(grouped.suffix)}`;
+  }
+
+  const latexFrac = parseLatexCommand(trimmed, "frac", 2);
+  if (latexFrac) {
+    return renderLatexFunction("frac", latexFrac);
+  }
+  const bareFrac = parseBareBraceArgs(trimmed, "frac", 2);
+  if (bareFrac) {
+    return renderLatexFunction("frac", bareFrac);
+  }
+
+  const latexSqrt = parseLatexCommand(trimmed, "sqrt", 1);
+  if (latexSqrt) {
+    return renderLatexFunction("sqrt", latexSqrt);
+  }
+  const bareSqrt = parseBareBraceArgs(trimmed, "sqrt", 1);
+  if (bareSqrt) {
+    return renderLatexFunction("sqrt", bareSqrt);
   }
 
   const commandIndex = nextLatexCommandIndex(trimmed);
@@ -2029,24 +2126,6 @@ function renderLatexExpression(source) {
     if (closeIndex !== -1) {
       return `${renderLatexExpression(trimmed.slice(0, parenIndex))}(${renderLatexExpression(trimmed.slice(parenIndex + 1, closeIndex))})${renderLatexExpression(trimmed.slice(closeIndex + 1))}`;
     }
-  }
-
-  const latexFrac = parseLatexCommand(trimmed, "frac", 2);
-  if (latexFrac) {
-    return renderLatexFunction("frac", latexFrac);
-  }
-  const bareFrac = parseBareBraceArgs(trimmed, "frac", 2);
-  if (bareFrac) {
-    return renderLatexFunction("frac", bareFrac);
-  }
-
-  const latexSqrt = parseLatexCommand(trimmed, "sqrt", 1);
-  if (latexSqrt) {
-    return renderLatexFunction("sqrt", latexSqrt);
-  }
-  const bareSqrt = parseBareBraceArgs(trimmed, "sqrt", 1);
-  if (bareSqrt) {
-    return renderLatexFunction("sqrt", bareSqrt);
   }
 
   const fracCall = parseFunctionCall(trimmed, "frac");
@@ -2555,12 +2634,63 @@ function normalizeExpressionDisplayText(value) {
   return assignment ? assignment.expression : stripped;
 }
 
+function normalizeBareAbsoluteBars(value) {
+  const parsed = parseBareAbsoluteSegment(String(value ?? ""), 0, false);
+  return parsed.text;
+}
+
+function parseBareAbsoluteSegment(source, start, insideAbsolute) {
+  let output = "";
+  let index = start;
+
+  while (index < source.length) {
+    if (source[index] !== "|") {
+      output += source[index];
+      index += 1;
+      continue;
+    }
+
+    if (isLatexCommandPipe(source, index)) {
+      output += source[index];
+      index += 1;
+      continue;
+    }
+
+    if (insideAbsolute && shouldCloseBareAbsolute(output)) {
+      return { text: output, index, closed: true };
+    }
+
+    const nested = parseBareAbsoluteSegment(source, index + 1, true);
+    if (!nested.closed) {
+      output += `|${nested.text}`;
+      index = nested.index;
+      continue;
+    }
+    output += `abs(${nested.text.trim()})`;
+    index = nested.index + 1;
+  }
+
+  return { text: output, index, closed: false };
+}
+
+function shouldCloseBareAbsolute(segment) {
+  const previous = String(segment ?? "").trim().at(-1);
+  return Boolean(previous && !/[+\-*/^(,]/.test(previous));
+}
+
+function isLatexCommandPipe(source, index) {
+  const prefix = source.slice(0, index);
+  return prefix.endsWith("\\left") || prefix.endsWith("\\right");
+}
+
 function latexToExpression(value) {
   let source = String(value)
     .replace(/\u00a0/g, " ")
     .replaceAll("π", "pi")
     .replaceAll(/\\operatorname\{([A-Za-z]\w*)\}/g, "$1")
     .trim();
+
+  source = normalizeBareAbsoluteBars(source);
 
   source = replaceLatexDelimited(source, "\\left|", "\\right|", (inner) => `abs(${latexToExpression(inner)})`);
   source = replaceLatexDelimited(source, "|", "|", (inner) => `abs(${latexToExpression(inner)})`);
@@ -2743,5 +2873,9 @@ window.__leptonDebug = {
   serializeMathField
 };
 
-window.addEventListener("resize", renderScene);
+window.addEventListener("resize", () => {
+  reflowMathLayout(root);
+  requestAnimationFrame(() => reflowMathLayout(root));
+  renderScene();
+});
 renderApp();

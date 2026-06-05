@@ -162,6 +162,8 @@ select {
   border: 1px solid #cfd5df;
   border-radius: 6px;
   background: #ffffff;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .mathquill-editor-small {
@@ -169,7 +171,8 @@ select {
 }
 
 .mq-root {
-  width: 100%;
+  min-width: 100%;
+  width: max-content;
   min-height: 50px;
   border-radius: 6px;
   padding: 6px 8px;
@@ -178,7 +181,7 @@ select {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 18px;
   line-height: 1.35;
-  white-space: pre-wrap;
+  white-space: nowrap;
   cursor: text;
 }
 
@@ -205,6 +208,7 @@ select {
   display: inline-block;
   padding: 0 0.08em;
   outline: none;
+  white-space: nowrap;
 }
 
 .mq-slot:empty::before {
@@ -229,8 +233,14 @@ select {
 }
 
 .mq-radical-symbol {
-  font-size: 1.15em;
+  display: inline-block;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-family: "Times New Roman", Georgia, serif;
+  font-size: 1.2em;
   line-height: 1;
+  margin-right: -0.04em;
+  transform-origin: center bottom;
 }
 
 .mq-radical {
@@ -333,8 +343,14 @@ select {
 }
 
 .latex-radical-symbol {
-  font-size: 1.15em;
+  display: inline-block;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-family: "Times New Roman", Georgia, serif;
+  font-size: 1.2em;
   line-height: 1;
+  margin-right: -0.04em;
+  transform-origin: center bottom;
 }
 
 .latex-radicand {
