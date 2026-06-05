@@ -370,7 +370,7 @@ function bindEvents() {
           const latex = mathField.latex();
           el.dataset.value = latex;
 
-          const cleanExpr = latexToExpression(latex);
+          const cleanExpr = latexToLeptonText(latex);
 
           const [collection, rawIndex, property] = fieldName.split(".");
           const index = Number(rawIndex);
@@ -564,7 +564,7 @@ function updateField(field) {
 function readFieldValue(field) {
   if (field.type === "checkbox") return field.checked;
   if (field.classList?.contains("mathquill-field") || field.classList?.contains("mq-editable-field")) {
-    return latexToExpression(field.dataset.value ?? "");
+    return latexToLeptonText(field.dataset.value ?? "");
   }
   return stripChannelPrefix(field.value);
 }
@@ -1937,18 +1937,48 @@ function convertDivisionsToFrac(source) {
   const fraction = splitTopLevelFraction(source);
   if (fraction) {
     const prefix = convertDivisionsToFrac(fraction.prefix);
-    const num = convertDivisionsToFrac(fraction.numerator);
-    const den = convertDivisionsToFrac(fraction.denominator);
+    const num = convertDivisionsToFrac(stripWrappingGroup(fraction.numerator));
+    const den = convertDivisionsToFrac(stripWrappingGroup(fraction.denominator));
     const suffix = convertDivisionsToFrac(fraction.suffix);
-    return `${prefix}frac(${num},${den})${suffix}`;
+    return `${prefix}frac{${num}}{${den}}${suffix}`;
   }
   return source;
+}
+
+function latexToLeptonText(value) {
+  let source = String(value)
+    .replace(/\u00a0/g, " ")
+    .replaceAll("π", "pi")
+    .replaceAll(/\\cdot\b/g, "*")
+    .replaceAll(/\\times\b/g, "*")
+    .replaceAll(/\\operatorname\{([A-Za-z]\w*)\}/g, "$1")
+    .trim();
+
+  source = normalizeBareAbsoluteBars(source);
+
+  source = replaceLatexDelimited(source, "\\left|", "\\right|", (inner) => `abs(${latexToLeptonText(inner)})`);
+  source = replaceLatexDelimited(source, "|", "|", (inner) => `abs(${latexToLeptonText(inner)})`);
+  source = replaceLatexDelimited(source, "\\lvert", "\\rvert", (inner) => `abs(${latexToLeptonText(inner)})`);
+  source = replaceLatexDelimited(source, "\\lfloor", "\\rfloor", (inner) => `floor(${latexToLeptonText(inner)})`);
+  source = replaceLatexDelimited(source, "\\lceil", "\\rceil", (inner) => `ceil(${latexToLeptonText(inner)})`);
+
+  // Strip \left and \right
+  source = source.replaceAll(/\\left|\\right/g, "");
+
+  // Convert \frac{a}{b} to frac{a}{b}
+  source = source.replaceAll(/\\frac(?=\{|[A-Za-z])/g, "frac");
+
+  // Strip remaining backslashes from commands
+  source = source.replaceAll(/\\([A-Za-z]+)/g, "$1");
+
+  return source.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
 }
 
 function latexSourceFromExpression(source) {
   const normalized = normalizeExpressionDisplayText(source).trim();
   if (normalized.startsWith("\\")) return normalized;
 
+  // Convert divisions (including {a}/{b}) to frac{}{} first
   const withFrac = convertDivisionsToFrac(normalized);
 
   let output = "";
@@ -1956,6 +1986,22 @@ function latexSourceFromExpression(source) {
   const functionNames = ["frac", "sqrt", "abs", "floor", "ceil", ...Object.keys(LATEX_FUNCTIONS)];
 
   while (i < withFrac.length) {
+    if (withFrac.startsWith("frac{", i)) {
+      const startBrace = i + 4;
+      const endBrace1 = matchingBrace(withFrac, startBrace);
+      if (endBrace1 !== -1 && withFrac[endBrace1 + 1] === "{") {
+        const startBrace2 = endBrace1 + 1;
+        const endBrace2 = matchingBrace(withFrac, startBrace2);
+        if (endBrace2 !== -1) {
+          const num = withFrac.slice(startBrace + 1, endBrace1);
+          const den = withFrac.slice(startBrace2 + 1, endBrace2);
+          output += `\\frac{${latexSourceFromExpression(num)}}{${latexSourceFromExpression(den)}}`;
+          i = endBrace2 + 1;
+          continue;
+        }
+      }
+    }
+
     let matchedCall = false;
     for (const name of functionNames) {
       if (withFrac.startsWith(`${name}(`, i)) {
@@ -2596,17 +2642,17 @@ function convertFracToDivisions(source) {
   let output = "";
   let i = 0;
   while (i < source.length) {
-    if (source.startsWith("frac(", i)) {
-      const startParen = i + 4;
-      const endParen = matchingParen(source, startParen);
-      if (endParen !== -1) {
-        const inner = source.slice(startParen + 1, endParen);
-        const args = splitFunctionArgs(inner);
-        if (args.length === 2) {
-          const num = convertFracToDivisions(args[0]);
-          const den = convertFracToDivisions(args[1]);
-          output += `${wrapIfNeeded(num)}/${wrapIfNeeded(den)}`;
-          i = endParen + 1;
+    if (source.startsWith("frac{", i)) {
+      const startBrace = i + 4;
+      const endBrace1 = matchingBrace(source, startBrace);
+      if (endBrace1 !== -1 && source[endBrace1 + 1] === "{") {
+        const startBrace2 = endBrace1 + 1;
+        const endBrace2 = matchingBrace(source, startBrace2);
+        if (endBrace2 !== -1) {
+          const num = convertFracToDivisions(source.slice(startBrace + 1, endBrace1));
+          const den = convertFracToDivisions(source.slice(startBrace2 + 1, endBrace2));
+          output += `{${num}}/{${den}}`;
+          i = endBrace2 + 1;
           continue;
         }
       }
@@ -2633,7 +2679,7 @@ function importScene(raw) {
     if (!line || line === "~~~~~") continue;
     if (line.startsWith("F:")) {
       const [id, expression] = splitFirst(line.slice(2), "~");
-      next.functions.push({ id, expression });
+      next.functions.push({ id, expression: convertDivisionsToFrac(expression) });
     } else if (line.startsWith("C:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [red = "0", green = "0", blue = "0"] = rest.split("~");
@@ -2641,7 +2687,7 @@ function importScene(raw) {
     } else if (line.startsWith("R:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [expression = "1", flag = "0"] = rest.split("~");
-      next.restrictions.push({ id, expression, checkSmaller: flag === "1" });
+      next.restrictions.push({ id, expression: convertDivisionsToFrac(expression), checkSmaller: flag === "1" });
     } else if (line.startsWith("D~")) {
       const [, equationId, colorId, restrictionId] = line.split("~");
       next.draws.push({ equationId, colorId, restrictionId });
@@ -2747,7 +2793,9 @@ function isLatexCommandPipe(source, index) {
 }
 
 function latexToExpression(value) {
-  let source = String(value)
+  let source = String(value);
+  source = convertDivisionsToFrac(source);
+  source = source
     .replace(/\u00a0/g, " ")
     .replaceAll("π", "pi")
     .replaceAll(/\\cdot\b/g, "*")
