@@ -1582,7 +1582,16 @@ function hasInternalRenderableCall(source) {
 }
 
 function renderEditableLatex(source) {
-  return renderEditableExpression(normalizeBareAbsoluteBars(normalizeExpressionDisplayText(source)));
+  if (!source) return "";
+  try {
+    const trimmed = String(source).trim();
+    const ast = (trimmed.startsWith("\\") || /\\(?:operatorname|frac|sqrt|left)\b/.test(trimmed))
+      ? parseLatex(trimmed)
+      : parseLeptonText(trimmed);
+    return astToEditableHtml(ast);
+  } catch (e) {
+    return escapeHtml(source);
+  }
 }
 
 function renderEditableExpression(source) {
@@ -1962,77 +1971,6 @@ function convertDivisionsToFrac(source) {
   return output;
 }
 
-function latexToLeptonText(value) {
-  let source = String(value)
-    .replace(/\u00a0/g, " ")
-    .replaceAll("π", "pi")
-    .replaceAll(/\\cdot\b/g, "*")
-    .replaceAll(/\\times\b/g, "*")
-    .replaceAll(/\\operatorname\{([A-Za-z]\w*)\}/g, "$1")
-    .trim();
-
-  source = normalizeBareAbsoluteBars(source);
-
-  source = replaceLatexDelimited(source, "\\left|", "\\right|", (inner) => `abs(${latexToLeptonText(inner)})`);
-  source = replaceLatexDelimited(source, "|", "|", (inner) => `abs(${latexToLeptonText(inner)})`);
-  source = replaceLatexDelimited(source, "\\lvert", "\\rvert", (inner) => `abs(${latexToLeptonText(inner)})`);
-  source = replaceLatexDelimited(source, "\\lfloor", "\\rfloor", (inner) => `floor(${latexToLeptonText(inner)})`);
-  source = replaceLatexDelimited(source, "\\lceil", "\\rceil", (inner) => `ceil(${latexToLeptonText(inner)})`);
-
-  // Strip \left and \right
-  source = source.replaceAll(/\\left|\\right/g, "");
-
-  // Convert \frac{a}{b} to frac(a)(b)
-  let i = 0;
-  let output = "";
-  while (i < source.length) {
-    if (source.startsWith("\\frac{", i)) {
-      const startBrace = i + 5;
-      const endBrace1 = matchingBrace(source, startBrace);
-      if (endBrace1 !== -1 && source[endBrace1 + 1] === "{") {
-        const startBrace2 = endBrace1 + 1;
-        const endBrace2 = matchingBrace(source, startBrace2);
-        if (endBrace2 !== -1) {
-          const num = latexToLeptonText(source.slice(startBrace + 1, endBrace1));
-          const den = latexToLeptonText(source.slice(startBrace2 + 1, endBrace2));
-          output += `frac(${num})(${den})`;
-          i = endBrace2 + 1;
-          continue;
-        }
-      }
-    }
-    output += source[i];
-    i++;
-  }
-  source = output;
-
-  // Strip remaining backslashes from commands
-  source = source.replaceAll(/\\([A-Za-z]+)/g, "$1");
-
-  // Exponents: ^{exponent} to ^exponent (single item) or ^(exponent)
-  let j = 0;
-  let finalOutput = "";
-  while (j < source.length) {
-    if (source.startsWith("^{", j)) {
-      const endBrace = matchingBrace(source, j + 1);
-      if (endBrace !== -1) {
-        const exponent = latexToLeptonText(source.slice(j + 2, endBrace));
-        if (/^[A-Za-z0-9_]$/.test(exponent)) {
-          finalOutput += `^${exponent}`;
-        } else {
-          finalOutput += `^(${exponent})`;
-        }
-        j = endBrace + 1;
-        continue;
-      }
-    }
-    finalOutput += source[j];
-    j++;
-  }
-
-  return finalOutput.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
-}
-
 const STANDARD_LATEX_COMMANDS = {
   sin: "\\sin",
   cos: "\\cos",
@@ -2053,113 +1991,537 @@ const STANDARD_LATEX_COMMANDS = {
   max: "\\max"
 };
 
-function latexSourceFromExpression(source) {
-  const normalized = normalizeExpressionDisplayText(source).trim();
-  if (normalized.startsWith("\\")) return normalized;
-
-  // Convert divisions to frac()() first
-  const withFrac = convertDivisionsToFrac(normalized);
-
-  let output = "";
+function tokenizeLatex(source) {
+  const tokens = [];
   let i = 0;
-  const functionNames = ["frac", "sqrt", "abs", "floor", "ceil", ...Object.keys(LATEX_FUNCTIONS)];
-
-  while (i < withFrac.length) {
-    // Check for frac(a)(b) first
-    if (withFrac.startsWith("frac(", i)) {
-      const startParen = i + 4;
-      const endParen1 = matchingParen(withFrac, startParen);
-      if (endParen1 !== -1 && withFrac[endParen1 + 1] === "(") {
-        const startParen2 = endParen1 + 1;
-        const endParen2 = matchingParen(withFrac, startParen2);
-        if (endParen2 !== -1) {
-          const num = withFrac.slice(startParen + 1, endParen1);
-          const den = withFrac.slice(startParen2 + 1, endParen2);
-          output += `\\frac{${latexSourceFromExpression(num)}}{${latexSourceFromExpression(den)}}`;
-          i = endParen2 + 1;
-          continue;
-        }
+  while (i < source.length) {
+    const char = source[i];
+    if (/\s/.test(char)) {
+      i++;
+      continue;
+    }
+    if (char === '\\') {
+      i++;
+      let opMatch = source.slice(i).match(/^operatorname\s*\{([A-Za-z]\w*)\}/);
+      if (opMatch) {
+        tokens.push({ type: "command", value: opMatch[1] });
+        i += opMatch[0].length;
+        continue;
+      }
+      let cmdMatch = source.slice(i).match(/^[A-Za-z]+/);
+      if (cmdMatch) {
+        tokens.push({ type: "command", value: "\\" + cmdMatch[0] });
+        i += cmdMatch[0].length;
+        continue;
+      }
+      continue;
+    }
+    let numMatch = source.slice(i).match(/^\d+(?:\.\d+)?/);
+    if (numMatch) {
+      tokens.push({ type: "number", value: Number(numMatch[0]) });
+      i += numMatch[0].length;
+      continue;
+    }
+    let identMatch = source.slice(i).match(/^[A-Za-z]\w*/);
+    if (identMatch) {
+      tokens.push({ type: "identifier", value: identMatch[0] });
+      i += identMatch[0].length;
+      continue;
+    }
+    if (char === '~') {
+      let refMatch = source.slice(i).match(/^~([A-Za-z]\w*)~/);
+      if (refMatch) {
+        tokens.push({ type: "identifier", value: refMatch[0] });
+        i += refMatch[0].length;
+        continue;
       }
     }
-
-    // Check for frac{a}{b}
-    if (withFrac.startsWith("frac{", i)) {
-      const startBrace = i + 4;
-      const endBrace1 = matchingBrace(withFrac, startBrace);
-      if (endBrace1 !== -1 && withFrac[endBrace1 + 1] === "{") {
-        const startBrace2 = endBrace1 + 1;
-        const endBrace2 = matchingBrace(withFrac, startBrace2);
-        if (endBrace2 !== -1) {
-          const num = withFrac.slice(startBrace + 1, endBrace1);
-          const den = withFrac.slice(startBrace2 + 1, endBrace2);
-          output += `\\frac{${latexSourceFromExpression(num)}}{${latexSourceFromExpression(den)}}`;
-          i = endBrace2 + 1;
-          continue;
-        }
-      }
+    if (/[+\-*/^(){}[\]|,]/.test(char)) {
+      tokens.push({ type: "operator", value: char });
+      i++;
+      continue;
     }
-
-    let matchedCall = false;
-    for (const name of functionNames) {
-      if (withFrac.startsWith(`${name}(`, i)) {
-        const startParen = i + name.length;
-        const endParen = matchingParen(withFrac, startParen);
-        if (endParen !== -1) {
-          const inner = withFrac.slice(startParen + 1, endParen);
-          const args = splitFunctionArgs(inner);
-          const latexArgs = args.map(latexSourceFromExpression);
-          
-          if (name === "frac" && latexArgs.length === 2) {
-            output += `\\frac{${latexArgs[0]}}{${latexArgs[1]}}`;
-          } else if (name === "sqrt" && latexArgs.length === 1) {
-            output += `\\sqrt{${latexArgs[0]}}`;
-          } else if (name === "abs" && latexArgs.length === 1) {
-            output += `\\left|${latexArgs[0]}\\right|`;
-          } else if (name === "floor" && latexArgs.length === 1) {
-            output += `\\lfloor{${latexArgs[0]}}\\rfloor`;
-          } else if (name === "ceil" && latexArgs.length === 1) {
-            output += `\\lceil{${latexArgs[0]}}\\rceil`;
-          } else {
-            const cmd = STANDARD_LATEX_COMMANDS[name] || `\\operatorname{${name}}`;
-            output += `${cmd}\\left(${latexArgs.join(",")}\\right)`;
-          }
-          i = endParen + 1;
-          matchedCall = true;
-          break;
-        }
-      }
-    }
-    if (matchedCall) continue;
-
-    const char = withFrac[i];
-    if (char === "^") {
-      if (withFrac[i + 1] === "(") {
-        const endParen = matchingParen(withFrac, i + 1);
-        if (endParen !== -1) {
-          const inner = withFrac.slice(i + 2, endParen);
-          output += `^{${latexSourceFromExpression(inner)}}`;
-          i = endParen + 1;
-          continue;
-        }
-      } else if (withFrac[i + 1] === "{") {
-        const endBrace = matchingBrace(withFrac, i + 1);
-        if (endBrace !== -1) {
-          const inner = withFrac.slice(i + 2, endBrace);
-          output += `^{${latexSourceFromExpression(inner)}}`;
-          i = endBrace + 1;
-          continue;
-        }
-      }
-    }
-
-    output += char;
+    tokens.push({ type: "operator", value: char });
     i++;
   }
+  return tokens;
+}
 
-  output = output.replaceAll(/(?<!\\)\bpi\b/g, "\\pi");
-  output = output.replaceAll(/(?<!\\)\btheta\b/g, "\\theta");
+function tokenizeLeptonText(source) {
+  const tokens = [];
+  let i = 0;
+  while (i < source.length) {
+    const char = source[i];
+    if (/\s/.test(char)) {
+      i++;
+      continue;
+    }
+    let numMatch = source.slice(i).match(/^\d+(?:\.\d+)?/);
+    if (numMatch) {
+      tokens.push({ type: "number", value: Number(numMatch[0]) });
+      i += numMatch[0].length;
+      continue;
+    }
+    let identMatch = source.slice(i).match(/^[A-Za-z_]\w*/);
+    if (identMatch) {
+      tokens.push({ type: "identifier", value: identMatch[0] });
+      i += identMatch[0].length;
+      continue;
+    }
+    if (char === '~') {
+      let refMatch = source.slice(i).match(/^~([A-Za-z]\w*)~/);
+      if (refMatch) {
+        tokens.push({ type: "identifier", value: refMatch[0] });
+        i += refMatch[0].length;
+        continue;
+      }
+    }
+    if (/[+\-*/^(){}[\]|,]/.test(char)) {
+      tokens.push({ type: "operator", value: char });
+      i++;
+      continue;
+    }
+    tokens.push({ type: "operator", value: char });
+    i++;
+  }
+  return tokens;
+}
 
-  return output;
+function isPrefixToken(token) {
+  if (!token) return false;
+  return token.type === "number" ||
+         token.type === "identifier" ||
+         token.type === "command" ||
+         (token.type === "operator" && (token.value === "(" || token.value === "{" || token.value === "[" || token.value === "|"));
+}
+
+function getOpPrecedence(op) {
+  if (op === "+" || op === "-") return 10;
+  if (op === "*" || op === "/") return 20;
+  if (op === "^") return 30;
+  return 0;
+}
+
+function createParser(tokens, isLatexMode) {
+  let index = 0;
+  
+  function peek() {
+    return tokens[index];
+  }
+  
+  function next() {
+    return tokens[index++];
+  }
+  
+  function consume(expectedType, expectedValue) {
+    const token = peek();
+    if (!token) {
+      throw new Error(`Expected ${expectedType} ${expectedValue ?? ""}, but reached EOF`);
+    }
+    if (token.type !== expectedType || (expectedValue !== undefined && token.value !== expectedValue)) {
+      throw new Error(`Expected ${expectedType} ${expectedValue ?? ""}, but got ${token.type} ${token.value}`);
+    }
+    return next();
+  }
+  
+  function parsePrefix() {
+    const token = next();
+    if (!token) throw new Error("Unexpected end of expression");
+    
+    if (token.type === "number") {
+      return { type: "number", value: token.value };
+    }
+    
+    if (token.type === "identifier") {
+      const name = token.value;
+      
+      // Support Lepton frac(a)(b) or frac{a}{b} or frac(a, b)
+      if (name === "frac" && !isLatexMode) {
+        const nextToken = peek();
+        if (nextToken && nextToken.type === "operator") {
+          if (nextToken.value === "(") {
+            consume("operator", "(");
+            const num = parseInfixExpression(0);
+            consume("operator", ")");
+            if (peek() && peek().type === "operator" && peek().value === "(") {
+              consume("operator", "(");
+              const den = parseInfixExpression(0);
+              consume("operator", ")");
+              return { type: "fraction", num, den };
+            }
+            return { type: "call", name: "frac", args: [num] };
+          } else if (nextToken.value === "{") {
+            consume("operator", "{");
+            const num = parseInfixExpression(0);
+            consume("operator", "}");
+            consume("operator", "{");
+            const den = parseInfixExpression(0);
+            consume("operator", "}");
+            return { type: "fraction", num, den };
+          }
+        }
+      }
+      
+      // Support function call
+      const nextToken = peek();
+      if (nextToken && nextToken.type === "operator" && nextToken.value === "(") {
+        consume("operator", "(");
+        const args = [];
+        if (peek() && !(peek().type === "operator" && peek().value === ")")) {
+          while (true) {
+            args.push(parseInfixExpression(0));
+            if (peek() && peek().type === "operator" && peek().value === ",") {
+              next();
+            } else {
+              break;
+            }
+          }
+        }
+        consume("operator", ")");
+        
+        if (name === "frac" && args.length === 2) {
+          return { type: "fraction", num: args[0], den: args[1] };
+        }
+        return { type: "call", name, args };
+      }
+      
+      return { type: "identifier", name };
+    }
+    
+    if (token.type === "operator" && (token.value === "(" || token.value === "{" || token.value === "[")) {
+      const closeChar = token.value === "(" ? ")" : token.value === "{" ? "}" : "]";
+      const expr = parseInfixExpression(0);
+      consume("operator", closeChar);
+      return expr;
+    }
+    
+    if (token.type === "operator" && (token.value === "-" || token.value === "+")) {
+      const expr = parseInfixExpression(40);
+      return { type: "unary", op: token.value, value: expr };
+    }
+    
+    if (token.type === "command") {
+      const name = token.value.startsWith("\\") ? token.value.slice(1) : token.value;
+      
+      // LaTeX fraction command: \frac{a}{b}
+      if (name === "frac") {
+        consume("operator", "{");
+        const num = parseInfixExpression(0);
+        consume("operator", "}");
+        consume("operator", "{");
+        const den = parseInfixExpression(0);
+        consume("operator", "}");
+        return { type: "fraction", num, den };
+      }
+      
+      // LaTeX square root: \sqrt{a} or \sqrt[n]{a}
+      if (name === "sqrt") {
+        let degree = null;
+        if (peek() && peek().type === "operator" && peek().value === "[") {
+          consume("operator", "[");
+          degree = parseInfixExpression(0);
+          consume("operator", "]");
+        }
+        consume("operator", "{");
+        const value = parseInfixExpression(0);
+        consume("operator", "}");
+        if (degree) {
+          return { type: "call", name: "root", args: [value, degree] };
+        }
+        return { type: "call", name: "sqrt", args: [value] };
+      }
+      
+      // LaTeX absolute values: \left| and \right|
+      if (name === "left") {
+        const delim = consume("operator");
+        if (delim.value !== "|") {
+          const expr = parseInfixExpression(0);
+          consume("command", "\\right");
+          consume("operator");
+          return expr;
+        }
+        const expr = parseInfixExpression(0);
+        consume("command", "\\right");
+        consume("operator", "|");
+        return { type: "call", name: "abs", args: [expr] };
+      }
+      
+      // LaTeX delimiters
+      if (name === "lvert") {
+        const expr = parseInfixExpression(0);
+        consume("command", "\\rvert");
+        return { type: "call", name: "abs", args: [expr] };
+      }
+      if (name === "lfloor") {
+        const expr = parseInfixExpression(0);
+        consume("command", "\\rfloor");
+        return { type: "call", name: "floor", args: [expr] };
+      }
+      if (name === "lceil") {
+        const expr = parseInfixExpression(0);
+        consume("command", "\\rceil");
+        return { type: "call", name: "ceil", args: [expr] };
+      }
+      
+      if (["pi", "theta", "e"].includes(name)) {
+        return { type: "identifier", name };
+      }
+      
+      let args = [];
+      const nextToken = peek();
+      if (nextToken && nextToken.type === "operator" && (nextToken.value === "{" || nextToken.value === "(")) {
+        const openChar = nextToken.value;
+        const closeChar = openChar === "{" ? "}" : ")";
+        next();
+        args.push(parseInfixExpression(0));
+        consume("operator", closeChar);
+      } else {
+        args.push(parseInfixExpression(50));
+      }
+      return { type: "call", name, args };
+    }
+    
+    if (token.type === "operator" && token.value === "|") {
+      const expr = parseInfixExpression(0);
+      consume("operator", "|");
+      return { type: "call", name: "abs", args: [expr] };
+    }
+    
+    throw new Error(`Unexpected token: ${token.type} ${token.value}`);
+  }
+  
+  function parseInfixExpression(precedence) {
+    let left = parsePrefix();
+    
+    while (true) {
+      const nextToken = peek();
+      
+      if (isPrefixToken(nextToken)) {
+        const implicitPrecedence = 20;
+        if (implicitPrecedence <= precedence) {
+          break;
+        }
+        const right = parseInfixExpression(implicitPrecedence);
+        left = { type: "binary", op: "*", left, right };
+        continue;
+      }
+      
+      const nextPrecedence = getPrecedence(nextToken);
+      if (nextPrecedence <= precedence) {
+        break;
+      }
+      
+      const opToken = next();
+      const right = parseInfixExpression(opToken.value === "^" ? nextPrecedence - 1 : nextPrecedence);
+      
+      if (opToken.value === "/") {
+        left = { type: "fraction", num: left, den: right };
+      } else {
+        left = { type: "binary", op: opToken.value, left, right };
+      }
+    }
+    
+    return left;
+  }
+  
+  return parseInfixExpression(0);
+}
+
+function parseLatex(source) {
+  const tokens = tokenizeLatex(source);
+  return createParser(tokens, true);
+}
+
+function parseLeptonText(source) {
+  const tokens = tokenizeLeptonText(source);
+  return createParser(tokens, false);
+}
+
+function astToLatex(node) {
+  if (node.type === "number") {
+    return String(node.value);
+  }
+  if (node.type === "identifier") {
+    if (node.name === "pi") return "\\pi";
+    if (node.name === "theta") return "\\theta";
+    return node.name;
+  }
+  if (node.type === "fraction") {
+    return `\\frac{${astToLatex(node.num)}}{${astToLatex(node.den)}}`;
+  }
+  if (node.type === "unary") {
+    return `${node.op}${astToLatex(node.value)}`;
+  }
+  if (node.type === "power") {
+    return `${astToLatex(node.base)}^{${astToLatex(node.exponent)}}`;
+  }
+  if (node.type === "binary") {
+    const op = node.op;
+    let left = astToLatex(node.left);
+    let right = astToLatex(node.right);
+    if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
+      left = `\\left(${left}\\right)`;
+    }
+    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
+      right = `\\left(${right}\\right)`;
+    }
+    return `${left}${op}${right}`;
+  }
+  if (node.type === "call") {
+    const name = node.name;
+    const args = node.args.map(astToLatex);
+    if (name === "abs" && args.length === 1) {
+      return `\\left|${args[0]}\\right|`;
+    }
+    if (name === "floor" && args.length === 1) {
+      return `\\lfloor{${args[0]}}\\rfloor`;
+    }
+    if (name === "ceil" && args.length === 1) {
+      return `\\lceil{${args[0]}}\\rceil`;
+    }
+    if (name === "sqrt" && args.length === 1) {
+      return `\\sqrt{${args[0]}}`;
+    }
+    const cmd = STANDARD_LATEX_COMMANDS[name] || `\\operatorname{${name}}`;
+    return `${cmd}\\left(${args.join(",")}\\right)`;
+  }
+  return "";
+}
+
+function astToLeptonText(node) {
+  if (node.type === "number") {
+    return String(node.value);
+  }
+  if (node.type === "identifier") {
+    return node.name;
+  }
+  if (node.type === "fraction") {
+    return `{${astToLeptonText(node.num)}}/{${astToLeptonText(node.den)}}`;
+  }
+  if (node.type === "unary") {
+    return `${node.op}${astToLeptonText(node.value)}`;
+  }
+  if (node.type === "power") {
+    const base = astToLeptonText(node.base);
+    const exponent = astToLeptonText(node.exponent);
+    if (node.exponent.type === "number" || node.exponent.type === "identifier") {
+      return `${base}^${exponent}`;
+    }
+    return `${base}^(${exponent})`;
+  }
+  if (node.type === "binary") {
+    const op = node.op;
+    let left = astToLeptonText(node.left);
+    let right = astToLeptonText(node.right);
+    if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
+      left = `(${left})`;
+    }
+    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
+      right = `(${right})`;
+    }
+    return `${left}${op}${right}`;
+  }
+  if (node.type === "call") {
+    const name = node.name;
+    const args = node.args.map(astToLeptonText);
+    return `${name}(${args.join(",")})`;
+  }
+  return "";
+}
+
+function astToMathString(node) {
+  if (node.type === "number") {
+    return String(node.value);
+  }
+  if (node.type === "identifier") {
+    return node.name;
+  }
+  if (node.type === "fraction") {
+    return `frac(${astToMathString(node.num)},${astToMathString(node.den)})`;
+  }
+  if (node.type === "unary") {
+    return `${node.op}${astToMathString(node.value)}`;
+  }
+  if (node.type === "power") {
+    return `pow(${astToMathString(node.base)},${astToMathString(node.exponent)})`;
+  }
+  if (node.type === "binary") {
+    const op = node.op;
+    let left = astToMathString(node.left);
+    let right = astToMathString(node.right);
+    if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
+      left = `(${left})`;
+    }
+    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
+      right = `(${right})`;
+    }
+    return `${left}${op}${right}`;
+  }
+  if (node.type === "call") {
+    const name = node.name;
+    const args = node.args.map(astToMathString);
+    return `${name}(${args.join(",")})`;
+  }
+  return "";
+}
+
+function astToEditableHtml(node) {
+  if (node.type === "number") {
+    return String(node.value);
+  }
+  if (node.type === "identifier") {
+    return node.name;
+  }
+  if (node.type === "fraction") {
+    return atomEditableHtml("frac", [astToLeptonText(node.num), astToLeptonText(node.den)]);
+  }
+  if (node.type === "unary") {
+    return `${node.op}${astToEditableHtml(node.value)}`;
+  }
+  if (node.type === "power") {
+    return `<span class="mq-power" data-command="power"><span class="mq-base">${astToEditableHtml(node.base)}</span><span class="mq-exponent">${astToEditableHtml(node.exponent)}</span></span>`;
+  }
+  if (node.type === "binary") {
+    return `${astToEditableHtml(node.left)}${node.op}${astToEditableHtml(node.right)}`;
+  }
+  if (node.type === "call") {
+    const name = node.name;
+    const args = node.args.map(astToLeptonText);
+    if (name === "abs" && args.length === 1) {
+      return atomEditableHtml("abs", args);
+    }
+    if (name === "floor" && args.length === 1) {
+      return atomEditableHtml("floor", args);
+    }
+    if (name === "ceil" && args.length === 1) {
+      return atomEditableHtml("ceil", args);
+    }
+    if (name === "sqrt" && args.length === 1) {
+      return atomEditableHtml("sqrt", args);
+    }
+    return atomEditableHtml(name, args);
+  }
+  return "";
+}
+
+function latexToLeptonText(value) {
+  if (!value) return "";
+  try {
+    const ast = parseLatex(value);
+    return astToLeptonText(ast);
+  } catch (e) {
+    return String(value);
+  }
+}
+
+function latexSourceFromExpression(source) {
+  if (!source) return "";
+  try {
+    const ast = parseLeptonText(source);
+    return astToLatex(ast);
+  } catch (e) {
+    return String(source);
+  }
 }
 
 function sourceFromLatexText(text) {
@@ -2905,65 +3267,16 @@ function isLatexCommandPipe(source, index) {
 }
 
 function latexToExpression(value) {
-  let source = String(value);
-  source = convertDivisionsToFrac(source);
-  source = source
-    .replace(/\u00a0/g, " ")
-    .replaceAll("π", "pi")
-    .replaceAll(/\\cdot\b/g, "*")
-    .replaceAll(/\\times\b/g, "*")
-    .replaceAll(/\\operatorname\{([A-Za-z]\w*)\}/g, "$1")
-    .trim();
-
-  source = normalizeBareAbsoluteBars(source);
-
-  source = replaceLatexDelimited(source, "\\left|", "\\right|", (inner) => `abs(${latexToExpression(inner)})`);
-  source = replaceLatexDelimited(source, "|", "|", (inner) => `abs(${latexToExpression(inner)})`);
-  source = replaceLatexDelimited(source, "\\lvert", "\\rvert", (inner) => `abs(${latexToExpression(inner)})`);
-  source = replaceLatexDelimited(source, "\\lfloor", "\\rfloor", (inner) => `floor(${latexToExpression(inner)})`);
-  source = replaceLatexDelimited(source, "\\lceil", "\\rceil", (inner) => `ceil(${latexToExpression(inner)})`);
-
-  // Strip \left and \right first
-  source = source.replaceAll(/\\left|\\right/g, "");
-
-  // Strip remaining backslashes from commands
-  source = source.replaceAll(/\\([A-Za-z]+)/g, "$1");
-
-  for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
-    source = replaceLatexCommand(source, command, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
+  if (!value) return "";
+  const trimmed = String(value).trim();
+  try {
+    const ast = (trimmed.startsWith("\\") || /\\(?:operatorname|frac|sqrt|left)\b/.test(trimmed))
+      ? parseLatex(trimmed)
+      : parseLeptonText(trimmed);
+    return astToMathString(ast);
+  } catch (e) {
+    return trimmed;
   }
-  source = replaceBareBraceCommand(source, "frac", 2, (args) => `frac(${args.map((arg) => latexToExpression(arg)).join(",")})`);
-  source = replaceBareBraceCommand(source, "sqrt", 1, (args) => `sqrt(${latexToExpression(args[0])})`);
-
-  let k = 0;
-  let output = "";
-  while (k < source.length) {
-    if (source.startsWith("frac(", k)) {
-      const startParen = k + 4;
-      const endParen1 = matchingParen(source, startParen);
-      if (endParen1 !== -1 && source[endParen1 + 1] === "(") {
-        const startParen2 = endParen1 + 1;
-        const endParen2 = matchingParen(source, startParen2);
-        if (endParen2 !== -1) {
-          const num = latexToExpression(source.slice(startParen + 1, endParen1));
-          const den = latexToExpression(source.slice(startParen2 + 1, endParen2));
-          output += `frac(${num},${den})`;
-          k = endParen2 + 1;
-          continue;
-        }
-      }
-    }
-    output += source[k];
-    k++;
-  }
-  source = output;
-
-  for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
-    if (["frac", "sqrt"].includes(command)) continue;
-    source = replaceBareBraceCommand(source, command, config.args, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
-  }
-  source = source.replaceAll(/\^\{([^{}]+)\}/g, "^($1)");
-  return source.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
 }
 
 function replaceBareBraceCommand(source, command, expectedArgs, build) {
