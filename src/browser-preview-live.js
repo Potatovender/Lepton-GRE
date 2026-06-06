@@ -364,7 +364,7 @@ function bindEvents() {
 
     const mathField = MQ.MathField(el, {
       autoCommands: "pi theta sqrt sum",
-      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot",
+      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan",
       handlers: {
         edit: () => {
           const latex = mathField.latex();
@@ -2082,6 +2082,23 @@ function latexSourceFromExpression(source) {
       }
     }
 
+    // Check for frac{a}{b}
+    if (withFrac.startsWith("frac{", i)) {
+      const startBrace = i + 4;
+      const endBrace1 = matchingBrace(withFrac, startBrace);
+      if (endBrace1 !== -1 && withFrac[endBrace1 + 1] === "{") {
+        const startBrace2 = endBrace1 + 1;
+        const endBrace2 = matchingBrace(withFrac, startBrace2);
+        if (endBrace2 !== -1) {
+          const num = withFrac.slice(startBrace + 1, endBrace1);
+          const den = withFrac.slice(startBrace2 + 1, endBrace2);
+          output += `\\frac{${latexSourceFromExpression(num)}}{${latexSourceFromExpression(den)}}`;
+          i = endBrace2 + 1;
+          continue;
+        }
+      }
+    }
+
     let matchedCall = false;
     for (const name of functionNames) {
       if (withFrac.startsWith(`${name}(`, i)) {
@@ -2734,6 +2751,20 @@ function convertFracToDivisions(source) {
           const den = convertFracToDivisions(source.slice(startBrace2 + 1, endBrace2));
           output += `{${num}}/{${den}}`;
           i = endBrace2 + 1;
+          continue;
+        }
+      }
+    } else if (source.startsWith("frac(", i)) {
+      const startParen = i + 4;
+      const endParen1 = matchingParen(source, startParen);
+      if (endParen1 !== -1 && source[endParen1 + 1] === "(") {
+        const startParen2 = endParen1 + 1;
+        const endParen2 = matchingParen(source, startParen2);
+        if (endParen2 !== -1) {
+          const num = convertFracToDivisions(source.slice(startParen + 1, endParen1));
+          const den = convertFracToDivisions(source.slice(startParen2 + 1, endParen2));
+          output += `{${num}}/{${den}}`;
+          i = endParen2 + 1;
           continue;
         }
       }
