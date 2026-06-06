@@ -1940,9 +1940,26 @@ function convertDivisionsToFrac(source) {
     const num = convertDivisionsToFrac(stripWrappingGroup(fraction.numerator));
     const den = convertDivisionsToFrac(stripWrappingGroup(fraction.denominator));
     const suffix = convertDivisionsToFrac(fraction.suffix);
-    return `${prefix}frac{${num}}{${den}}${suffix}`;
+    return `${prefix}frac(${num})(${den})${suffix}`;
   }
-  return source;
+
+  let output = "";
+  let i = 0;
+  while (i < source.length) {
+    const char = source[i];
+    if (char === "(") {
+      const end = matchingParen(source, i);
+      if (end !== -1) {
+        const inner = source.slice(i + 1, end);
+        output += `(${convertDivisionsToFrac(inner)})`;
+        i = end + 1;
+        continue;
+      }
+    }
+    output += char;
+    i++;
+  }
+  return output;
 }
 
 function latexToLeptonText(value) {
@@ -1965,20 +1982,82 @@ function latexToLeptonText(value) {
   // Strip \left and \right
   source = source.replaceAll(/\\left|\\right/g, "");
 
-  // Convert \frac{a}{b} to frac{a}{b}
-  source = source.replaceAll(/\\frac(?=\{|[A-Za-z])/g, "frac");
+  // Convert \frac{a}{b} to frac(a)(b)
+  let i = 0;
+  let output = "";
+  while (i < source.length) {
+    if (source.startsWith("\\frac{", i)) {
+      const startBrace = i + 5;
+      const endBrace1 = matchingBrace(source, startBrace);
+      if (endBrace1 !== -1 && source[endBrace1 + 1] === "{") {
+        const startBrace2 = endBrace1 + 1;
+        const endBrace2 = matchingBrace(source, startBrace2);
+        if (endBrace2 !== -1) {
+          const num = latexToLeptonText(source.slice(startBrace + 1, endBrace1));
+          const den = latexToLeptonText(source.slice(startBrace2 + 1, endBrace2));
+          output += `frac(${num})(${den})`;
+          i = endBrace2 + 1;
+          continue;
+        }
+      }
+    }
+    output += source[i];
+    i++;
+  }
+  source = output;
 
   // Strip remaining backslashes from commands
   source = source.replaceAll(/\\([A-Za-z]+)/g, "$1");
 
-  return source.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
+  // Exponents: ^{exponent} to ^exponent (single item) or ^(exponent)
+  let j = 0;
+  let finalOutput = "";
+  while (j < source.length) {
+    if (source.startsWith("^{", j)) {
+      const endBrace = matchingBrace(source, j + 1);
+      if (endBrace !== -1) {
+        const exponent = latexToLeptonText(source.slice(j + 2, endBrace));
+        if (/^[A-Za-z0-9_]$/.test(exponent)) {
+          finalOutput += `^${exponent}`;
+        } else {
+          finalOutput += `^(${exponent})`;
+        }
+        j = endBrace + 1;
+        continue;
+      }
+    }
+    finalOutput += source[j];
+    j++;
+  }
+
+  return finalOutput.replaceAll(/\\pi\b/g, "pi").replaceAll(/\\mathrm\{e\}/g, "e");
 }
+
+const STANDARD_LATEX_COMMANDS = {
+  sin: "\\sin",
+  cos: "\\cos",
+  tan: "\\tan",
+  asin: "\\arcsin",
+  acos: "\\arccos",
+  atan: "\\arctan",
+  sinh: "\\sinh",
+  cosh: "\\cosh",
+  tanh: "\\tanh",
+  log: "\\log",
+  ln: "\\ln",
+  exp: "\\exp",
+  sec: "\\sec",
+  csc: "\\csc",
+  cot: "\\cot",
+  min: "\\min",
+  max: "\\max"
+};
 
 function latexSourceFromExpression(source) {
   const normalized = normalizeExpressionDisplayText(source).trim();
   if (normalized.startsWith("\\")) return normalized;
 
-  // Convert divisions (including {a}/{b}) to frac{}{} first
+  // Convert divisions to frac()() first
   const withFrac = convertDivisionsToFrac(normalized);
 
   let output = "";
@@ -1986,17 +2065,18 @@ function latexSourceFromExpression(source) {
   const functionNames = ["frac", "sqrt", "abs", "floor", "ceil", ...Object.keys(LATEX_FUNCTIONS)];
 
   while (i < withFrac.length) {
-    if (withFrac.startsWith("frac{", i)) {
-      const startBrace = i + 4;
-      const endBrace1 = matchingBrace(withFrac, startBrace);
-      if (endBrace1 !== -1 && withFrac[endBrace1 + 1] === "{") {
-        const startBrace2 = endBrace1 + 1;
-        const endBrace2 = matchingBrace(withFrac, startBrace2);
-        if (endBrace2 !== -1) {
-          const num = withFrac.slice(startBrace + 1, endBrace1);
-          const den = withFrac.slice(startBrace2 + 1, endBrace2);
+    // Check for frac(a)(b) first
+    if (withFrac.startsWith("frac(", i)) {
+      const startParen = i + 4;
+      const endParen1 = matchingParen(withFrac, startParen);
+      if (endParen1 !== -1 && withFrac[endParen1 + 1] === "(") {
+        const startParen2 = endParen1 + 1;
+        const endParen2 = matchingParen(withFrac, startParen2);
+        if (endParen2 !== -1) {
+          const num = withFrac.slice(startParen + 1, endParen1);
+          const den = withFrac.slice(startParen2 + 1, endParen2);
           output += `\\frac{${latexSourceFromExpression(num)}}{${latexSourceFromExpression(den)}}`;
-          i = endBrace2 + 1;
+          i = endParen2 + 1;
           continue;
         }
       }
@@ -2023,7 +2103,8 @@ function latexSourceFromExpression(source) {
           } else if (name === "ceil" && latexArgs.length === 1) {
             output += `\\lceil{${latexArgs[0]}}\\rceil`;
           } else {
-            output += `\\${name}\\left(${latexArgs.join(",")}\\right)`;
+            const cmd = STANDARD_LATEX_COMMANDS[name] || `\\operatorname{${name}}`;
+            output += `${cmd}\\left(${latexArgs.join(",")}\\right)`;
           }
           i = endParen + 1;
           matchedCall = true;
@@ -2814,7 +2895,7 @@ function latexToExpression(value) {
   // Strip \left and \right first
   source = source.replaceAll(/\\left|\\right/g, "");
 
-  // Strip remaining backslashes from commands (e.g. \frac -> frac, \sin -> sin, \theta -> theta)
+  // Strip remaining backslashes from commands
   source = source.replaceAll(/\\([A-Za-z]+)/g, "$1");
 
   for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
@@ -2822,6 +2903,30 @@ function latexToExpression(value) {
   }
   source = replaceBareBraceCommand(source, "frac", 2, (args) => `frac(${args.map((arg) => latexToExpression(arg)).join(",")})`);
   source = replaceBareBraceCommand(source, "sqrt", 1, (args) => `sqrt(${latexToExpression(args[0])})`);
+
+  let k = 0;
+  let output = "";
+  while (k < source.length) {
+    if (source.startsWith("frac(", k)) {
+      const startParen = k + 4;
+      const endParen1 = matchingParen(source, startParen);
+      if (endParen1 !== -1 && source[endParen1 + 1] === "(") {
+        const startParen2 = endParen1 + 1;
+        const endParen2 = matchingParen(source, startParen2);
+        if (endParen2 !== -1) {
+          const num = latexToExpression(source.slice(startParen + 1, endParen1));
+          const den = latexToExpression(source.slice(startParen2 + 1, endParen2));
+          output += `frac(${num},${den})`;
+          k = endParen2 + 1;
+          continue;
+        }
+      }
+    }
+    output += source[k];
+    k++;
+  }
+  source = output;
+
   for (const [command, config] of Object.entries(LATEX_FUNCTIONS)) {
     if (["frac", "sqrt"].includes(command)) continue;
     source = replaceBareBraceCommand(source, command, config.args, (args) => `${config.internal}(${args.map((arg) => latexToExpression(arg)).join(",")})`);
