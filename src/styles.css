@@ -160,6 +160,11 @@ select {
   box-shadow: 0 0 0 3px #f5d9d7;
 }
 
+.entry-status.info {
+  background: #2f7ed8;
+  box-shadow: 0 0 0 3px #d9e9fb;
+}
+
 .entry-status.warning {
   background: #c6952f;
   box-shadow: 0 0 0 3px #f6ead1;

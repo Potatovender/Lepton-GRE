@@ -128,6 +128,8 @@ const LATEX_FUNCTIONS = {
   frac: { internal: "frac", args: 2, display: "frac" }
 };
 const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
+const NODE_BLUE_FLAG_THRESHOLD = 2 ** 16;
+const NODE_RED_FLAG_THRESHOLD = 2 ** 32;
 
 let scene = structuredClone(DEFAULT_SCENE);
 let displayMode = "standard";
@@ -1329,9 +1331,10 @@ function validateScene() {
 
   const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.draws];
   const firstError = all.find((item) => item.status === "invalid");
+  const firstInfo = all.find((item) => item.status === "info");
   const firstWarning = all.find((item) => item.status === "warning");
   diagnostics.hasErrors = Boolean(firstError);
-  diagnostics.summary = firstError ? firstError.message : firstWarning ? firstWarning.message : "GLSL ready";
+  diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
 }
 
@@ -1352,6 +1355,13 @@ function validateExpression(source, env, stack = []) {
     if (/\b[A-Za-z]\w*\(\s*\)/.test(normalized)) {
       throw new Error("Empty function argument");
     }
+    const nodeCount = estimateExpandedNodeCount(source, env, stack);
+    if (nodeCount > NODE_RED_FLAG_THRESHOLD) {
+      throw new Error(`Equation is too large (${formatNodeCount(nodeCount)} nodes); refusing to generate`);
+    }
+    if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) {
+      return { status: "info", message: `Equation is too large (${formatNodeCount(nodeCount)} nodes); still attempting to generate` };
+    }
     expressionToGlsl(source, env, null, stack);
     const runtimeEnv = buildRuntimeEnv(env);
     compileExpression(source)(1, 1, runtimeEnv);
@@ -1359,6 +1369,44 @@ function validateExpression(source, env, stack = []) {
   } catch (error) {
     return { status: "invalid", message: error.message };
   }
+}
+
+function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map()) {
+  const normalized = normalizeExpressionText(source).replaceAll(/~([A-Za-z]\w*)~/g, "$1");
+  let total = countLocalExpressionNodes(normalized);
+  const identifiers = normalized.matchAll(/\b[A-Za-z_]\w*\b/g);
+  for (const match of identifiers) {
+    const name = match[0];
+    if (BUILTIN_NAMES.has(name) || !env[name]) continue;
+    if (stack.length >= recursionLimit()) {
+      total = cappedNodeAdd(total, 2);
+      continue;
+    }
+    const memoKey = `${name}:${stack.length}`;
+    if (memo.has(memoKey)) {
+      total = cappedNodeAdd(total, Math.max(0, memo.get(memoKey) - 1));
+      continue;
+    }
+    const value = estimateExpandedNodeCount(env[name], env, [...stack, name], memo);
+    memo.set(memoKey, value);
+    total = cappedNodeAdd(total, Math.max(0, value - 1));
+  }
+  return total;
+}
+
+function countLocalExpressionNodes(source) {
+  const tokens = String(source).match(/\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b|[+\-*/^(),]/g);
+  return Math.max(1, tokens?.length ?? 1);
+}
+
+function cappedNodeAdd(left, right) {
+  const total = left + right;
+  return total > NODE_RED_FLAG_THRESHOLD + 1 ? NODE_RED_FLAG_THRESHOLD + 1 : total;
+}
+
+function formatNodeCount(value) {
+  if (value > NODE_RED_FLAG_THRESHOLD) return `>${NODE_RED_FLAG_THRESHOLD.toLocaleString()}`;
+  return value.toLocaleString();
 }
 
 function assertCompleteExpression(source) {
@@ -1385,6 +1433,7 @@ function updateStatusLights(diagnostics) {
     if (!status || !item) return;
     status.classList.toggle("valid", item.status === "valid");
     status.classList.toggle("invalid", item.status === "invalid");
+    status.classList.toggle("info", item.status === "info");
     status.classList.toggle("warning", item.status === "warning");
     status.setAttribute("aria-label", item.message);
     row.setAttribute("title", item.message);
@@ -1399,7 +1448,10 @@ function updateStatusLights(diagnostics) {
 }
 
 function combineDiagnostics(items) {
-  return items.find((item) => item.status === "invalid") ?? { status: "valid", message: "Color is valid" };
+  return items.find((item) => item.status === "invalid") ??
+    items.find((item) => item.status === "info") ??
+    items.find((item) => item.status === "warning") ??
+    { status: "valid", message: "Color is valid" };
 }
 
 function handleMathBeforeInput(field, event) {

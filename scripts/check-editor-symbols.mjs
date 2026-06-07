@@ -23,7 +23,7 @@ const sandbox = {
 
 vm.createContext(sandbox);
 vm.runInContext(
-  source.replace(/renderApp\(\);\s*$/, "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS;"),
+  source.replace(/renderApp\(\);\s*$/, "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene;"),
   sandbox
 );
 
@@ -116,6 +116,33 @@ check("custom variables resolve and unknown variables error during validation", 
 check("malformed expressions are invalid", () => {
   const result = sandbox.validateExpression("sin(2x)+", {});
   assert(result.status === "invalid", JSON.stringify(result));
+});
+
+check("recursive node estimator blue-flags equations above 2^16 nodes", () => {
+  sandbox.__debugScene.settings.maxRecursion = 20;
+  const env = {
+    a: "b+b+1",
+    b: "a+a+1"
+  };
+  const result = sandbox.validateExpression("a+b", env, ["a"]);
+  assert(result.status === "info", JSON.stringify(result));
+  assert(result.message.includes("too large"), result.message);
+  assert(result.message.includes("still attempting"), result.message);
+});
+
+check("recursive node estimator red-flags equations above 2^32 nodes", () => {
+  sandbox.__debugScene.settings.maxRecursion = 100;
+  const env = {
+    real: "real^2-imaginary^2+x",
+    imaginary: "2*real*imaginary+y",
+    c: "x",
+    bounds: "1",
+    comb: "real+imaginary"
+  };
+  const result = sandbox.validateExpression("real+imaginary", env, ["comb"]);
+  assert(result.status === "invalid", JSON.stringify(result));
+  assert(result.message.includes("too large"), result.message);
+  assert(result.message.includes("refusing"), result.message);
 });
 
 function check(name, fn) {
