@@ -23,7 +23,10 @@ const sandbox = {
 
 vm.createContext(sandbox);
 vm.runInContext(
-  source.replace(/renderApp\(\);\s*$/, "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene;"),
+  source.replace(
+    /renderApp\(\);\s*$/,
+    "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; };"
+  ),
   sandbox
 );
 
@@ -113,6 +116,35 @@ check("custom variables resolve and unknown variables error during validation", 
   assert(result.status === "invalid", JSON.stringify(result));
 });
 
+check("pi inside an identifier does not corrupt reference compilation", () => {
+  const env = sandbox.buildRuntimeEnv({ tempimaginary: "10" });
+  const value = sandbox.compileExpression("tempimaginary+1")(0, 0, env);
+  assert(value === 11, `expected 11, got ${value}`);
+  const glsl = sandbox.expressionToGlsl("tempimaginary+1", { tempimaginary: "10" });
+  assert(glsl === "(10.0)+1.0", glsl);
+});
+
+check("identifiers containing reserved names are yellow-flagged", () => {
+  const idResult = sandbox.validateEntryId("tempimaginary", "Function");
+  assert(idResult.status === "warning", JSON.stringify(idResult));
+  assert(idResult.message.includes("pi"), idResult.message);
+
+  const expressionResult = sandbox.validateExpression("tempimaginary+1", { tempimaginary: "10" });
+  assert(expressionResult.status === "warning", JSON.stringify(expressionResult));
+  assert(expressionResult.message.includes("pi"), expressionResult.message);
+
+  const eResult = sandbox.validateEntryId("one", "Function");
+  assert(eResult.status === "valid", JSON.stringify(eResult));
+});
+
+check("recursion base case returns zero", () => {
+  sandbox.__debugScene.settings.maxRecursion = 1;
+  const env = sandbox.buildRuntimeEnv({ loop: "loop+1" });
+  const value = sandbox.compileExpression("loop")(2, 3, env);
+  assert(value === 1, `expected base 0 plus 1, got ${value}`);
+  assert(sandbox.expressionToGlsl("loop", { loop: "loop+1" }) === "((0.0)+1.0)", "GLSL recursion base should be 0.0");
+});
+
 check("malformed expressions are invalid", () => {
   const result = sandbox.validateExpression("sin(2x)+", {});
   assert(result.status === "invalid", JSON.stringify(result));
@@ -143,6 +175,62 @@ check("recursive node estimator red-flags equations above 2^32 nodes", () => {
   assert(result.status === "invalid", JSON.stringify(result));
   assert(result.message.includes("too large"), result.message);
   assert(result.message.includes("refusing"), result.message);
+});
+
+check("draw layers can be hidden and round-trip through text mode", () => {
+  const imported = sandbox.importScene(`F:eq~x
+~~~~~
+C:rgb~eq~eq~eq
+~~~~~
+R:rest~eq~0
+~~~~~
+D~eq~rgb~rest~1
+~~~~~
+S:x_min~-1
+S:x_max~1
+S:y_min~-1
+S:y_max~1
+S:max_recursion~20
+S:angle_mode~radians`);
+  assert(imported.draws[0].hidden === true, JSON.stringify(imported.draws[0]));
+
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("D~eq~rgb~rest~1"), exported);
+});
+
+check("hidden draw layers do not invalidate the scene", () => {
+  const imported = sandbox.importScene(`F:eq~x
+~~~~~
+C:rgb~eq~eq~eq
+~~~~~
+R:rest~eq~0
+~~~~~
+D~missing~missing~missing~1
+~~~~~
+S:x_min~-1
+S:x_max~1
+S:y_min~-1
+S:y_max~1
+S:max_recursion~20
+S:angle_mode~radians`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.draws[0].status === "valid", JSON.stringify(diagnostics.draws[0]));
+  assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
+});
+
+check("draw layers can be reordered", () => {
+  sandbox.__debugSetScene({
+    ...structuredClone(sandbox.__debugScene),
+    draws: [
+      { equationId: "a", colorId: "rgb", restrictionId: "rest", hidden: false },
+      { equationId: "b", colorId: "rgb", restrictionId: "rest", hidden: false },
+      { equationId: "c", colorId: "rgb", restrictionId: "rest", hidden: false }
+    ]
+  });
+  sandbox.moveDrawLayer(2, 0);
+  assert(sandbox.__debugScene.draws.map((entry) => entry.equationId).join(",") === "c,a,b", JSON.stringify(sandbox.__debugScene.draws));
 });
 
 function check(name, fn) {

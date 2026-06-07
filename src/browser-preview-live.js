@@ -84,6 +84,7 @@ const BUILTIN_NAMES = new Set([
 ]);
 
 const RESERVED_FUNCTION_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x", "y", "z", "pi", "e", "Math", "ref", "NaN"].includes(name)));
+const SUBSTRING_REFERENCE_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x", "y", "z", "e", "Math", "PI", "ref", "NaN"].includes(name) && name.length > 1));
 const LATEX_FUNCTIONS = {
   sin: { internal: "sin", args: 1, display: "sin" },
   cos: { internal: "cos", args: 1, display: "cos" },
@@ -247,10 +248,14 @@ function renderPanel() {
     return [
       ...scene.draws.map(
         (entry, index) => expressionRow(diagnostics.draws[index]?.status ?? "invalid", diagnostics.draws[index]?.message ?? "", `
+          <div class="draw-layer-toolbar">
+            <button class="draw-drag-handle" data-draw-handle="${index}" draggable="true" title="Drag to reorder draw layer" aria-label="Drag to reorder draw layer">↕</button>
+            <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
+          </div>
           <select class="compact-field" data-field="draws.${index}.equationId">${options(scene.functions, entry.equationId)}</select>
           <select class="compact-field" data-field="draws.${index}.colorId">${options(scene.colors, entry.colorId)}</select>
           <select class="compact-field" data-field="draws.${index}.restrictionId">${options(scene.restrictions, entry.restrictionId)}</select>
-        `, "draws", index)
+        `, "draws", index, { rowClass: entry.hidden ? "expression-row-hidden" : "", attrs: `data-draw-index="${index}"` })
       ),
       addRow("Add draw layer", "draws")
     ].join("");
@@ -314,9 +319,9 @@ function mathEditor(field, value, label, small = false) {
   `;
 }
 
-function expressionRow(status, message, content, kind = null, index = null) {
+function expressionRow(status, message, content, kind = null, index = null, options = {}) {
   return `
-    <div class="expression-row" title="${escapeHtml(message)}">
+    <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${options.attrs ?? ""}>
       <span class="entry-status ${status}" aria-label="${escapeHtml(message || status)}"></span>
       <div class="entry-content">${content}</div>
       ${kind ? `<button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
@@ -509,6 +514,78 @@ function bindEvents() {
       renderApp();
     });
   });
+
+  root.querySelectorAll("[data-toggle-draw]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      toggleDrawHidden(Number(button.dataset.toggleDraw));
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-draw-handle]").forEach((handle) => {
+    handle.addEventListener("dragstart", (event) => {
+      event.dataTransfer?.setData("text/plain", String(handle.dataset.drawHandle));
+      event.dataTransfer?.setDragImage(handle, handle.offsetWidth / 2, handle.offsetHeight / 2);
+    });
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      startDrawPointerDrag(Number(handle.dataset.drawHandle), event);
+    });
+  });
+
+  root.querySelectorAll("[data-draw-index]").forEach((row) => {
+    row.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      row.classList.add("expression-row-drop-target");
+    });
+    row.addEventListener("dragleave", () => {
+      row.classList.remove("expression-row-drop-target");
+    });
+    row.addEventListener("drop", (event) => {
+      event.preventDefault();
+      row.classList.remove("expression-row-drop-target");
+      const from = Number(event.dataTransfer?.getData("text/plain"));
+      const to = Number(row.dataset.drawIndex);
+      syncFields();
+      moveDrawLayer(from, to);
+      renderApp();
+    });
+  });
+}
+
+function startDrawPointerDrag(from, event) {
+  if (!Number.isInteger(from)) return;
+  let targetRow = null;
+
+  const clearTarget = () => {
+    targetRow?.classList.remove("expression-row-drop-target");
+    targetRow = null;
+  };
+
+  const onMove = (moveEvent) => {
+    const row = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest?.("[data-draw-index]");
+    if (row === targetRow) return;
+    clearTarget();
+    if (row) {
+      targetRow = row;
+      targetRow.classList.add("expression-row-drop-target");
+    }
+  };
+
+  const onUp = (upEvent) => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    const row = document.elementFromPoint(upEvent.clientX, upEvent.clientY)?.closest?.("[data-draw-index]") ?? targetRow;
+    const to = Number(row?.dataset.drawIndex);
+    clearTarget();
+    syncFields();
+    moveDrawLayer(from, to);
+    renderApp();
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
 }
 
 function bindSidebarResize() {
@@ -661,9 +738,22 @@ function addEntry(kind) {
     scene.draws.push({
       equationId: scene.functions[0]?.id ?? "",
       colorId: scene.colors[0]?.id ?? "",
-      restrictionId: scene.restrictions[0]?.id ?? ""
+      restrictionId: scene.restrictions[0]?.id ?? "",
+      hidden: false
     });
   }
+}
+
+function toggleDrawHidden(index) {
+  if (!scene.draws[index]) return;
+  scene.draws[index].hidden = !scene.draws[index].hidden;
+}
+
+function moveDrawLayer(from, to) {
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+  if (from < 0 || from >= scene.draws.length || to < 0 || to >= scene.draws.length || from === to) return;
+  const [entry] = scene.draws.splice(from, 1);
+  scene.draws.splice(to, 0, entry);
 }
 
 function deleteEntry(kind, index) {
@@ -756,6 +846,7 @@ function renderSceneCpu(canvas) {
   const pixelHeight = rect.height / Math.max(1, yPoints.length - 1);
 
   for (const draw of scene.draws) {
+    if (draw.hidden) continue;
     const fn = scene.functions.find((entry) => entry.id === draw.equationId);
     const color = scene.colors.find((entry) => entry.id === draw.colorId);
     const restriction = scene.restrictions.find((entry) => entry.id === draw.restrictionId);
@@ -859,6 +950,7 @@ function buildFragmentShader() {
   const env = Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression]));
   const layers = scene.draws
     .map((draw) => {
+      if (draw?.hidden) return null;
       const fn = scene.functions.find((entry) => entry.id === draw?.equationId);
       const color = scene.colors.find((entry) => entry.id === draw?.colorId);
       const restriction = scene.restrictions.find((entry) => entry.id === draw?.restrictionId);
@@ -1068,7 +1160,7 @@ function compileExpression(source) {
   let js = normalizeMathSyntax(normalizeExpressionText(source));
   js = convertPowers(js)
     .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
-    .replaceAll("pi", "Math.PI")
+    .replaceAll(/\bpi\b/g, "Math.PI")
     .replaceAll(/\be\b/g, "Math.E")
     .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log|pow)\b/g, "Math.$1")
     .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
@@ -1102,7 +1194,7 @@ function compileExpression(source) {
       const runtime = env.__runtime ?? { depth: 0, maxDepth: ${recursionLimit()} };
       const ref = (name, rx, ry) => {
         if (!env[name]) return NaN;
-        if (runtime.depth >= runtime.maxDepth) return rx + ry;
+        if (runtime.depth >= runtime.maxDepth) return 0;
         runtime.depth += 1;
         try {
           return env[name](rx, ry, env);
@@ -1176,7 +1268,7 @@ function normalizeGlslNumbers(expression) {
 }
 
 function recursionBaseGlsl(zName) {
-  return zName ? `(${zName}+y)` : "(x+y)";
+  return "0.0";
 }
 
 function inlineCustomVariables(expression, env, stack, zName) {
@@ -1289,28 +1381,36 @@ function validateScene() {
   };
 
   diagnostics.functions = scene.functions.map((entry) => {
-    const idResult = validateEntryId(entry.id, "Function");
+    const idResult = validateEntryId(entry.id, "Function", env);
     if (idResult.status === "invalid") return idResult;
     const result = validateExpression(entry.expression, env, [entry.id]);
+    if (result.status === "valid" && idResult.status === "warning") {
+      return idResult;
+    }
     if (result.status === "valid" && RESERVED_FUNCTION_NAMES.has(entry.id)) {
       return { status: "warning", message: `"${entry.id}" shadows a built-in function name` };
     }
     return result;
   });
   diagnostics.colors = scene.colors.map((entry) => {
-    const idResult = validateEntryId(entry.id, "Color");
+    const idResult = validateEntryId(entry.id, "Color", env);
     if (idResult.status === "invalid") return idResult;
     return combineDiagnostics([
+      idResult,
       validateExpression(entry.red, env),
       validateExpression(entry.green, env),
       validateExpression(entry.blue, env)
     ]);
   });
   diagnostics.restrictions = scene.restrictions.map((entry) => {
-    const idResult = validateEntryId(entry.id, "Boundary");
-    return idResult.status === "invalid" ? idResult : validateExpression(entry.expression, env);
+    const idResult = validateEntryId(entry.id, "Boundary", env);
+    if (idResult.status === "invalid") return idResult;
+    return combineDiagnostics([idResult, validateExpression(entry.expression, env)]);
   });
   diagnostics.draws = scene.draws.map((entry) => {
+    if (entry.hidden) {
+      return { status: "valid", message: "Draw layer hidden" };
+    }
     const missing = [];
     const functionIndex = scene.functions.findIndex((candidate) => candidate.id === entry.equationId);
     const colorIndex = scene.colors.findIndex((candidate) => candidate.id === entry.colorId);
@@ -1338,12 +1438,16 @@ function validateScene() {
   return diagnostics;
 }
 
-function validateEntryId(id, label) {
+function validateEntryId(id, label, env = {}) {
   if (!id.trim()) {
     return { status: "invalid", message: `${label} name cannot be blank` };
   }
   if (!/^[A-Za-z_]\w*$/.test(id)) {
     return { status: "invalid", message: `${label} name must start with a letter or underscore` };
+  }
+  const warning = findSubstringReferenceWarning(id, env);
+  if (warning) {
+    return { status: "warning", message: `${label} name "${id}" contains ${warning}` };
   }
   return { status: "valid", message: `${label} name is valid` };
 }
@@ -1365,10 +1469,41 @@ function validateExpression(source, env, stack = []) {
     expressionToGlsl(source, env, null, stack);
     const runtimeEnv = buildRuntimeEnv(env);
     compileExpression(source)(1, 1, runtimeEnv);
+    const warning = findSubstringReferenceWarning(normalized, env);
+    if (warning) {
+      return { status: "warning", message: `Expression contains ${warning}` };
+    }
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
     return { status: "invalid", message: error.message };
   }
+}
+
+function findSubstringReferenceWarning(source, env = {}) {
+  const candidates = new Set(SUBSTRING_REFERENCE_NAMES);
+  for (const name of Object.keys(env)) {
+    if (name.length > 1 && name !== "e") {
+      candidates.add(name);
+    }
+  }
+
+  const matches = new Set();
+  const identifiers = String(source).match(/\b[A-Za-z_]\w*\b/g) ?? [];
+  for (const identifier of identifiers) {
+    if (BUILTIN_NAMES.has(identifier)) continue;
+    const lowerIdentifier = identifier.toLowerCase();
+    for (const candidate of candidates) {
+      const lowerCandidate = candidate.toLowerCase();
+      if (lowerIdentifier === lowerCandidate) continue;
+      if (lowerIdentifier.includes(lowerCandidate)) {
+        matches.add(candidate);
+      }
+    }
+  }
+
+  if (!matches.size) return "";
+  const names = [...matches].sort((left, right) => left.localeCompare(right));
+  return `reserved substring${names.length === 1 ? "" : "s"} ${names.map((name) => `"${name}"`).join(", ")}`;
 }
 
 function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map()) {
@@ -3213,7 +3348,7 @@ function exportScene() {
     "~~~~~",
     ...scene.restrictions.map((entry) => `R:${entry.id}~${textModeExpression(entry.expression)}~${entry.checkSmaller ? 1 : 0}`),
     "~~~~~",
-    ...scene.draws.map((entry) => `D~${entry.equationId}~${entry.colorId}~${entry.restrictionId}`),
+    ...scene.draws.map((entry) => `D~${entry.equationId}~${entry.colorId}~${entry.restrictionId}~${entry.hidden ? 1 : 0}`),
     "~~~~~",
     `S:x_min~${scene.settings.xMin}`,
     `S:x_max~${scene.settings.xMax}`,
@@ -3311,8 +3446,8 @@ function importScene(raw) {
       const [expression = "1", flag = "0"] = rest.split("~");
       next.restrictions.push({ id, expression: convertDivisionsToFrac(expression), checkSmaller: flag === "1" });
     } else if (line.startsWith("D~")) {
-      const [, equationId, colorId, restrictionId] = line.split("~");
-      next.draws.push({ equationId, colorId, restrictionId });
+      const [, equationId, colorId, restrictionId, hidden = "0"] = line.split("~");
+      next.draws.push({ equationId, colorId, restrictionId, hidden: hidden === "1" });
     } else if (line.startsWith("S:")) {
       const [key, value] = splitFirst(line.slice(2), "~");
       const settingMap = { x_min: "xMin", x_max: "xMax", y_min: "yMin", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode" };
