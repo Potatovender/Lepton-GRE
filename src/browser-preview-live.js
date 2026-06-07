@@ -129,8 +129,8 @@ const LATEX_FUNCTIONS = {
   frac: { internal: "frac", args: 2, display: "frac" }
 };
 const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
-const NODE_BLUE_FLAG_THRESHOLD = 2 ** 16;
-const NODE_RED_FLAG_THRESHOLD = 2 ** 32;
+const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
+const NODE_RED_FLAG_THRESHOLD = 2 ** 16;
 
 let scene = structuredClone(DEFAULT_SCENE);
 let displayMode = "standard";
@@ -1464,7 +1464,7 @@ function validateExpression(source, env, stack = []) {
       throw new Error(`Equation is too large (${formatNodeCount(nodeCount)} nodes); refusing to generate`);
     }
     if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) {
-      return { status: "info", message: `Equation is too large (${formatNodeCount(nodeCount)} nodes); still attempting to generate` };
+      return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes); rendering may be slower` };
     }
     expressionToGlsl(source, env, null, stack);
     const runtimeEnv = buildRuntimeEnv(env);

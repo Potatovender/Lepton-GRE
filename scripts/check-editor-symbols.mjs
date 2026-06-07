@@ -150,20 +150,21 @@ check("malformed expressions are invalid", () => {
   assert(result.status === "invalid", JSON.stringify(result));
 });
 
-check("recursive node estimator blue-flags equations above 2^16 nodes", () => {
-  sandbox.__debugScene.settings.maxRecursion = 20;
+check("recursive node estimator blue-flags equations above 2^12 nodes", () => {
+  sandbox.__debugScene.settings.maxRecursion = 10;
   const env = {
     a: "b+b+1",
     b: "a+a+1"
   };
   const result = sandbox.validateExpression("a+b", env, ["a"]);
   assert(result.status === "info", JSON.stringify(result));
-  assert(result.message.includes("too large"), result.message);
-  assert(result.message.includes("still attempting"), result.message);
+  assert(result.message.includes("large"), result.message);
+  assert(result.message.includes("rendering may be slower"), result.message);
+  assert(!result.message.includes("still attempting"), result.message);
 });
 
-check("recursive node estimator red-flags equations above 2^32 nodes", () => {
-  sandbox.__debugScene.settings.maxRecursion = 100;
+check("recursive node estimator red-flags equations above 2^16 nodes", () => {
+  sandbox.__debugScene.settings.maxRecursion = 20;
   const env = {
     real: "real^2-imaginary^2+x",
     imaginary: "2*real*imaginary+y",
