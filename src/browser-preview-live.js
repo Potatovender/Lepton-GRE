@@ -135,6 +135,11 @@ let activeTab = "functions";
 let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380");
 let viewport = loadViewport();
 let panRenderFrame = 0;
+const listControls = {
+  functions: { query: "", sort: "custom" },
+  colors: { query: "", sort: "custom" },
+  restrictions: { query: "", sort: "custom" }
+};
 const editorHistory = new Map();
 
 const root = document.querySelector("#app");
@@ -192,8 +197,9 @@ function renderPanel() {
 
   if (activeTab === "functions") {
     return [
-      ...scene.functions.map(
-        (entry, index) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", `
+      listControlBar("functions", "Search functions"),
+      ...visibleEntries(scene.functions, "functions").map(
+        ([entry, index]) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", `
           <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Function id" />
           ${mathEditor(`functions.${index}.expression`, entry.expression, "Function expression")}
         `, "functions", index)
@@ -204,8 +210,9 @@ function renderPanel() {
 
   if (activeTab === "colors") {
     return [
-      ...scene.colors.map(
-        (entry, index) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
+      listControlBar("colors", "Search colors"),
+      ...visibleEntries(scene.colors, "colors").map(
+        ([entry, index]) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
           <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Color id" />
           <label class="channel-row"><span class="channel-label">r</span><select class="compact-field" data-field="colors.${index}.red">${options(scene.functions, entry.red)}</select></label>
           <label class="channel-row"><span class="channel-label">g</span><select class="compact-field" data-field="colors.${index}.green">${options(scene.functions, entry.green)}</select></label>
@@ -218,8 +225,9 @@ function renderPanel() {
 
   if (activeTab === "restrictions") {
     return [
-      ...scene.restrictions.map(
-        (entry, index) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
+      listControlBar("restrictions", "Search bounds"),
+      ...visibleEntries(scene.restrictions, "restrictions").map(
+        ([entry, index]) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
           <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Restriction id" />
           <label class="settings-row"><span>Function reference</span><select class="compact-field" data-field="restrictions.${index}.expression">${options(scene.functions, entry.expression)}</select></label>
           <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> <= 0</label>
@@ -260,6 +268,36 @@ function renderPanel() {
       </label>
     </div>
   `;
+}
+
+function listControlBar(kind, placeholder) {
+  const state = listControls[kind];
+  return `
+    <div class="list-controls" data-list-controls="${kind}">
+      <input class="list-search compact-field" data-entry-search="${kind}" value="${escapeHtml(state.query)}" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)} by ID" />
+      <select class="list-sort compact-field" data-entry-sort="${kind}" aria-label="Sort ${escapeHtml(kind)} by ID">
+        <option value="custom" ${state.sort === "custom" ? "selected" : ""}>Custom order</option>
+        <option value="az" ${state.sort === "az" ? "selected" : ""}>ID A-Z</option>
+        <option value="za" ${state.sort === "za" ? "selected" : ""}>ID Z-A</option>
+      </select>
+    </div>
+  `;
+}
+
+function visibleEntries(entries, kind) {
+  const state = listControls[kind] ?? { query: "", sort: "custom" };
+  const query = state.query.trim().toLowerCase();
+  let indexed = entries.map((entry, index) => [entry, index]);
+  if (query) {
+    indexed = indexed.filter(([entry]) => entry.id.toLowerCase().includes(query));
+  }
+  if (state.sort !== "custom") {
+    indexed.sort(([left], [right]) => {
+      const order = left.id.localeCompare(right.id, undefined, { numeric: true, sensitivity: "base" });
+      return state.sort === "az" ? order : -order;
+    });
+  }
+  return indexed;
 }
 
 function mathEditor(field, value, label, small = false) {
@@ -322,6 +360,25 @@ function bindEvents() {
     button.addEventListener("click", () => {
       syncFields();
       displayMode = button.dataset.displayMode;
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-entry-search]").forEach((field) => {
+    field.addEventListener("input", () => {
+      const kind = field.dataset.entrySearch;
+      const value = field.value;
+      listControls[kind].query = value;
+      renderApp();
+      const nextField = root.querySelector(`[data-entry-search="${cssEscape(kind)}"]`);
+      nextField?.focus();
+      nextField?.setSelectionRange(value.length, value.length);
+    });
+  });
+
+  root.querySelectorAll("[data-entry-sort]").forEach((field) => {
+    field.addEventListener("change", () => {
+      listControls[field.dataset.entrySort].sort = field.value;
       renderApp();
     });
   });
@@ -396,6 +453,20 @@ function bindEvents() {
     });
 
     mathField.latex(initialValue);
+  });
+
+  root.querySelectorAll(".mathquill-field").forEach((field) => {
+    field.addEventListener(
+      "wheel",
+      (event) => {
+        if (field.scrollWidth <= field.clientWidth) return;
+        const horizontal = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        if (!horizontal) return;
+        field.scrollLeft += horizontal;
+        event.preventDefault();
+      },
+      { passive: false }
+    );
   });
 
   root.querySelectorAll("input.entry-id[data-field]").forEach((field) => {
@@ -2010,7 +2081,12 @@ function tokenizeLatex(source) {
       }
       let cmdMatch = source.slice(i).match(/^[A-Za-z]+/);
       if (cmdMatch) {
-        tokens.push({ type: "command", value: "\\" + cmdMatch[0] });
+        const command = cmdMatch[0];
+        if (command === "cdot" || command === "times") {
+          tokens.push({ type: "operator", value: "*" });
+        } else {
+          tokens.push({ type: "command", value: "\\" + command });
+        }
         i += cmdMatch[0].length;
         continue;
       }
@@ -2089,10 +2165,17 @@ function tokenizeLeptonText(source) {
 
 function isPrefixToken(token) {
   if (!token) return false;
+  if (isTerminatorToken(token)) return false;
   return token.type === "number" ||
          token.type === "identifier" ||
          token.type === "command" ||
          (token.type === "operator" && (token.value === "(" || token.value === "{" || token.value === "[" || token.value === "|"));
+}
+
+function isTerminatorToken(token) {
+  if (!token) return true;
+  if (token.type === "command" && token.value === "\\right") return true;
+  return token.type === "operator" && [")", "}", "]", ","].includes(token.value);
 }
 
 function getOpPrecedence(op) {
@@ -2295,6 +2378,9 @@ function createParser(tokens, isLatexMode) {
     
     while (true) {
       const nextToken = peek();
+      if (isTerminatorToken(nextToken)) {
+        break;
+      }
       
       if (isPrefixToken(nextToken)) {
         const implicitPrecedence = 20;
@@ -2306,7 +2392,7 @@ function createParser(tokens, isLatexMode) {
         continue;
       }
       
-      const nextPrecedence = getPrecedence(nextToken);
+      const nextPrecedence = nextToken?.type === "operator" ? getOpPrecedence(nextToken.value) : 0;
       if (nextPrecedence <= precedence) {
         break;
       }
@@ -2324,7 +2410,12 @@ function createParser(tokens, isLatexMode) {
     return left;
   }
   
-  return parseInfixExpression(0);
+  const ast = parseInfixExpression(0);
+  if (index < tokens.length) {
+    const token = tokens[index];
+    throw new Error(`Unexpected trailing token: ${token.type} ${token.value}`);
+  }
+  return ast;
 }
 
 function parseLatex(source) {
@@ -2365,7 +2456,7 @@ function astToLatex(node) {
     if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
       right = `\\left(${right}\\right)`;
     }
-    return `${left}${op}${right}`;
+    return op === "*" ? `${left}\\cdot ${right}` : `${left}${op}${right}`;
   }
   if (node.type === "call") {
     const name = node.name;
@@ -3268,9 +3359,9 @@ function isLatexCommandPipe(source, index) {
 
 function latexToExpression(value) {
   if (!value) return "";
-  const trimmed = String(value).trim();
+  const trimmed = normalizeBareAbsoluteBars(String(value).trim());
   try {
-    const ast = (trimmed.startsWith("\\") || /\\(?:operatorname|frac|sqrt|left)\b/.test(trimmed))
+    const ast = trimmed.includes("\\")
       ? parseLatex(trimmed)
       : parseLeptonText(trimmed);
     return astToMathString(ast);

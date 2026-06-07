@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://potatovender.github.io/Lepton-GRE/sitemap.xml

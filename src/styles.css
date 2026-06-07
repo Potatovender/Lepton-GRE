@@ -42,6 +42,8 @@ select {
   grid-template-rows: auto auto minmax(0, 1fr);
   background: #ffffff;
   border-right: 1px solid #d7dce5;
+  overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
 .expression-panel-text {
@@ -52,6 +54,12 @@ select {
 .panel-footer {
   padding: 12px;
   border-bottom: 1px solid #eceff4;
+}
+
+.panel-header {
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 10px;
 }
 
 .panel-footer {
@@ -86,12 +94,31 @@ select {
 
 .entry-list {
   min-height: 0;
-  overflow: auto;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .entry-list-text {
   display: grid;
   overflow: hidden;
+}
+
+.list-controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid #eceff4;
+  background: #ffffff;
+}
+
+.list-search,
+.list-sort {
+  min-width: 0;
 }
 
 .expression-row {
@@ -181,6 +208,18 @@ select {
   margin: 0 !important;
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+.mathquill-field::-webkit-scrollbar {
+  height: 6px;
+}
+
+.mathquill-field::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c8d0dc;
 }
 
 .mathquill-field:not(.mathquill-field-small) {
@@ -209,6 +248,12 @@ select {
   line-height: inherit;
   white-space: nowrap;
   cursor: text;
+}
+
+.mathquill-field .mq-root-block {
+  min-width: 100%;
+  width: max-content;
+  white-space: nowrap;
 }
 
 .mq-root::selection,
@@ -432,17 +477,23 @@ select {
 }
 
 .brand-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 180px 76px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: start;
   gap: 12px;
+  min-height: 34px;
+}
+
+.brand-row .toolbar-button {
+  width: 76px;
 }
 
 .display-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, 96px);
+  justify-content: start;
   gap: 4px;
-  margin-top: 10px;
 }
 
 .display-button {
