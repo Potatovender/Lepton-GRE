@@ -133,6 +133,7 @@ let scene = structuredClone(DEFAULT_SCENE);
 let displayMode = "standard";
 let activeTab = "functions";
 let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380");
+let sidebarCollapsed = localStorage.getItem("lepton-sidebar-collapsed") === "true";
 let viewport = loadViewport();
 let panRenderFrame = 0;
 const listControls = {
@@ -148,7 +149,7 @@ window.__leptonForceGradient = false;
 function renderApp() {
   const diagnostics = validateScene();
   root.innerHTML = `
-    <main class="app-shell" style="--sidebar-width: ${sidebarWidth}px">
+    <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px">
       <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
         <header class="panel-header">
           <div class="brand-row">
@@ -169,8 +170,11 @@ function renderApp() {
       </section>
       <div class="sidebar-resizer" role="separator" aria-label="Resize expression panel" tabindex="0"></div>
       <section class="renderer-pane" aria-label="Grid renderer">
+        <button class="sidebar-toggle" data-action="toggle-sidebar" aria-label="${sidebarCollapsed ? "Show expression panel" : "Hide expression panel"}" aria-pressed="${sidebarCollapsed}">
+          <span aria-hidden="true"></span>
+        </button>
         <canvas class="grid-canvas"></canvas>
-        <div class="render-overlay">${scene.settings.xPoints} x ${scene.settings.yPoints} · ${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
+        <div class="render-overlay">${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
       </section>
     </main>
   `;
@@ -254,10 +258,8 @@ function renderPanel() {
     <div class="settings-grid">
       ${settingsField("xMin", "x minimum")}
       ${settingsField("xMax", "x maximum")}
-      ${settingsField("xPoints", "x points")}
       ${settingsField("yMin", "y minimum")}
       ${settingsField("yMax", "y maximum")}
-      ${settingsField("yPoints", "y points")}
       ${settingsField("maxRecursion", "max recursion")}
       <label class="settings-row">
         <span>Angle mode</span>
@@ -276,7 +278,7 @@ function listControlBar(kind, placeholder) {
     <div class="list-controls" data-list-controls="${kind}">
       <input class="list-search compact-field" data-entry-search="${kind}" value="${escapeHtml(state.query)}" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)} by ID" />
       <select class="list-sort compact-field" data-entry-sort="${kind}" aria-label="Sort ${escapeHtml(kind)} by ID">
-        <option value="custom" ${state.sort === "custom" ? "selected" : ""}>Custom order</option>
+        <option value="custom" ${state.sort === "custom" ? "selected" : ""}>Custom</option>
         <option value="az" ${state.sort === "az" ? "selected" : ""}>ID A-Z</option>
         <option value="za" ${state.sort === "za" ? "selected" : ""}>ID Z-A</option>
       </select>
@@ -385,6 +387,11 @@ function bindEvents() {
 
   root.querySelector('[data-action="render"]')?.addEventListener("click", () => {
     syncFields();
+    renderApp();
+  });
+  root.querySelector('[data-action="toggle-sidebar"]')?.addEventListener("click", () => {
+    sidebarCollapsed = !sidebarCollapsed;
+    localStorage.setItem("lepton-sidebar-collapsed", String(sidebarCollapsed));
     renderApp();
   });
   root.querySelector('[data-action="apply-text"]')?.addEventListener("click", () => {
@@ -1387,7 +1394,7 @@ function updateStatusLights(diagnostics) {
   if (overlay) {
     overlay.textContent = diagnostics.hasErrors
       ? `Some layers skipped: ${diagnostics.summary}`
-      : `${scene.settings.xPoints} x ${scene.settings.yPoints} · ${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}`;
+      : `${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}`;
   }
 }
 
@@ -3157,10 +3164,8 @@ function exportScene() {
     ...scene.draws.map((entry) => `D~${entry.equationId}~${entry.colorId}~${entry.restrictionId}`),
     "~~~~~",
     `S:x_min~${scene.settings.xMin}`,
-    `S:x_points~${scene.settings.xPoints}`,
     `S:x_max~${scene.settings.xMax}`,
     `S:y_min~${scene.settings.yMin}`,
-    `S:y_points~${scene.settings.yPoints}`,
     `S:y_max~${scene.settings.yMax}`,
     `S:max_recursion~${scene.settings.maxRecursion}`,
     `S:angle_mode~${scene.settings.angleMode}`
@@ -3258,7 +3263,7 @@ function importScene(raw) {
       next.draws.push({ equationId, colorId, restrictionId });
     } else if (line.startsWith("S:")) {
       const [key, value] = splitFirst(line.slice(2), "~");
-      const settingMap = { x_min: "xMin", x_points: "xPoints", x_max: "xMax", y_min: "yMin", y_points: "yPoints", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode" };
+      const settingMap = { x_min: "xMin", x_max: "xMax", y_min: "yMin", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode" };
       const mapped = settingMap[key];
       if (mapped) next.settings[mapped] = mapped === "angleMode" ? value : Number(value);
     }
