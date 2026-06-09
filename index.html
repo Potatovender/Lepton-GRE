@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lepton-GRE</title>
+    <title>Lepton</title>
     <meta
       name="description"
       content="Lepton-GRE is a browser-based mathematical grid renderer for dense field evaluation, raw syntax editing, visual graph workflows, and LaTeX-first math creation."
@@ -12,18 +12,18 @@
     <link rel="canonical" href="https://potatovender.github.io/Lepton-GRE/" />
     <link rel="icon" href="./src/assets/lepton-logo.png" type="image/png" />
     <link rel="apple-touch-icon" href="./src/assets/lepton-logo.png" />
-    <meta property="og:title" content="Lepton-GRE" />
+    <meta property="og:title" content="Lepton" />
     <meta property="og:description" content="Create dense mathematical field art with a precise GLSL renderer and LaTeX-aware workflow." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://potatovender.github.io/Lepton-GRE/" />
     <meta property="og:image" content="https://potatovender.github.io/Lepton-GRE/src/assets/lepton-logo.png" />
-    <link rel="stylesheet" href="./src/styles.css?v=20260609-samples-logo" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260609-lepton-samples" />
   </head>
   <body class="landing-body">
     <header class="landing-nav" aria-label="Site navigation">
       <a class="landing-brand" href="./">
         <img src="./src/assets/lepton-logo.png" alt="" />
-        <span>Lepton-GRE</span>
+        <span>Lepton</span>
       </a>
       <a class="nav-launch" href="./app.html">Launch Graph</a>
     </header>
@@ -44,9 +44,9 @@
             <div class="field-grid" aria-hidden="true"></div>
           </div>
           <div class="formula-strip" aria-hidden="true">
-            <span>z = f(x, y)</span>
-            <span>rgb = r · g · b</span>
-            <span>∂field / ∂pixel</span>
+            <span>F:eq~sin(x)+cos(y)</span>
+            <span>C:rgb~r~g~b</span>
+            <span>D~eq~rgb~rest~0</span>
           </div>
         </div>
       </section>
@@ -55,16 +55,16 @@
         <h2 id="why-title">Why Lepton exists</h2>
         <div class="feature-grid">
           <article>
-            <h3>Function Lines</h3>
-            <p><code>F:eq~sin(x)+cos(y)</code></p>
+            <h3>Per-Pixel Accuracy</h3>
+            <p>Every single coordinate is treated as a dense field evaluation. No skipped lines, no sampling artifacts, just direct mathematical output.</p>
           </article>
           <article>
-            <h3>Color Lines</h3>
-            <p><code>C:rgb~r~g~b</code></p>
+            <h3>Text &amp; Block Architectures</h3>
+            <p>Use raw syntax when you want speed, or move toward a visual node-graph layout when structure matters more than compact code.</p>
           </article>
           <article>
-            <h3>Draw Lines</h3>
-            <p><code>D~eq~rgb~rest~0</code></p>
+            <h3>Native LaTeX &amp; Clipboard Pipeline</h3>
+            <p>Math copy-paste is part of the workflow, with LaTeX-aware editing and compilation paths built directly for equation-heavy work.</p>
           </article>
         </div>
       </section>
@@ -95,6 +95,6 @@
       </section>
     </main>
 
-    <script type="module" src="./src/landing.js?v=20260609-samples-logo"></script>
+    <script type="module" src="./src/landing.js?v=20260609-lepton-samples"></script>
   </body>
 </html>

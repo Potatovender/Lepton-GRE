@@ -247,21 +247,6 @@ body {
   letter-spacing: 0;
 }
 
-.feature-grid code {
-  display: block;
-  min-height: 92px;
-  padding: 16px;
-  border: 1px solid #d8dee9;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #172033;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 15px;
-  line-height: 1.5;
-  overflow-x: auto;
-  white-space: nowrap;
-}
-
 .feature-grid p,
 .section-heading p {
   margin: 0;
@@ -307,6 +292,12 @@ body {
   padding: 0 16px;
   color: #202938;
   font-weight: 720;
+  -webkit-text-stroke: 0.35px rgba(255, 255, 255, 0.85);
+  text-shadow:
+    0 1px 0 #ffffff,
+    1px 0 0 #ffffff,
+    0 -1px 0 rgba(255, 255, 255, 0.82),
+    -1px 0 0 rgba(255, 255, 255, 0.82);
 }
 
 @media (max-width: 860px) {
