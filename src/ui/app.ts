@@ -3,7 +3,7 @@ export function createApp(root: HTMLDivElement): void {
     <main class="app-shell">
       <section class="expression-panel" aria-label="Expression editor">
         <header class="panel-header">
-          <strong>Lepton-GRE</strong>
+          <strong>Lepton GRE</strong>
         </header>
         <nav class="tab-row" aria-label="Editor sections">
           <button class="tab-button" aria-selected="true">Functions</button>

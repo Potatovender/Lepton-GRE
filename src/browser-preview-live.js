@@ -156,7 +156,7 @@ function renderApp() {
       <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
         <header class="panel-header">
           <div class="brand-row">
-            <strong>Lepton-GRE</strong>
+            <strong>Lepton GRE</strong>
             <button class="toolbar-button primary" data-action="render">Refresh</button>
           </div>
           <div class="display-row" aria-label="Display mode">
@@ -966,11 +966,11 @@ function buildFragmentShader() {
       }
       try {
         return {
-          expr: expressionToGlsl(fn.expression, env),
-          red: expressionToGlsl(color.red, env, "z"),
-          green: expressionToGlsl(color.green, env, "z"),
-          blue: expressionToGlsl(color.blue, env, "z"),
-          bound: expressionToGlsl(restriction.expression, env),
+          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode),
+          red: expressionToGlsl(color.red, env, "z", [], scene.settings.angleMode),
+          green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode),
+          blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode),
+          bound: expressionToGlsl(restriction.expression, env, null, [], scene.settings.angleMode),
           boundCheck: restriction.checkSmaller ? "boundValue <= 0.0" : "boundValue >= 0.0"
         };
       } catch {
@@ -1215,13 +1215,13 @@ function buildRuntimeEnv(expressions) {
   return attachRuntimeGuard(runtimeEnv);
 }
 
-function expressionToGlsl(source, env = {}, zName = null, stack = []) {
+function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode = "radians") {
   if (stack.length > recursionLimit()) {
     return recursionBaseGlsl(zName);
   }
   let expression = normalizeExpressionText(source);
-  expression = inlineCustomVariables(expression, env, stack, zName);
-  expression = inlineBareVariables(expression, env, stack, zName);
+  expression = inlineCustomVariables(expression, env, stack, zName, angleMode);
+  expression = inlineBareVariables(expression, env, stack, zName, angleMode);
   expression = normalizeMathSyntax(expression);
   expression = expression
     .replaceAll(/\barcsin\b/g, "asin")
@@ -1244,6 +1244,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = []) {
     expression = expression.replaceAll(/\bx\b/g, zName);
   }
 
+  expression = convertTrigForAngleMode(expression, angleMode);
   expression = convertPowers(expression);
   expression = normalizeGlslNumbers(expression);
   if (expression.length > 200000) {
@@ -1267,11 +1268,56 @@ function normalizeGlslNumbers(expression) {
   return expression.replaceAll(/\b\d+(?:\.\d+)?\b/g, (match) => (match.includes(".") ? match : `${match}.0`));
 }
 
+function convertTrigForAngleMode(expression, angleMode) {
+  if (angleMode !== "degrees") return expression;
+  return wrapFunctionArguments(expression, new Set(["sin", "cos", "tan", "sec", "csc", "cot"]), (name, argument) => `${name}((${argument})*0.017453292519943295)`);
+}
+
+function wrapFunctionArguments(expression, names, wrap) {
+  let output = "";
+  let index = 0;
+  while (index < expression.length) {
+    const match = expression.slice(index).match(/^[A-Za-z_]\w*/);
+    if (!match) {
+      output += expression[index];
+      index += 1;
+      continue;
+    }
+
+    const name = match[0];
+    const nameStart = index;
+    index += name.length;
+    if (!names.has(name) || expression[index] !== "(") {
+      output += expression.slice(nameStart, index);
+      continue;
+    }
+
+    const open = index;
+    let depth = 0;
+    let close = -1;
+    for (let i = open; i < expression.length; i += 1) {
+      if (expression[i] === "(") depth += 1;
+      if (expression[i] === ")") depth -= 1;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+    if (close === -1) {
+      output += expression.slice(nameStart);
+      break;
+    }
+    output += wrap(name, expression.slice(open + 1, close));
+    index = close + 1;
+  }
+  return output;
+}
+
 function recursionBaseGlsl(zName) {
   return "0.0";
 }
 
-function inlineCustomVariables(expression, env, stack, zName) {
+function inlineCustomVariables(expression, env, stack, zName, angleMode = "radians") {
   return expression.replaceAll(/~([A-Za-z]\w*)~/g, (_, name) => {
     if (!env[name]) {
       throw new Error(`Unknown reference ~${name}~`);
@@ -1279,11 +1325,11 @@ function inlineCustomVariables(expression, env, stack, zName) {
     if (stack.length >= recursionLimit()) {
       return `(${recursionBaseGlsl(zName)})`;
     }
-    return `(${expressionToGlsl(env[name], env, zName, [...stack, name])})`;
+    return `(${expressionToGlsl(env[name], env, zName, [...stack, name], angleMode)})`;
   });
 }
 
-function inlineBareVariables(expression, env, stack, zName) {
+function inlineBareVariables(expression, env, stack, zName, angleMode = "radians") {
   return rewriteBareIdentifiers(
     expression,
     (name) => {
@@ -1293,7 +1339,7 @@ function inlineBareVariables(expression, env, stack, zName) {
       if (stack.length >= recursionLimit()) {
         return `(${recursionBaseGlsl(zName)})`;
       }
-      return `(${expressionToGlsl(env[name], env, zName, [...stack, name])})`;
+      return `(${expressionToGlsl(env[name], env, zName, [...stack, name], angleMode)})`;
     },
     new Set()
   );

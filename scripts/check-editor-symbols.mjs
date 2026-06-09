@@ -72,6 +72,13 @@ check("multiplication round-trips as cdot in LaTeX and star in compiler text", (
   assert(sandbox.expressionToGlsl("\\sin(x)\\cdot\\cos(y)", {}) === "sin(x)*cos(y)", "\\cdot should convert to GLSL *");
 });
 
+check("GLSL trig respects degree angle mode", () => {
+  const radians = sandbox.expressionToGlsl("sin(180)", {}, null, [], "radians");
+  const degrees = sandbox.expressionToGlsl("sin(180)", {}, null, [], "degrees");
+  assert(radians === "sin(180.0)", radians);
+  assert(degrees === "sin((180.0)*0.017453292519943295)", degrees);
+});
+
 check("nested absolute bars serialize as nested abs calls", () => {
   const expression = sandbox.normalizeExpressionText("|x+ |y| |").replace(/\s+/g, "");
   assert(expression === "abs(x+abs(y))", expression);

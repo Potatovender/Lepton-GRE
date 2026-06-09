@@ -1,8 +1,8 @@
 const sampleScenes = {
   fire: `F:eq~arctan(2sin(-2x-y/8+cos(3y-x-sin(cos(sin(sin(x*y)+x))+x-y+arccot(x)*arctan(y))))+frac{(x^{2}+frac{y^{2}}{14})}{3}-(frac{100}{x^{2}+y^{2}})+e^{-4-y})
-F:r~135((x-(cos(3.7(x+0.8))/3))/3.15+0.9)
-F:g~38(sin(1.5(x+pi/2))/3.15+0.32)
-F:b~12(e^(-(3(x+0.99))^2)/3.5-x/12+0.03)
+F:r~255((-x-(cos(3.7(-x+0.8))/3))/2.8+1.28)
+F:g~255(sin(1.5(-x+pi/2))/2.8+0.5)
+F:b~255(e^(-(3(-x+0.99))^2)/3+x/9+0.1)
 F:rest~1
 ~~~~~
 C:rgb~r~g~b
@@ -53,13 +53,15 @@ S:y_min~-8
 S:y_max~8
 S:max_recursion~40
 S:angle_mode~radians`,
-  stars: `F:eq~sin(2.3*x+4.1*sin(y))+cos(3.7*y+1.9*sin(x))+sin(1.7*x*y)
-F:star~e^(0-((abs(eq)-2.45)^2)/0.018)
-F:nebula~e^(0-(x^2+y^2)/85)
-F:arm~0.5+0.5*sin(2.4*sqrt(x^2+y^2)+0.32*x-0.2*y)
-F:r~8+230*star+38*nebula*arm+10*sin(y/3)
-F:g~10+220*star+32*nebula*arm
-F:b~30+255*star+120*nebula+20*sin(x/4)
+  stars: `F:rad~sqrt(x^2+y^2)
+F:theta~arctan(y/(x+0.02))
+F:arm~(0.5+0.5*sin(3*theta+2.4*rad))*e^(0-rad^2/85)
+F:core~e^(0-rad^2/9)
+F:spark~e^(0-(abs(sin(11.7*x+2.3*sin(y)))+abs(cos(10.9*y+1.7*sin(x))))/0.055)
+F:eq~arm+core+0.35*spark
+F:r~8+105*arm+240*core+180*spark
+F:g~10+70*arm+150*core+170*spark
+F:b~30+180*arm+230*core+220*spark
 F:rest~1
 ~~~~~
 C:rgb~r~g~b
