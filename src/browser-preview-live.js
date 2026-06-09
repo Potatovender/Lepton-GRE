@@ -3730,6 +3730,10 @@ window.addEventListener("resize", () => {
   renderScene();
 });
 
+if (typeof URLSearchParams !== "undefined" && window.location && new URLSearchParams(window.location.search).get("capture") === "1") {
+  document.body.classList.add("capture-mode");
+}
+
 loadSceneFromUrl();
 renderApp();
 

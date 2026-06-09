@@ -1,8 +1,8 @@
 const sampleScenes = {
   fire: `F:eq~arctan(2sin(-2x-y/8+cos(3y-x-sin(cos(sin(sin(x*y)+x))+x-y+arccot(x)*arctan(y))))+frac{(x^{2}+frac{y^{2}}{14})}{3}-(frac{100}{x^{2}+y^{2}})+e^{-4-y})
-F:r~255((x-(cos(3.7(x+0.8))/3))/2.8+1.28)
-F:g~255(sin(1.5(x+pi/2))/2.8+0.5)
-F:b~255(e^(-(3(x+0.99))^2)/3-x/9+0.1)
+F:r~150((x-(cos(3.7(x+0.8))/3))/3.4+0.9)
+F:g~70(sin(1.35(x+pi/2))/3.5+0.28)
+F:b~18(e^(-(3(x+0.99))^2)/4-x/14+0.03)
 F:rest~1
 ~~~~~
 C:rgb~r~g~b
@@ -17,30 +17,28 @@ S:y_min~-15
 S:y_max~15
 S:max_recursion~100
 S:angle_mode~radians`,
-  mandelbrot: `F:real~old^2-imaginary^2+x
-F:imaginary~2*old*imaginary+y
-F:one~255
-F:shade~80+35*(real+imaginary)
-F:rest~real^2+imaginary^2-4
+  mandelbrot: `F:real~real^2-imaginary^2+x
+F:imaginary~2*real*imaginary+y
+F:one~1
 F:combined~real^2+imaginary^2
-F:old~real
+F:rest~combined-4
 ~~~~~
-C:rgb~shade~combined~one
+C:rgb~one~one~one
 ~~~~~
 R:rest~rest~1
 ~~~~~
 D~combined~rgb~rest~0
 ~~~~~
-S:x_min~-2.4
-S:x_max~1.2
-S:y_min~-1.5
-S:y_max~1.5
-S:max_recursion~8
+S:x_min~-2
+S:x_max~1
+S:y_min~-2
+S:y_max~2
+S:max_recursion~12
 S:angle_mode~radians`,
-  ripple: `F:eq~sin(sqrt(x^2+y^2)*4)+cos(x*2-y*1.5)
-F:r~120+80*sin(eq)
-F:g~150+90*cos(x/2)
-F:b~210+40*sin(y/2)
+  water: `F:eq~sin(sqrt(x^2+y^2)*4.8+0.6*sin(x))+0.55*cos(x*1.6-y*1.35)
+F:r~30+35*sin(eq+x/6)
+F:g~105+65*cos(eq/2+y/7)
+F:b~185+55*sin(eq-y/6)
 F:rest~1
 ~~~~~
 C:rgb~r~g~b
@@ -55,10 +53,10 @@ S:y_min~-8
 S:y_max~8
 S:max_recursion~40
 S:angle_mode~radians`,
-  lattice: `F:eq~sin(2x)+cos(2y)
-F:r~150+90*sin(3x)
-F:g~180+60*cos(3y)
-F:b~255-70*abs(sin(x*y/5))
+  stars: `F:eq~abs(sin(4x)cos(4y))+0.22sin(x*y)-0.86
+F:r~12+26sin(x/2)+220exp(-(eq^2)/0.018)
+F:g~18+24cos(y/3)+220exp(-(eq^2)/0.014)
+F:b~45+34sin((x+y)/4)+210exp(-(eq^2)/0.012)
 F:rest~1
 ~~~~~
 C:rgb~r~g~b
@@ -67,10 +65,10 @@ R:rest~rest~0
 ~~~~~
 D~eq~rgb~rest~0
 ~~~~~
-S:x_min~-10
-S:x_max~10
-S:y_min~-7
-S:y_max~7
+S:x_min~-12
+S:x_max~12
+S:y_min~-8
+S:y_max~8
 S:max_recursion~40
 S:angle_mode~radians`
 };

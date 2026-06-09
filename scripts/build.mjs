@@ -7,7 +7,12 @@ const requiredFiles = [
   "src/landing.js",
   "src/browser-preview-live.js",
   "src/styles.css",
-  "src/assets/lepton-logo.svg",
+  "src/assets/lepton-logo.png",
+  "src/assets/hero-field.png",
+  "src/assets/sample-fire.png",
+  "src/assets/sample-mandelbrot.png",
+  "src/assets/sample-ripple.png",
+  "src/assets/sample-contour.png",
   "sample code/fire"
 ];
 
@@ -19,14 +24,14 @@ for (const file of requiredFiles) {
 }
 
 const index = await readFile("index.html", "utf8");
-for (const asset of ["src/landing.js", "src/styles.css", "src/assets/lepton-logo.svg"]) {
+for (const asset of ["src/landing.js", "src/styles.css", "src/assets/lepton-logo.png"]) {
   if (!index.includes(asset)) {
     throw new Error(`index.html does not reference ${asset}`);
   }
 }
 
 const app = await readFile("app.html", "utf8");
-for (const asset of ["src/browser-preview-live.js", "src/styles.css", "src/assets/lepton-logo.svg"]) {
+for (const asset of ["src/browser-preview-live.js", "src/styles.css", "src/assets/lepton-logo.png"]) {
   if (!app.includes(asset)) {
     throw new Error(`app.html does not reference ${asset}`);
   }

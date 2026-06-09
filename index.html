@@ -10,18 +10,19 @@
     />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://potatovender.github.io/Lepton-GRE/" />
-    <link rel="icon" href="./src/assets/lepton-logo.svg" type="image/svg+xml" />
+    <link rel="icon" href="./src/assets/lepton-logo.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./src/assets/lepton-logo.png" />
     <meta property="og:title" content="Lepton-GRE" />
     <meta property="og:description" content="Create dense mathematical field art with a precise GLSL renderer and LaTeX-aware workflow." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://potatovender.github.io/Lepton-GRE/" />
-    <meta property="og:image" content="https://potatovender.github.io/Lepton-GRE/src/assets/lepton-logo.svg" />
-    <link rel="stylesheet" href="./src/styles.css?v=20260608-landing" />
+    <meta property="og:image" content="https://potatovender.github.io/Lepton-GRE/src/assets/lepton-logo.png" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260609-samples-logo" />
   </head>
   <body class="landing-body">
     <header class="landing-nav" aria-label="Site navigation">
       <a class="landing-brand" href="./">
-        <img src="./src/assets/lepton-logo.svg" alt="" />
+        <img src="./src/assets/lepton-logo.png" alt="" />
         <span>Lepton-GRE</span>
       </a>
       <a class="nav-launch" href="./app.html">Launch Graph</a>
@@ -39,7 +40,7 @@
         </div>
         <div class="hero-visual" aria-label="Lepton renderer preview">
           <div class="field-preview">
-            <img src="./src/assets/sample-mandelbrot.svg" alt="A high-detail mathematical render preview" />
+            <img src="./src/assets/hero-field.png" alt="A high-detail mathematical render preview" />
             <div class="field-grid" aria-hidden="true"></div>
           </div>
           <div class="formula-strip" aria-hidden="true">
@@ -54,46 +55,46 @@
         <h2 id="why-title">Why Lepton exists</h2>
         <div class="feature-grid">
           <article>
-            <h3>Per-Pixel Accuracy</h3>
-            <p>Every single coordinate is treated as a dense field evaluation. No skipped lines, no sampling artifacts, just direct mathematical output.</p>
+            <h3>Function Lines</h3>
+            <p><code>F:eq~sin(x)+cos(y)</code></p>
           </article>
           <article>
-            <h3>Text &amp; Block Architectures</h3>
-            <p>Use raw syntax when you want speed, or move toward a visual node-graph layout when structure matters more than compact code.</p>
+            <h3>Color Lines</h3>
+            <p><code>C:rgb~r~g~b</code></p>
           </article>
           <article>
-            <h3>Native LaTeX &amp; Clipboard Pipeline</h3>
-            <p>Math copy-paste is part of the workflow, with LaTeX-aware editing and compilation paths built directly for equation-heavy work.</p>
+            <h3>Draw Lines</h3>
+            <p><code>D~eq~rgb~rest~0</code></p>
           </article>
         </div>
       </section>
 
       <section class="sample-section" aria-labelledby="samples-title">
         <div class="section-heading">
-          <h2 id="samples-title">Launch a field</h2>
-          <p>Pick a compiled scene. Each card opens Lepton with the exact text architecture already loaded.</p>
+          <h2 id="samples-title">Launch a sample</h2>
+          <p>Pick a sample scene. Each card opens Lepton with the exact text architecture already loaded.</p>
         </div>
         <div class="sample-grid">
           <a class="sample-card" data-sample="fire" href="./app.html">
-            <img src="./src/assets/sample-fire.svg" alt="Fire-like recursive color field" />
-            <span>Fire Field</span>
+            <img src="./src/assets/sample-fire.png" alt="Fire-like recursive color field" />
+            <span>Fire Sample</span>
           </a>
           <a class="sample-card" data-sample="mandelbrot" href="./app.html">
-            <img src="./src/assets/sample-mandelbrot.svg" alt="Mandelbrot-style recursive field" />
-            <span>Mandelbrot Study</span>
+            <img src="./src/assets/sample-mandelbrot.png" alt="Mandelbrot-style recursive field" />
+            <span>Mandelbrot Set</span>
           </a>
-          <a class="sample-card" data-sample="ripple" href="./app.html">
-            <img src="./src/assets/sample-ripple.svg" alt="Blue sine ripple field" />
-            <span>Phase Ripple</span>
+          <a class="sample-card" data-sample="water" href="./app.html">
+            <img src="./src/assets/sample-ripple.png" alt="Blue sine ripple field" />
+            <span>Water Effect Sample</span>
           </a>
-          <a class="sample-card" data-sample="lattice" href="./app.html">
-            <img src="./src/assets/sample-lattice.svg" alt="Geometric lattice render" />
-            <span>Chromatic Lattice</span>
+          <a class="sample-card" data-sample="stars" href="./app.html">
+            <img src="./src/assets/sample-contour.png" alt="Layered contour render" />
+            <span>Star Field Sample</span>
           </a>
         </div>
       </section>
     </main>
 
-    <script type="module" src="./src/landing.js?v=20260608-landing"></script>
+    <script type="module" src="./src/landing.js?v=20260609-samples-logo"></script>
   </body>
 </html>

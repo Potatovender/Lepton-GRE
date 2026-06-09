@@ -247,6 +247,21 @@ body {
   letter-spacing: 0;
 }
 
+.feature-grid code {
+  display: block;
+  min-height: 92px;
+  padding: 16px;
+  border: 1px solid #d8dee9;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #172033;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
 .feature-grid p,
 .section-heading p {
   margin: 0;
@@ -1107,4 +1122,9 @@ select {
   background: rgba(255, 255, 255, 0.94);
   color: #4d5768;
   font-size: 12px;
+}
+
+.capture-mode .sidebar-toggle,
+.capture-mode .render-overlay {
+  display: none;
 }
