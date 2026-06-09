@@ -24,7 +24,7 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(
   source.replace(
-    /renderApp\(\);\s*$/,
+    /loadSceneFromUrl\(\);\s*renderApp\(\);/,
     "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; };"
   ),
   sandbox

@@ -3,8 +3,11 @@ import { spawn } from "node:child_process";
 
 const requiredFiles = [
   "index.html",
+  "app.html",
+  "src/landing.js",
   "src/browser-preview-live.js",
   "src/styles.css",
+  "src/assets/lepton-logo.svg",
   "sample code/fire"
 ];
 
@@ -16,13 +19,21 @@ for (const file of requiredFiles) {
 }
 
 const index = await readFile("index.html", "utf8");
-for (const asset of ["src/browser-preview-live.js", "src/styles.css"]) {
+for (const asset of ["src/landing.js", "src/styles.css", "src/assets/lepton-logo.svg"]) {
   if (!index.includes(asset)) {
     throw new Error(`index.html does not reference ${asset}`);
   }
 }
 
+const app = await readFile("app.html", "utf8");
+for (const asset of ["src/browser-preview-live.js", "src/styles.css", "src/assets/lepton-logo.svg"]) {
+  if (!app.includes(asset)) {
+    throw new Error(`app.html does not reference ${asset}`);
+  }
+}
+
 await run(process.execPath, ["--check", "src/browser-preview-live.js"]);
+await run(process.execPath, ["--check", "src/landing.js"]);
 await run(process.execPath, ["scripts/check-editor-symbols.mjs"]);
 
 console.log("Build verification passed.");

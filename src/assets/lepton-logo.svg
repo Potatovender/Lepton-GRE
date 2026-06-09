@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 960" role="img" aria-labelledby="title desc">
+  <title id="title">Lepton logo</title>
+  <desc id="desc">A geometric blue lepton mark over a pale rounded square.</desc>
+  <defs>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1800ff"/>
+      <stop offset="0.5" stop-color="#9ed9f8"/>
+      <stop offset="1" stop-color="#1200ee"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="55%">
+      <stop offset="0" stop-color="#ffe9ff"/>
+      <stop offset="0.35" stop-color="#a8dbf8"/>
+      <stop offset="1" stop-color="#83cdf6"/>
+    </radialGradient>
+  </defs>
+  <path fill="#f4f8fb" d="M210 19h540c129 0 191 62 191 191v540c0 129-62 191-191 191H210C81 941 19 879 19 750V210C19 81 81 19 210 19Z"/>
+  <path fill="none" stroke="#050505" stroke-width="126" stroke-linecap="butt" stroke-linejoin="miter" d="M262-34 444 482 262 994"/>
+  <path fill="none" stroke="#050505" stroke-width="126" stroke-linecap="butt" stroke-linejoin="miter" d="M698-34 516 482 698 994"/>
+  <path fill="none" stroke="url(#beam)" stroke-width="86" stroke-linecap="butt" stroke-linejoin="miter" d="M268-34 450 482 268 994"/>
+  <path fill="none" stroke="url(#beam)" stroke-width="86" stroke-linecap="butt" stroke-linejoin="miter" d="M692-34 510 482 692 994"/>
+  <circle cx="480" cy="482" r="134" fill="#050505"/>
+  <circle cx="480" cy="482" r="94" fill="url(#core)"/>
+</svg>

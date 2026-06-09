@@ -6,47 +6,94 @@
     <title>Lepton-GRE</title>
     <meta
       name="description"
-      content="Lepton-GRE is a browser-based mathematical grid renderer and function visualizer with MathQuill editing, Lepton Text Code, GLSL rendering, colors, bounds, and recursive references."
+      content="Lepton-GRE is a browser-based mathematical grid renderer for dense field evaluation, raw syntax editing, visual graph workflows, and LaTeX-first math creation."
     />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://potatovender.github.io/Lepton-GRE/" />
+    <link rel="icon" href="./src/assets/lepton-logo.svg" type="image/svg+xml" />
     <meta property="og:title" content="Lepton-GRE" />
-    <meta property="og:description" content="Create and render mathematical grid art with a Desmos-style editor and Lepton Text Code." />
+    <meta property="og:description" content="Create dense mathematical field art with a precise GLSL renderer and LaTeX-aware workflow." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://potatovender.github.io/Lepton-GRE/" />
-    <link rel="stylesheet" href="./src/libs/mathquill/style.css" />
-    <link rel="stylesheet" href="./src/styles.css?v=20260607-recursion-thresholds" />
+    <meta property="og:image" content="https://potatovender.github.io/Lepton-GRE/src/assets/lepton-logo.svg" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260608-landing" />
   </head>
-  <body>
-    <div id="app">
-      <main class="app-shell">
-        <section class="expression-panel" aria-label="Expression editor">
-          <header class="panel-header">
-            <div class="brand-row">
-              <strong>Lepton-GRE</strong>
-              <span class="loading-note">Loading editor...</span>
-            </div>
-          </header>
-          <nav class="tab-row" aria-label="Editor sections">
-            <button class="tab-button" aria-selected="true">Functions</button>
-            <button class="tab-button" aria-selected="false">Colors</button>
-            <button class="tab-button" aria-selected="false">Bounds</button>
-            <button class="tab-button" aria-selected="false">Draw</button>
-          </nav>
-          <div class="entry-list">
-            <div class="expression-row">
-              <span class="entry-status valid"></span>
-              <textarea class="math-box" aria-label="Expression">eq = sin(x) + cos(y)</textarea>
-            </div>
+  <body class="landing-body">
+    <header class="landing-nav" aria-label="Site navigation">
+      <a class="landing-brand" href="./">
+        <img src="./src/assets/lepton-logo.svg" alt="" />
+        <span>Lepton-GRE</span>
+      </a>
+      <a class="nav-launch" href="./app.html">Launch Graph</a>
+    </header>
+
+    <main>
+      <section class="landing-hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="hero-kicker">Dense math fields, rendered cleanly.</p>
+          <h1 id="hero-title">Graph every coordinate.</h1>
+          <p class="hero-text">
+            Lepton turns equations, recursive fields, color functions, and bounds into full-screen mathematical renders with a syntax path built for serious experimentation.
+          </p>
+          <a class="hero-cta" href="./app.html">Launch Graph</a>
+        </div>
+        <div class="hero-visual" aria-label="Lepton renderer preview">
+          <div class="field-preview">
+            <img src="./src/assets/sample-mandelbrot.svg" alt="A high-detail mathematical render preview" />
+            <div class="field-grid" aria-hidden="true"></div>
           </div>
-        </section>
-        <section class="renderer-pane" aria-label="Grid renderer">
-          <canvas class="grid-canvas"></canvas>
-          <div class="render-overlay">Open through a local server for the interactive preview.</div>
-        </section>
-      </main>
-    </div>
-    <script src="./src/libs/mathquill/index.global.js"></script>
-    <script type="module" src="./src/browser-preview-live.js?v=20260607-recursion-thresholds"></script>
+          <div class="formula-strip" aria-hidden="true">
+            <span>z = f(x, y)</span>
+            <span>rgb = r · g · b</span>
+            <span>∂field / ∂pixel</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-columns" aria-labelledby="why-title">
+        <h2 id="why-title">Why Lepton exists</h2>
+        <div class="feature-grid">
+          <article>
+            <h3>Per-Pixel Accuracy</h3>
+            <p>Every single coordinate is treated as a dense field evaluation. No skipped lines, no sampling artifacts, just direct mathematical output.</p>
+          </article>
+          <article>
+            <h3>Text &amp; Block Architectures</h3>
+            <p>Use raw syntax when you want speed, or move toward a visual node-graph layout when structure matters more than compact code.</p>
+          </article>
+          <article>
+            <h3>Native LaTeX &amp; Clipboard Pipeline</h3>
+            <p>Math copy-paste is part of the workflow, with LaTeX-aware editing and compilation paths built directly for equation-heavy work.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="sample-section" aria-labelledby="samples-title">
+        <div class="section-heading">
+          <h2 id="samples-title">Launch a field</h2>
+          <p>Pick a compiled scene. Each card opens Lepton with the exact text architecture already loaded.</p>
+        </div>
+        <div class="sample-grid">
+          <a class="sample-card" data-sample="fire" href="./app.html">
+            <img src="./src/assets/sample-fire.svg" alt="Fire-like recursive color field" />
+            <span>Fire Field</span>
+          </a>
+          <a class="sample-card" data-sample="mandelbrot" href="./app.html">
+            <img src="./src/assets/sample-mandelbrot.svg" alt="Mandelbrot-style recursive field" />
+            <span>Mandelbrot Study</span>
+          </a>
+          <a class="sample-card" data-sample="ripple" href="./app.html">
+            <img src="./src/assets/sample-ripple.svg" alt="Blue sine ripple field" />
+            <span>Phase Ripple</span>
+          </a>
+          <a class="sample-card" data-sample="lattice" href="./app.html">
+            <img src="./src/assets/sample-lattice.svg" alt="Geometric lattice render" />
+            <span>Chromatic Lattice</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./src/landing.js?v=20260608-landing"></script>
   </body>
 </html>

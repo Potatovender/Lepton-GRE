@@ -3729,4 +3729,19 @@ window.addEventListener("resize", () => {
   requestAnimationFrame(() => reflowMathLayout(root));
   renderScene();
 });
+
+loadSceneFromUrl();
 renderApp();
+
+function loadSceneFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const encodedScene = params.get("scene");
+    if (!encodedScene) return;
+    scene = importScene(encodedScene);
+    viewport = sceneViewport();
+    saveViewport();
+  } catch (error) {
+    window.__leptonRuntimeError = `Scene preload failed: ${error.message}`;
+  }
+}
