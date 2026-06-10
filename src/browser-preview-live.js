@@ -259,11 +259,20 @@ function handleGlobalHistoryKeydown(event) {
   const key = event.key.toLowerCase();
   if (!(event.metaKey || event.ctrlKey)) return;
   if (key !== "z" && key !== "y") return;
+  if (closestMathFieldTarget(event.target)) {
+    if (handleFieldHistoryKeydown(event)) event.preventDefault();
+    return;
+  }
   if (isEditableTarget(event.target)) return;
   const direction = key === "y" || event.shiftKey ? "redo" : "undo";
   if (restoreSceneHistory(direction)) {
     event.preventDefault();
   }
+}
+
+function closestMathFieldTarget(target) {
+  const element = target?.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+  return element?.closest?.(".mathquill-field, .mq-editable-field") ?? null;
 }
 
 function renderPanel() {
@@ -449,12 +458,13 @@ function options(entries, selected) {
 }
 
 function searchableReference(field, entries, selected, label) {
-  const listId = `list-${field.replaceAll(/[^A-Za-z0-9_-]/g, "-")}`;
   return `
-    <input class="compact-field reference-field" data-field="${escapeHtml(field)}" list="${listId}" value="${escapeHtml(selected ?? "")}" aria-label="${escapeHtml(label)}" />
-    <datalist id="${listId}">
-      ${entries.map((entry) => `<option value="${escapeHtml(entry.id)}"></option>`).join("")}
-    </datalist>
+    <div class="reference-picker">
+      <input class="compact-field reference-filter" data-reference-filter="${escapeHtml(field)}" value="" placeholder="Search ${escapeHtml(label.toLowerCase())}" aria-label="Search ${escapeHtml(label)}" />
+      <select class="compact-field reference-field" data-field="${escapeHtml(field)}" aria-label="${escapeHtml(label)}">
+        ${options(entries, selected)}
+      </select>
+    </div>
   `;
 }
 
@@ -492,6 +502,12 @@ function bindEvents() {
     field.addEventListener("change", () => {
       listControls[field.dataset.entrySort].sort = field.value;
       renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-reference-filter]").forEach((field) => {
+    field.addEventListener("input", () => {
+      filterReferencePicker(field);
     });
   });
 
@@ -587,6 +603,10 @@ function bindEvents() {
   });
 
   root.querySelectorAll(".mathquill-field").forEach((field) => {
+    field.addEventListener("keydown", (event) => {
+      if (!handleFieldHistoryKeydown(event)) return;
+      event.preventDefault();
+    });
     field.addEventListener(
       "wheel",
       (event) => {
@@ -684,6 +704,40 @@ function bindEvents() {
       renderApp();
     });
   });
+}
+
+function filterReferencePicker(field) {
+  const picker = field.closest(".reference-picker");
+  const select = picker?.querySelector("select[data-field]");
+  if (!select) return;
+  const query = field.value.trim().toLowerCase();
+  let firstVisible = null;
+  for (const option of select.options) {
+    const visible = !query || option.value.toLowerCase().includes(query);
+    option.hidden = !visible;
+    option.disabled = !visible;
+    if (visible && !firstVisible) firstVisible = option;
+  }
+  if (query) {
+    const exact = Array.from(select.options).find((option) => option.value.toLowerCase() === query);
+    if (exact) {
+      select.value = exact.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  } else {
+    for (const option of select.options) {
+      option.hidden = false;
+      option.disabled = false;
+    }
+  }
+}
+
+function handleFieldHistoryKeydown(event) {
+  const key = event.key.toLowerCase();
+  if (!(event.metaKey || event.ctrlKey)) return false;
+  if (key !== "z" && key !== "y") return false;
+  const direction = key === "y" || event.shiftKey ? "redo" : "undo";
+  return restoreSceneHistory(direction);
 }
 
 function startDrawPointerDrag(from, event) {
@@ -1591,6 +1645,11 @@ function skipSpacesRight(source, index) {
 
 function validateScene() {
   const env = Object.fromEntries(scene.functions.filter((entry) => entry.id.trim()).map((entry) => [entry.id, entry.expression]));
+  const duplicateIds = {
+    functions: duplicateEntryIds(scene.functions),
+    colors: duplicateEntryIds(scene.colors),
+    restrictions: duplicateEntryIds(scene.restrictions)
+  };
   const diagnostics = {
     functions: [],
     colors: [],
@@ -1603,9 +1662,10 @@ function validateScene() {
   diagnostics.functions = scene.functions.map((entry) => {
     const idResult = validateEntryId(entry.id, "Function", env);
     if (idResult.status === "invalid") return idResult;
+    const duplicateWarning = duplicateIdWarning(entry.id, "Function", duplicateIds.functions);
     const result = validateExpression(entry.expression, env, [entry.id]);
-    if (result.status === "valid" && idResult.status === "warning") {
-      return idResult;
+    if (result.status === "valid" && duplicateWarning) {
+      return duplicateWarning;
     }
     if (result.status === "valid" && RESERVED_FUNCTION_NAMES.has(entry.id)) {
       return { status: "warning", message: `"${entry.id}" shadows a built-in function name` };
@@ -1615,7 +1675,9 @@ function validateScene() {
   diagnostics.colors = scene.colors.map((entry) => {
     const idResult = validateEntryId(entry.id, "Color", env);
     if (idResult.status === "invalid") return idResult;
+    const duplicateWarning = duplicateIdWarning(entry.id, "Color", duplicateIds.colors);
     return combineDiagnostics([
+      duplicateWarning,
       idResult,
       validateExpression(entry.red, env),
       validateExpression(entry.green, env),
@@ -1625,7 +1687,8 @@ function validateScene() {
   diagnostics.restrictions = scene.restrictions.map((entry) => {
     const idResult = validateEntryId(entry.id, "Boundary", env);
     if (idResult.status === "invalid") return idResult;
-    return combineDiagnostics([idResult, validateExpression(entry.expression, env)]);
+    const duplicateWarning = duplicateIdWarning(entry.id, "Boundary", duplicateIds.restrictions);
+    return combineDiagnostics([duplicateWarning, idResult, validateExpression(entry.expression, env)]);
   });
   diagnostics.draws = scene.draws.map((entry) => {
     if (entry.hidden) {
@@ -1656,6 +1719,22 @@ function validateScene() {
   diagnostics.hasErrors = Boolean(firstError);
   diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
+}
+
+function duplicateEntryIds(entries) {
+  const counts = new Map();
+  for (const entry of entries) {
+    const id = entry.id.trim();
+    if (!id) continue;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return new Set([...counts].filter(([, count]) => count > 1).map(([id]) => id));
+}
+
+function duplicateIdWarning(id, label, duplicates) {
+  return duplicates.has(id.trim())
+    ? { status: "warning", message: `${label} name "${id}" is duplicated` }
+    : null;
 }
 
 function validateEntryId(id, label, env = {}) {
@@ -1768,9 +1847,10 @@ function updateStatusLights(diagnostics) {
 }
 
 function combineDiagnostics(items) {
-  return items.find((item) => item.status === "invalid") ??
-    items.find((item) => item.status === "info") ??
-    items.find((item) => item.status === "warning") ??
+  const present = items.filter(Boolean);
+  return present.find((item) => item.status === "invalid") ??
+    present.find((item) => item.status === "info") ??
+    present.find((item) => item.status === "warning") ??
     { status: "valid", message: "Color is valid" };
 }
 
@@ -3910,7 +3990,8 @@ function unescapeHtml(value) {
 window.__leptonDebug = {
   latexToExpression,
   renderEditableLatex,
-  serializeMathField
+  serializeMathField,
+  scene: () => structuredClone(scene)
 };
 
 window.addEventListener("resize", () => {

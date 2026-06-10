@@ -155,6 +155,29 @@ check("exact built-in function names are still yellow-flagged", () => {
   assert(diagnostics.functions[0].message.includes("shadows"), diagnostics.functions[0].message);
 });
 
+check("duplicate entry ids are yellow-flagged", () => {
+  sandbox.__debugSetScene({
+    ...structuredClone(sandbox.__debugScene),
+    functions: [
+      { id: "same", expression: "x" },
+      { id: "same", expression: "y" }
+    ],
+    colors: [
+      { id: "rgb", red: "same", green: "same", blue: "same" },
+      { id: "rgb", red: "same", green: "same", blue: "same" }
+    ],
+    restrictions: [
+      { id: "rest", expression: "same", checkSmaller: false },
+      { id: "rest", expression: "same", checkSmaller: false }
+    ],
+    draws: []
+  });
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.functions.every((item) => item.status === "warning"), JSON.stringify(diagnostics.functions));
+  assert(diagnostics.colors.every((item) => item.status === "warning"), JSON.stringify(diagnostics.colors));
+  assert(diagnostics.restrictions.every((item) => item.status === "warning"), JSON.stringify(diagnostics.restrictions));
+});
+
 check("recursion base case returns zero", () => {
   sandbox.__debugScene.settings.maxRecursion = 1;
   const env = sandbox.buildRuntimeEnv({ loop: "loop+1" });

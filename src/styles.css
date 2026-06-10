@@ -944,6 +944,20 @@ select {
   color: #202938;
 }
 
+.reference-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.reference-filter {
+  font-size: 12px;
+  padding-block: 6px;
+}
+
+.reference-picker select {
+  min-height: 38px;
+}
+
 .settings-grid {
   display: grid;
   gap: 12px;
