@@ -1,14 +1,8 @@
 const DEFAULT_SCENE = {
-  functions: [
-    { id: "eq", expression: "sin(x)+cos(y)" },
-    { id: "r", expression: "128+127*sin(x)" },
-    { id: "g", expression: "128+127*cos(x)" },
-    { id: "b", expression: "180" },
-    { id: "rest", expression: "1" }
-  ],
-  colors: [{ id: "rgb", red: "r", green: "g", blue: "b" }],
-  restrictions: [{ id: "rest", expression: "rest", checkSmaller: false }],
-  draws: [{ equationId: "eq", colorId: "rgb", restrictionId: "rest" }],
+  functions: [],
+  colors: [],
+  restrictions: [],
+  draws: [],
   settings: {
     xMin: -15,
     xMax: 15,

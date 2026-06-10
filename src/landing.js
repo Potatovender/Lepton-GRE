@@ -54,14 +54,15 @@ S:y_max~8
 S:max_recursion~40
 S:angle_mode~radians`,
   stars: `F:rad~sqrt(x^2+y^2)
+F:fade~e^(0-rad^2/18)
 F:theta~arctan(y/(x+0.02))
-F:arm~(0.5+0.5*sin(3*theta+2.4*rad))*e^(0-rad^2/85)
-F:core~e^(0-rad^2/9)
-F:spark~e^(0-(abs(sin(11.7*x+2.3*sin(y)))+abs(cos(10.9*y+1.7*sin(x))))/0.055)
-F:eq~arm+core+0.35*spark
-F:r~8+105*arm+240*core+180*spark
-F:g~10+70*arm+150*core+170*spark
-F:b~30+180*arm+230*core+220*spark
+F:swirl~0.5+0.5*sin(3*theta+2.8*rad)
+F:core~e^(0-rad^2/3.5)
+F:spark~e^(0-(abs(sin(12.7*x+2.1*sin(y)))+abs(cos(13.3*y+1.9*sin(x))))/0.045)*fade
+F:eq~fade*swirl+core+0.35*spark
+F:r~5+95*fade*swirl+235*core+175*spark
+F:g~8+65*fade*swirl+145*core+165*spark
+F:b~28+175*fade*swirl+225*core+225*spark
 F:rest~1
 ~~~~~
 C:rgb~r~g~b
@@ -70,8 +71,8 @@ R:rest~rest~0
 ~~~~~
 D~eq~rgb~rest~0
 ~~~~~
-S:x_min~-12
-S:x_max~12
+S:x_min~-8
+S:x_max~8
 S:y_min~-8
 S:y_max~8
 S:max_recursion~40
