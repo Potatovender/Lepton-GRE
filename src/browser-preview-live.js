@@ -11,7 +11,8 @@ const DEFAULT_SCENE = {
     yMax: 15,
     yPoints: 120,
     maxRecursion: 100,
-    angleMode: "radians"
+    angleMode: "radians",
+    backgroundColor: "0"
   }
 };
 
@@ -78,7 +79,6 @@ const BUILTIN_NAMES = new Set([
 ]);
 
 const RESERVED_FUNCTION_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x", "y", "z", "pi", "e", "Math", "ref", "NaN"].includes(name)));
-const SUBSTRING_REFERENCE_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x", "y", "z", "e", "Math", "PI", "ref", "NaN"].includes(name) && name.length > 1));
 const LATEX_FUNCTIONS = {
   sin: { internal: "sin", args: 1, display: "sin" },
   cos: { internal: "cos", args: 1, display: "cos" },
@@ -139,12 +139,17 @@ const listControls = {
   restrictions: { query: "", sort: "custom" }
 };
 const editorHistory = new Map();
+const sceneHistory = { undo: [], redo: [], last: "" };
+const entryScrollTops = new Map();
+let pendingScrollTarget = null;
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
 
 function renderApp() {
+  rememberEntryScroll();
   const diagnostics = validateScene();
+  const scrollKey = panelScrollKey();
   root.innerHTML = `
     <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px">
       <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
@@ -175,10 +180,90 @@ function renderApp() {
       </section>
     </main>
   `;
+  if (root.dataset) root.dataset.panelKey = scrollKey;
 
   bindEvents();
   bindCanvasPan();
+  restoreEntryScroll();
   renderScene(diagnostics);
+}
+
+function panelScrollKey() {
+  return displayMode === "text" ? "text" : activeTab;
+}
+
+function rememberEntryScroll() {
+  const key = root.dataset?.panelKey;
+  const list = root.querySelector(".entry-list");
+  if (!key || !list) return;
+  entryScrollTops.set(key, list.scrollTop);
+}
+
+function restoreEntryScroll() {
+  const list = root.querySelector(".entry-list");
+  if (!list) return;
+
+  if (pendingScrollTarget) {
+    const { kind, index } = pendingScrollTarget;
+    pendingScrollTarget = null;
+    const addButton = root.querySelector(`[data-add="${cssEscape(kind)}"]`);
+    const row = root.querySelector(`[data-entry-kind="${cssEscape(kind)}"][data-entry-index="${index}"]`);
+    const target = addButton ?? row;
+    if (target) {
+      target.scrollIntoView({ block: "nearest" });
+      return;
+    }
+  }
+
+  list.scrollTop = entryScrollTops.get(panelScrollKey()) ?? 0;
+}
+
+function sceneSnapshot() {
+  return JSON.stringify(scene);
+}
+
+function recordSceneHistory(previous = sceneSnapshot()) {
+  const current = sceneSnapshot();
+  if (previous === current) return;
+  const lastUndo = sceneHistory.undo[sceneHistory.undo.length - 1];
+  if (lastUndo !== previous) {
+    sceneHistory.undo.push(previous);
+    if (sceneHistory.undo.length > 100) sceneHistory.undo.shift();
+  }
+  sceneHistory.redo = [];
+  sceneHistory.last = current;
+}
+
+function restoreSceneHistory(direction) {
+  const from = direction === "undo" ? sceneHistory.undo : sceneHistory.redo;
+  const to = direction === "undo" ? sceneHistory.redo : sceneHistory.undo;
+  if (!from.length) return false;
+  syncFields();
+  to.push(sceneSnapshot());
+  const source = from.pop();
+  scene = JSON.parse(source);
+  sceneHistory.last = source;
+  viewport = sceneViewport();
+  saveViewport();
+  renderApp();
+  return true;
+}
+
+function isEditableTarget(target) {
+  const element = target?.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+  if (!element?.closest) return false;
+  return Boolean(element.closest("input, textarea, [contenteditable='true'], .mq-editable-field, .mathquill-field"));
+}
+
+function handleGlobalHistoryKeydown(event) {
+  const key = event.key.toLowerCase();
+  if (!(event.metaKey || event.ctrlKey)) return;
+  if (key !== "z" && key !== "y") return;
+  if (isEditableTarget(event.target)) return;
+  const direction = key === "y" || event.shiftKey ? "redo" : "undo";
+  if (restoreSceneHistory(direction)) {
+    event.preventDefault();
+  }
 }
 
 function renderPanel() {
@@ -215,9 +300,9 @@ function renderPanel() {
       ...visibleEntries(scene.colors, "colors").map(
         ([entry, index]) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
           <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Color id" />
-          <label class="channel-row"><span class="channel-label">r</span><select class="compact-field" data-field="colors.${index}.red">${options(scene.functions, entry.red)}</select></label>
-          <label class="channel-row"><span class="channel-label">g</span><select class="compact-field" data-field="colors.${index}.green">${options(scene.functions, entry.green)}</select></label>
-          <label class="channel-row"><span class="channel-label">b</span><select class="compact-field" data-field="colors.${index}.blue">${options(scene.functions, entry.blue)}</select></label>
+          <label class="channel-row"><span class="channel-label">r</span>${searchableReference(`colors.${index}.red`, scene.functions, entry.red, "Red function")}</label>
+          <label class="channel-row"><span class="channel-label">g</span>${searchableReference(`colors.${index}.green`, scene.functions, entry.green, "Green function")}</label>
+          <label class="channel-row"><span class="channel-label">b</span>${searchableReference(`colors.${index}.blue`, scene.functions, entry.blue, "Blue function")}</label>
         `, "colors", index)
       ),
       addRow("Add color", "colors")
@@ -230,7 +315,7 @@ function renderPanel() {
       ...visibleEntries(scene.restrictions, "restrictions").map(
         ([entry, index]) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
           <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Restriction id" />
-          <label class="settings-row"><span>Function reference</span><select class="compact-field" data-field="restrictions.${index}.expression">${options(scene.functions, entry.expression)}</select></label>
+          <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, scene.functions, entry.expression, "Boundary function")}</label>
           <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> <= 0</label>
         `, "restrictions", index)
       ),
@@ -246,9 +331,9 @@ function renderPanel() {
             <button class="draw-drag-handle" data-draw-handle="${index}" draggable="true" title="Drag to reorder draw layer" aria-label="Drag to reorder draw layer">↕</button>
             <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
           </div>
-          <select class="compact-field" data-field="draws.${index}.equationId">${options(scene.functions, entry.equationId)}</select>
-          <select class="compact-field" data-field="draws.${index}.colorId">${options(scene.colors, entry.colorId)}</select>
-          <select class="compact-field" data-field="draws.${index}.restrictionId">${options(scene.restrictions, entry.restrictionId)}</select>
+          ${searchableReference(`draws.${index}.equationId`, scene.functions, entry.equationId, "Draw function")}
+          ${searchableReference(`draws.${index}.colorId`, scene.colors, entry.colorId, "Draw color")}
+          ${searchableReference(`draws.${index}.restrictionId`, scene.restrictions, entry.restrictionId, "Draw boundary")}
         `, "draws", index, { rowClass: entry.hidden ? "expression-row-hidden" : "", attrs: `data-draw-index="${index}"` })
       ),
       addRow("Add draw layer", "draws")
@@ -269,6 +354,19 @@ function renderPanel() {
           <option value="degrees" ${scene.settings.angleMode === "degrees" ? "selected" : ""}>degrees</option>
         </select>
       </label>
+      <label class="settings-row">
+        <span>Background color</span>
+        <select class="compact-field" data-background-mode>
+          <option value="0" ${scene.settings.backgroundColor === "0" ? "selected" : ""}>Default</option>
+          <option value="custom" ${scene.settings.backgroundColor !== "0" ? "selected" : ""}>Custom</option>
+        </select>
+      </label>
+      ${scene.settings.backgroundColor !== "0" ? `
+        <label class="settings-row">
+          <span>Background color ID</span>
+          ${searchableReference("settings.backgroundColor", scene.colors, scene.settings.backgroundColor, "Background color")}
+        </label>
+      ` : ""}
     </div>
   `;
 }
@@ -314,8 +412,9 @@ function mathEditor(field, value, label, small = false) {
 }
 
 function expressionRow(status, message, content, kind = null, index = null, options = {}) {
+  const entryAttrs = kind ? `data-entry-kind="${kind}" data-entry-index="${index}"` : "";
   return `
-    <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${options.attrs ?? ""}>
+    <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
       <span class="entry-status ${status}" aria-label="${escapeHtml(message || status)}"></span>
       <div class="entry-content">${content}</div>
       ${kind ? `<button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
@@ -347,6 +446,16 @@ function options(entries, selected) {
     ...(hasSelected || !selected ? [] : [`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (missing)</option>`]),
     ...entries.map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === selected ? "selected" : ""}>${escapeHtml(entry.id)}</option>`)
   ].join("");
+}
+
+function searchableReference(field, entries, selected, label) {
+  const listId = `list-${field.replaceAll(/[^A-Za-z0-9_-]/g, "-")}`;
+  return `
+    <input class="compact-field reference-field" data-field="${escapeHtml(field)}" list="${listId}" value="${escapeHtml(selected ?? "")}" aria-label="${escapeHtml(label)}" />
+    <datalist id="${listId}">
+      ${entries.map((entry) => `<option value="${escapeHtml(entry.id)}"></option>`).join("")}
+    </datalist>
+  `;
 }
 
 function bindEvents() {
@@ -397,18 +506,28 @@ function bindEvents() {
   });
   root.querySelector('[data-action="apply-text"]')?.addEventListener("click", () => {
     const text = root.querySelector("[data-scene-text]")?.value ?? "";
+    const before = sceneSnapshot();
     scene = importScene(text);
     viewport = sceneViewport();
     saveViewport();
+    recordSceneHistory(before);
     renderApp();
   });
   root.querySelector('[data-action="refresh-text"]')?.addEventListener("click", () => {
     const field = root.querySelector("[data-scene-text]");
     if (field) field.value = exportScene();
   });
+  root.querySelector("[data-background-mode]")?.addEventListener("change", (event) => {
+    const before = sceneSnapshot();
+    scene.settings.backgroundColor = event.target.value === "custom" ? scene.colors[0]?.id ?? "0" : "0";
+    recordSceneHistory(before);
+    renderApp();
+  });
   root.querySelector('[data-action="reset"]')?.addEventListener("click", () => {
+    const before = sceneSnapshot();
     scene = structuredClone(DEFAULT_SCENE);
     viewport = loadViewport(true);
+    recordSceneHistory(before);
     renderApp();
   });
   root.querySelector('[data-action="export"]')?.addEventListener("click", () => {
@@ -417,7 +536,9 @@ function bindEvents() {
   root.querySelector('[data-action="import"]')?.addEventListener("click", () => {
     const raw = window.prompt("Paste exported scene");
     if (raw) {
+      const before = sceneSnapshot();
       scene = importScene(raw);
+      recordSceneHistory(before);
       renderApp();
     }
   });
@@ -439,6 +560,7 @@ function bindEvents() {
 
           const [collection, rawIndex, property] = fieldName.split(".");
           const index = Number(rawIndex);
+          const before = sceneSnapshot();
           if (collection === "functions" && property === "expression") {
             const assignment = parseAssignment(cleanExpr);
             if (assignment) {
@@ -452,6 +574,7 @@ function bindEvents() {
           } else {
             scene[collection][index][property] = cleanExpr;
           }
+          recordSceneHistory(before);
 
           const diagnostics = validateScene();
           updateStatusLights(diagnostics);
@@ -479,7 +602,9 @@ function bindEvents() {
 
   root.querySelectorAll("input.entry-id[data-field]").forEach((field) => {
     field.addEventListener("input", () => {
+      const before = sceneSnapshot();
       updateField(field);
+      recordSceneHistory(before);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
@@ -488,7 +613,9 @@ function bindEvents() {
 
   root.querySelectorAll("[data-field]").forEach((field) => {
     field.addEventListener("change", () => {
+      const before = sceneSnapshot();
       updateField(field);
+      recordSceneHistory(before);
       renderApp();
     });
   });
@@ -496,7 +623,12 @@ function bindEvents() {
   root.querySelectorAll("[data-add]").forEach((button) => {
     button.addEventListener("click", () => {
       syncFields();
-      addEntry(button.dataset.add);
+      const before = sceneSnapshot();
+      const kind = button.dataset.add;
+      if (listControls[kind]) listControls[kind].query = "";
+      const target = addEntry(kind);
+      recordSceneHistory(before);
+      pendingScrollTarget = target;
       renderApp();
     });
   });
@@ -504,7 +636,9 @@ function bindEvents() {
   root.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", () => {
       syncFields();
+      const before = sceneSnapshot();
       deleteEntry(button.dataset.delete, Number(button.dataset.index));
+      recordSceneHistory(before);
       renderApp();
     });
   });
@@ -512,7 +646,9 @@ function bindEvents() {
   root.querySelectorAll("[data-toggle-draw]").forEach((button) => {
     button.addEventListener("click", () => {
       syncFields();
+      const before = sceneSnapshot();
       toggleDrawHidden(Number(button.dataset.toggleDraw));
+      recordSceneHistory(before);
       renderApp();
     });
   });
@@ -542,7 +678,9 @@ function bindEvents() {
       const from = Number(event.dataTransfer?.getData("text/plain"));
       const to = Number(row.dataset.drawIndex);
       syncFields();
+      const before = sceneSnapshot();
       moveDrawLayer(from, to);
+      recordSceneHistory(before);
       renderApp();
     });
   });
@@ -574,7 +712,9 @@ function startDrawPointerDrag(from, event) {
     const to = Number(row?.dataset.drawIndex);
     clearTarget();
     syncFields();
+    const before = sceneSnapshot();
     moveDrawLayer(from, to);
+    recordSceneHistory(before);
     renderApp();
   };
 
@@ -689,7 +829,7 @@ function updateField(field) {
   if (property === "id") value = value.trim();
 
   if (collection === "settings") {
-    scene.settings[rawIndex] = rawIndex === "angleMode" ? value : Number(value);
+    scene.settings[rawIndex] = ["angleMode", "backgroundColor"].includes(rawIndex) ? value : Number(value);
     if (["xMin", "xMax", "yMin", "yMax"].includes(rawIndex)) {
       viewport = sceneViewport();
       saveViewport();
@@ -725,9 +865,18 @@ function syncFields() {
 }
 
 function addEntry(kind) {
-  if (kind === "functions") scene.functions.push({ id: `f${scene.functions.length + 1}`, expression: "x+y" });
-  if (kind === "colors") scene.colors.push({ id: `c${scene.colors.length + 1}`, red: scene.functions[0]?.id ?? "", green: scene.functions[0]?.id ?? "", blue: scene.functions[0]?.id ?? "" });
-  if (kind === "restrictions") scene.restrictions.push({ id: `r${scene.restrictions.length + 1}`, expression: scene.functions[0]?.id ?? "", checkSmaller: false });
+  if (kind === "functions") {
+    scene.functions.push({ id: `f${scene.functions.length + 1}`, expression: "x+y" });
+    return { kind, index: scene.functions.length - 1 };
+  }
+  if (kind === "colors") {
+    scene.colors.push({ id: `c${scene.colors.length + 1}`, red: scene.functions[0]?.id ?? "", green: scene.functions[0]?.id ?? "", blue: scene.functions[0]?.id ?? "" });
+    return { kind, index: scene.colors.length - 1 };
+  }
+  if (kind === "restrictions") {
+    scene.restrictions.push({ id: `r${scene.restrictions.length + 1}`, expression: scene.functions[0]?.id ?? "", checkSmaller: false });
+    return { kind, index: scene.restrictions.length - 1 };
+  }
   if (kind === "draws") {
     scene.draws.push({
       equationId: scene.functions[0]?.id ?? "",
@@ -735,7 +884,9 @@ function addEntry(kind) {
       restrictionId: scene.restrictions[0]?.id ?? "",
       hidden: false
     });
+    return { kind, index: scene.draws.length - 1 };
   }
+  return null;
 }
 
 function toggleDrawHidden(index) {
@@ -773,6 +924,9 @@ function deleteEntry(kind, index) {
     scene.draws.forEach((draw) => {
       if (draw.colorId === removed.id) draw.colorId = replacement;
     });
+    if (scene.settings.backgroundColor === removed.id) {
+      scene.settings.backgroundColor = replacement || "0";
+    }
   }
   if (kind === "restrictions") {
     const replacement = scene.restrictions[0]?.id ?? "";
@@ -830,7 +984,8 @@ function renderSceneCpu(canvas) {
 
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  drawGrid(ctx, rect.width, rect.height);
+  const backgroundColor = resolveBackgroundColor();
+  drawGrid(ctx, rect.width, rect.height, backgroundColor.custom ? backgroundColor.rgb : null);
 
   const env = buildRuntimeEnv(Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression])));
   const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
@@ -923,10 +1078,33 @@ function renderSceneWebGl(canvas) {
     visibleViewport.yMin,
     visibleViewport.yMax
   );
-  gl.clearColor(0.97, 0.98, 0.99, 1);
+  const backgroundColor = resolveBackgroundColor();
+  gl.clearColor(backgroundColor.rgb[0] / 255, backgroundColor.rgb[1] / 255, backgroundColor.rgb[2] / 255, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   return true;
+}
+
+function resolveBackgroundColor() {
+  const fallback = { custom: false, rgb: [247, 250, 252] };
+  const id = scene.settings.backgroundColor ?? "0";
+  if (id === "0") return fallback;
+  const color = scene.colors.find((entry) => entry.id === id);
+  if (!color) return fallback;
+  try {
+    const env = buildRuntimeEnv(Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression])));
+    const red = compileExpression(color.red)(0, 0, env);
+    const green = compileExpression(color.green)(0, 0, env);
+    const blue = compileExpression(color.blue)(0, 0, env);
+    return { custom: true, rgb: [channel(red), channel(green), channel(blue)] };
+  } catch {
+    return fallback;
+  }
+}
+
+function backgroundColorGlsl() {
+  const color = resolveBackgroundColor().rgb.map((value) => (value / 255).toFixed(6));
+  return `vec3(${color.join(", ")})`;
 }
 
 function buildFragmentShader() {
@@ -988,6 +1166,7 @@ function buildFragmentShader() {
         )
         .join("\n")
     : "";
+  const backgroundColor = backgroundColorGlsl();
 
   return `
       precision highp float;
@@ -1022,7 +1201,7 @@ function buildFragmentShader() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
       float x = mix(u_bounds.x, u_bounds.y, uv.x);
       float y = mix(u_bounds.z, u_bounds.w, uv.y);
-      vec3 color = vec3(0.97, 0.98, 0.99);
+      vec3 color = ${backgroundColor};
       bool painted = false;
       ${layerShader}
       gl_FragColor = vec4(color, 1.0);
@@ -1030,9 +1209,10 @@ function buildFragmentShader() {
   `;
 }
 
-function drawGrid(ctx, width, height) {
-  ctx.fillStyle = "#f8fafc";
+function drawGrid(ctx, width, height, solidBackground = null) {
+  ctx.fillStyle = solidBackground ? `rgb(${solidBackground.join(", ")})` : "#f8fafc";
   ctx.fillRect(0, 0, width, height);
+  if (solidBackground) return;
   ctx.strokeStyle = "#e1e5ec";
   ctx.lineWidth = 1;
 
@@ -1485,10 +1665,6 @@ function validateEntryId(id, label, env = {}) {
   if (!/^[A-Za-z_]\w*$/.test(id)) {
     return { status: "invalid", message: `${label} name must start with a letter or underscore` };
   }
-  const warning = findSubstringReferenceWarning(id, env);
-  if (warning) {
-    return { status: "warning", message: `${label} name "${id}" contains ${warning}` };
-  }
   return { status: "valid", message: `${label} name is valid` };
 }
 
@@ -1509,41 +1685,10 @@ function validateExpression(source, env, stack = []) {
     expressionToGlsl(source, env, null, stack);
     const runtimeEnv = buildRuntimeEnv(env);
     compileExpression(source)(1, 1, runtimeEnv);
-    const warning = findSubstringReferenceWarning(normalized, env);
-    if (warning) {
-      return { status: "warning", message: `Expression contains ${warning}` };
-    }
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
     return { status: "invalid", message: error.message };
   }
-}
-
-function findSubstringReferenceWarning(source, env = {}) {
-  const candidates = new Set(SUBSTRING_REFERENCE_NAMES);
-  for (const name of Object.keys(env)) {
-    if (name.length > 1 && name !== "e") {
-      candidates.add(name);
-    }
-  }
-
-  const matches = new Set();
-  const identifiers = String(source).match(/\b[A-Za-z_]\w*\b/g) ?? [];
-  for (const identifier of identifiers) {
-    if (BUILTIN_NAMES.has(identifier)) continue;
-    const lowerIdentifier = identifier.toLowerCase();
-    for (const candidate of candidates) {
-      const lowerCandidate = candidate.toLowerCase();
-      if (lowerIdentifier === lowerCandidate) continue;
-      if (lowerIdentifier.includes(lowerCandidate)) {
-        matches.add(candidate);
-      }
-    }
-  }
-
-  if (!matches.size) return "";
-  const names = [...matches].sort((left, right) => left.localeCompare(right));
-  return `reserved substring${names.length === 1 ? "" : "s"} ${names.map((name) => `"${name}"`).join(", ")}`;
 }
 
 function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map()) {
@@ -3395,7 +3540,8 @@ function exportScene() {
     `S:y_min~${scene.settings.yMin}`,
     `S:y_max~${scene.settings.yMax}`,
     `S:max_recursion~${scene.settings.maxRecursion}`,
-    `S:angle_mode~${scene.settings.angleMode}`
+    `S:angle_mode~${scene.settings.angleMode}`,
+    `S:background_color~${scene.settings.backgroundColor ?? "0"}`
   ].join("\n");
 }
 
@@ -3490,9 +3636,9 @@ function importScene(raw) {
       next.draws.push({ equationId, colorId, restrictionId, hidden: hidden === "1" });
     } else if (line.startsWith("S:")) {
       const [key, value] = splitFirst(line.slice(2), "~");
-      const settingMap = { x_min: "xMin", x_max: "xMax", y_min: "yMin", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode" };
+      const settingMap = { x_min: "xMin", x_max: "xMax", y_min: "yMin", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode", background_color: "backgroundColor" };
       const mapped = settingMap[key];
-      if (mapped) next.settings[mapped] = mapped === "angleMode" ? value : Number(value);
+      if (mapped) next.settings[mapped] = ["angleMode", "backgroundColor"].includes(mapped) ? value : Number(value);
     }
   }
 
@@ -3522,6 +3668,9 @@ function normalizeSceneReferences(next) {
   next.restrictions.forEach((restriction) => {
     restriction.expression = ensureFunction(`${restriction.id}_fn`, restriction.expression);
   });
+  if (next.settings.backgroundColor !== "0" && !next.colors.some((color) => color.id === next.settings.backgroundColor)) {
+    next.settings.backgroundColor = "0";
+  }
   return next;
 }
 
@@ -3769,12 +3918,14 @@ window.addEventListener("resize", () => {
   requestAnimationFrame(() => reflowMathLayout(root));
   renderScene();
 });
+document.addEventListener("keydown", handleGlobalHistoryKeydown);
 
 if (typeof URLSearchParams !== "undefined" && window.location && new URLSearchParams(window.location.search).get("capture") === "1") {
   document.body.classList.add("capture-mode");
 }
 
 loadSceneFromUrl();
+sceneHistory.last = sceneSnapshot();
 renderApp();
 
 function loadSceneFromUrl() {
@@ -3785,6 +3936,9 @@ function loadSceneFromUrl() {
     scene = importScene(encodedScene);
     viewport = sceneViewport();
     saveViewport();
+    sceneHistory.undo = [];
+    sceneHistory.redo = [];
+    sceneHistory.last = sceneSnapshot();
   } catch (error) {
     window.__leptonRuntimeError = `Scene preload failed: ${error.message}`;
   }

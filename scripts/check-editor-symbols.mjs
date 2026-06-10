@@ -24,7 +24,7 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(
   source.replace(
-    /loadSceneFromUrl\(\);\s*renderApp\(\);/,
+    /loadSceneFromUrl\(\);\s*sceneHistory\.last = sceneSnapshot\(\);\s*renderApp\(\);/,
     "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; };"
   ),
   sandbox
@@ -131,17 +131,28 @@ check("pi inside an identifier does not corrupt reference compilation", () => {
   assert(glsl === "(10.0)+1.0", glsl);
 });
 
-check("identifiers containing reserved names are yellow-flagged", () => {
+check("identifiers containing reserved names are not yellow-flagged", () => {
   const idResult = sandbox.validateEntryId("tempimaginary", "Function");
-  assert(idResult.status === "warning", JSON.stringify(idResult));
-  assert(idResult.message.includes("pi"), idResult.message);
+  assert(idResult.status === "valid", JSON.stringify(idResult));
 
   const expressionResult = sandbox.validateExpression("tempimaginary+1", { tempimaginary: "10" });
-  assert(expressionResult.status === "warning", JSON.stringify(expressionResult));
-  assert(expressionResult.message.includes("pi"), expressionResult.message);
+  assert(expressionResult.status === "valid", JSON.stringify(expressionResult));
 
   const eResult = sandbox.validateEntryId("one", "Function");
   assert(eResult.status === "valid", JSON.stringify(eResult));
+});
+
+check("exact built-in function names are still yellow-flagged", () => {
+  sandbox.__debugSetScene({
+    ...structuredClone(sandbox.__debugScene),
+    functions: [{ id: "sin", expression: "x" }],
+    colors: [],
+    restrictions: [],
+    draws: []
+  });
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.functions[0].status === "warning", JSON.stringify(diagnostics.functions[0]));
+  assert(diagnostics.functions[0].message.includes("shadows"), diagnostics.functions[0].message);
 });
 
 check("recursion base case returns zero", () => {
@@ -239,6 +250,35 @@ check("draw layers can be reordered", () => {
   });
   sandbox.moveDrawLayer(2, 0);
   assert(sandbox.__debugScene.draws.map((entry) => entry.equationId).join(",") === "c,a,b", JSON.stringify(sandbox.__debugScene.draws));
+});
+
+check("background color exports and imports through text mode", () => {
+  const imported = sandbox.importScene(`F:r~20
+F:g~30
+F:b~40
+~~~~~
+C:bg~r~g~b
+~~~~~
+R:rest~r~0
+~~~~~
+D~r~bg~rest~1
+~~~~~
+S:x_min~-1
+S:x_max~1
+S:y_min~-1
+S:y_max~1
+S:max_recursion~20
+S:angle_mode~radians
+S:background_color~bg`);
+  sandbox.__debugSetScene(imported);
+  assert(sandbox.__debugScene.settings.backgroundColor === "bg", JSON.stringify(sandbox.__debugScene.settings));
+  const exported = sandbox.exportScene();
+  assert(exported.includes("S:background_color~bg"), exported);
+});
+
+check("missing background color falls back to default", () => {
+  const imported = sandbox.importScene(`S:background_color~missing`);
+  assert(imported.settings.backgroundColor === "0", JSON.stringify(imported.settings));
 });
 
 function check(name, fn) {
