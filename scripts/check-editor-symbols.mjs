@@ -262,6 +262,38 @@ S:angle_mode~radians`);
   assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
 });
 
+check("draw layers can use virtual default function color and boundary", () => {
+  const imported = sandbox.importScene(`~~~~~
+~~~~~
+~~~~~
+D~f1~c1~rest~0
+~~~~~
+S:x_min~-1
+S:x_max~1
+S:y_min~-1
+S:y_max~1
+S:max_recursion~20
+S:angle_mode~radians`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.draws[0].status === "valid", JSON.stringify(diagnostics.draws[0]));
+  assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
+});
+
+check("new draw layer uses virtual defaults on a blank scene", () => {
+  sandbox.__debugSetScene({
+    ...structuredClone(sandbox.__debugScene),
+    functions: [],
+    colors: [],
+    restrictions: [],
+    draws: []
+  });
+  sandbox.addEntry("draws");
+  assert(sandbox.__debugScene.draws[0].equationId === "f1", JSON.stringify(sandbox.__debugScene.draws[0]));
+  assert(sandbox.__debugScene.draws[0].colorId === "c1", JSON.stringify(sandbox.__debugScene.draws[0]));
+  assert(sandbox.__debugScene.draws[0].restrictionId === "rest", JSON.stringify(sandbox.__debugScene.draws[0]));
+});
+
 check("draw layers can be reordered", () => {
   sandbox.__debugSetScene({
     ...structuredClone(sandbox.__debugScene),

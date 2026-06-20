@@ -125,6 +125,23 @@ const LATEX_FUNCTIONS = {
 const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
 const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
 const NODE_RED_FLAG_THRESHOLD = 2 ** 16;
+const DEFAULT_DRAW_FUNCTION = { id: "f1", expression: "x" };
+const DEFAULT_DRAW_COLOR = { id: "c1", red: "f1", green: "f1", blue: "f1" };
+const DEFAULT_DRAW_BOUNDARY = { id: "rest", expression: "1", checkSmaller: false };
+const HELP_TEXT = {
+  standard: "Standard mode is the visual editor. Use tabs for functions, colors, bounds, draw layers, and settings.",
+  text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
+  functions: "Functions declare reusable formulas like F:eq~sin(x)+cos(y). They can use x, y, constants, built-in math, and other functions by ID.",
+  colors: "Colors map red, green, and blue channels to function IDs. For example C:rgb~r~g~b uses functions named r, g, and b.",
+  restrictions: "Bounds choose a function and decide which side of zero is drawn. A bound of 1 means no restriction.",
+  draws: "Draw layers connect a function, color, and bound. Layers are drawn in order and can be hidden or dragged.",
+  settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
+  textLanguage: "Lepton text uses sections: F for functions, C for colors, R for bounds, D for draw layers, and S for settings. Sections are separated by ~~~~~.",
+  applyText: "Apply parses the text editor and replaces the current scene with that text.",
+  refreshText: "Refresh text regenerates the text view from the current visual editor state.",
+  backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
+  tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
+};
 
 let scene = structuredClone(DEFAULT_SCENE);
 let displayMode = "standard";
@@ -133,6 +150,7 @@ let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380")
 let sidebarCollapsed = localStorage.getItem("lepton-sidebar-collapsed") === "true";
 let viewport = loadViewport();
 let panRenderFrame = 0;
+let tutorialOpen = false;
 const listControls = {
   functions: { query: "", sort: "custom" },
   colors: { query: "", sort: "custom" },
@@ -156,16 +174,17 @@ function renderApp() {
         <header class="panel-header">
           <div class="brand-row">
             <strong>Lepton GRE</strong>
+            <button class="tutorial-button" data-action="tutorial" type="button">What do I do?</button>
             <button class="toolbar-button primary" data-action="render">Refresh</button>
           </div>
           <div class="display-row" aria-label="Display mode">
-            <button class="display-button" data-display-mode="standard" aria-selected="${displayMode === "standard"}">Standard</button>
-            <button class="display-button" data-display-mode="text" aria-selected="${displayMode === "text"}">Text</button>
+            <button class="display-button" data-display-mode="standard" aria-selected="${displayMode === "standard"}">${helpDash("Standard", "standard")}</button>
+            <button class="display-button" data-display-mode="text" aria-selected="${displayMode === "text"}">${helpDash("Text", "text")}</button>
           </div>
         </header>
         <nav class="tab-row" aria-label="Editor sections" ${displayMode === "text" ? "hidden" : ""}>
           ${tabs
-            .map(([id, label]) => `<button class="tab-button" data-tab="${id}" aria-selected="${id === activeTab}">${label}</button>`)
+            .map(([id, label]) => `<button class="tab-button" data-tab="${id}" aria-selected="${id === activeTab}">${helpDash(label, id)}</button>`)
             .join("")}
         </nav>
         <div class="entry-list ${displayMode === "text" ? "entry-list-text" : ""}">${renderPanel()}</div>
@@ -278,13 +297,20 @@ function closestMathFieldTarget(target) {
 function renderPanel() {
   const diagnostics = validateScene();
 
+  if (tutorialOpen) {
+    return tutorialPanel();
+  }
+
   if (displayMode === "text") {
     return `
       <div class="text-mode-panel">
+        <div class="text-language-help">
+          <span>${helpDash("Lepton language", "textLanguage")}</span>
+        </div>
         <textarea class="scene-textarea" data-scene-text spellcheck="false">${escapeHtml(exportScene())}</textarea>
         <div class="text-mode-actions">
-          <button class="toolbar-button primary" data-action="apply-text">Apply</button>
-          <button class="toolbar-button" data-action="refresh-text">Refresh text</button>
+          <span class="text-action-wrap"><button class="toolbar-button primary" data-action="apply-text">Apply</button>${helpMark("applyText")}</span>
+          <span class="text-action-wrap"><button class="toolbar-button" data-action="refresh-text">Refresh text</button>${helpMark("refreshText")}</span>
         </div>
       </div>
     `;
@@ -340,9 +366,9 @@ function renderPanel() {
             <button class="draw-drag-handle" data-draw-handle="${index}" draggable="true" title="Drag to reorder draw layer" aria-label="Drag to reorder draw layer">↕</button>
             <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
           </div>
-          ${searchableReference(`draws.${index}.equationId`, scene.functions, entry.equationId, "Draw function")}
-          ${searchableReference(`draws.${index}.colorId`, scene.colors, entry.colorId, "Draw color")}
-          ${searchableReference(`draws.${index}.restrictionId`, scene.restrictions, entry.restrictionId, "Draw boundary")}
+          ${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}
+          ${searchableReference(`draws.${index}.colorId`, drawColorEntries(), entry.colorId, "Draw color")}
+          ${searchableReference(`draws.${index}.restrictionId`, drawBoundaryEntries(), entry.restrictionId, "Draw boundary")}
         `, "draws", index, { rowClass: entry.hidden ? "expression-row-hidden" : "", attrs: `data-draw-index="${index}"` })
       ),
       addRow("Add draw layer", "draws")
@@ -364,7 +390,7 @@ function renderPanel() {
         </select>
       </label>
       <label class="settings-row">
-        <span>Background color</span>
+        <span>Background color ${helpMark("backgroundColor")}</span>
         <select class="compact-field" data-background-mode>
           <option value="0" ${scene.settings.backgroundColor === "0" ? "selected" : ""}>Default</option>
           <option value="custom" ${scene.settings.backgroundColor !== "0" ? "selected" : ""}>Custom</option>
@@ -457,6 +483,61 @@ function options(entries, selected) {
   ].join("");
 }
 
+function helpMark(key) {
+  return `<span class="help-marker" data-help="${escapeHtml(HELP_TEXT[key] ?? "")}" aria-label="${escapeHtml(HELP_TEXT[key] ?? "")}">?</span>`;
+}
+
+function helpDash(label, key) {
+  return `<span class="help-dash" data-help="${escapeHtml(HELP_TEXT[key] ?? "")}">${escapeHtml(label)}</span>`;
+}
+
+function tutorialPanel() {
+  // Keep this content in sync when Lepton grammar or editor features change.
+  return `
+    <section class="tutorial-panel" aria-labelledby="tutorial-title">
+      <div class="tutorial-header">
+        <div>
+          <p class="tutorial-kicker">Lepton Tutorial</p>
+          <h2 id="tutorial-title">What do I do?</h2>
+        </div>
+        <button class="toolbar-button" data-action="close-tutorial">Close</button>
+      </div>
+      <div class="tutorial-content">
+        ${tutorialSection("Start with a function", `
+          A function is a named formula. Use the Functions tab to declare things like <code>eq = sin(x)+cos(y)</code>, or make variables like <code>ten = 10</code>. Function IDs can be reused anywhere else in the graph, so small named pieces are easier to experiment with than one giant equation.
+        `)}
+        ${tutorialSection("Make color from math", `
+          The Colors tab maps red, green, and blue channels to function IDs. A color like <code>rgb</code> can reference functions named <code>r</code>, <code>g</code>, and <code>b</code>. Because colors are also math, you can make gradients, heat maps, glowing fields, or animated-looking bands from the same variables that define your shape.
+        `)}
+        ${tutorialSection("Control where things draw", `
+          Bounds use a function as a boundary. With the default direction, Lepton draws where the boundary value is at least zero. A boundary function of <code>1</code> means no restriction. Flip the checkbox when you want the opposite side of the boundary.
+        `)}
+        ${tutorialSection("Connect layers in Draw", `
+          Draw layers combine a function, a color, and a bound. Layers draw in order, can be hidden, and can be dragged to reorder. If you have not declared anything yet, Draw offers defaults: <code>f1=x</code>, <code>c1=f1,f1,f1</code>, and <code>rest=1</code>.
+        `)}
+        ${tutorialSection("Try changing a graph", `
+          A good first experiment is to change one number at a time. Try replacing <code>sin(x)</code> with <code>sin(3x)</code>, change a color function from <code>120+80*sin(eq)</code> to <code>180+60*cos(eq)</code>, or add a bound like <code>1-(x^2+y^2)</code> to clip a field into a circle.
+        `)}
+        ${tutorialSection("Use recursion carefully", `
+          A function can reference itself or mutually reference another function. Lepton expands recursive references up to the max recursion setting, then uses a base value of zero. Large recursive graphs get blue or red flags depending on estimated node count, so recursion can stay powerful without freezing the renderer.
+        `)}
+        ${tutorialSection("Understand Text mode", `
+          Text mode is the compact Lepton language. <code>F:</code> lines declare functions, <code>C:</code> colors, <code>R:</code> bounds, <code>D</code> draw layers, and <code>S:</code> settings. Sections are separated by <code>~~~~~</code>. Use it for copy-paste, samples, sharing, and precise bulk edits.
+        `)}
+      </div>
+    </section>
+  `;
+}
+
+function tutorialSection(title, body) {
+  return `
+    <article class="tutorial-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${body}</p>
+    </article>
+  `;
+}
+
 function searchableReference(field, entries, selected, label) {
   return `
     <div class="reference-picker">
@@ -473,6 +554,7 @@ function bindEvents() {
 
   root.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", () => {
+      tutorialOpen = false;
       activeTab = button.dataset.tab;
       renderApp();
     });
@@ -481,9 +563,21 @@ function bindEvents() {
   root.querySelectorAll("[data-display-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       syncFields();
+      tutorialOpen = false;
       displayMode = button.dataset.displayMode;
       renderApp();
     });
+  });
+
+  root.querySelector('[data-action="tutorial"]')?.addEventListener("click", () => {
+    syncFields();
+    tutorialOpen = true;
+    renderApp();
+  });
+
+  root.querySelector('[data-action="close-tutorial"]')?.addEventListener("click", () => {
+    tutorialOpen = false;
+    renderApp();
   });
 
   root.querySelectorAll("[data-entry-search]").forEach((field) => {
@@ -918,6 +1012,40 @@ function syncFields() {
   root.querySelectorAll("[data-field]").forEach((field) => updateField(field));
 }
 
+function resolveFunctionEntry(id) {
+  return scene.functions.find((entry) => entry.id === id) ?? (id === DEFAULT_DRAW_FUNCTION.id ? DEFAULT_DRAW_FUNCTION : null);
+}
+
+function resolveColorEntry(id) {
+  return scene.colors.find((entry) => entry.id === id) ?? (id === DEFAULT_DRAW_COLOR.id ? DEFAULT_DRAW_COLOR : null);
+}
+
+function resolveBoundaryEntry(id) {
+  return scene.restrictions.find((entry) => entry.id === id) ?? (id === DEFAULT_DRAW_BOUNDARY.id ? DEFAULT_DRAW_BOUNDARY : null);
+}
+
+function drawFunctionEntries() {
+  return scene.functions.some((entry) => entry.id === DEFAULT_DRAW_FUNCTION.id)
+    ? scene.functions
+    : [DEFAULT_DRAW_FUNCTION, ...scene.functions];
+}
+
+function drawColorEntries() {
+  return scene.colors.length ? scene.colors : [DEFAULT_DRAW_COLOR];
+}
+
+function drawBoundaryEntries() {
+  return scene.restrictions.length ? scene.restrictions : [DEFAULT_DRAW_BOUNDARY];
+}
+
+function sceneFunctionEnv(includeDefault = false) {
+  const entries = scene.functions.map((entry) => [entry.id, entry.expression]);
+  if (includeDefault && !scene.functions.some((entry) => entry.id === DEFAULT_DRAW_FUNCTION.id)) {
+    entries.push([DEFAULT_DRAW_FUNCTION.id, DEFAULT_DRAW_FUNCTION.expression]);
+  }
+  return Object.fromEntries(entries);
+}
+
 function addEntry(kind) {
   if (kind === "functions") {
     scene.functions.push({ id: `f${scene.functions.length + 1}`, expression: "x+y" });
@@ -933,9 +1061,9 @@ function addEntry(kind) {
   }
   if (kind === "draws") {
     scene.draws.push({
-      equationId: scene.functions[0]?.id ?? "",
-      colorId: scene.colors[0]?.id ?? "",
-      restrictionId: scene.restrictions[0]?.id ?? "",
+      equationId: drawFunctionEntries()[0]?.id ?? "",
+      colorId: drawColorEntries()[0]?.id ?? "",
+      restrictionId: drawBoundaryEntries()[0]?.id ?? "",
       hidden: false
     });
     return { kind, index: scene.draws.length - 1 };
@@ -1041,7 +1169,7 @@ function renderSceneCpu(canvas) {
   const backgroundColor = resolveBackgroundColor();
   drawGrid(ctx, rect.width, rect.height, backgroundColor.custom ? backgroundColor.rgb : null);
 
-  const env = buildRuntimeEnv(Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression])));
+  const env = buildRuntimeEnv(sceneFunctionEnv(true));
   const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
   const xPoints = axis(visibleViewport.xMin, visibleViewport.xMax, scene.settings.xPoints);
   const yPoints = axis(visibleViewport.yMin, visibleViewport.yMax, scene.settings.yPoints);
@@ -1050,9 +1178,9 @@ function renderSceneCpu(canvas) {
 
   for (const draw of scene.draws) {
     if (draw.hidden) continue;
-    const fn = scene.functions.find((entry) => entry.id === draw.equationId);
-    const color = scene.colors.find((entry) => entry.id === draw.colorId);
-    const restriction = scene.restrictions.find((entry) => entry.id === draw.restrictionId);
+    const fn = resolveFunctionEntry(draw.equationId);
+    const color = resolveColorEntry(draw.colorId);
+    const restriction = resolveBoundaryEntry(draw.restrictionId);
     if (!fn || !color || !restriction) continue;
 
     let evaluate;
@@ -1173,13 +1301,13 @@ function buildFragmentShader() {
     `;
   }
 
-  const env = Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression]));
+  const env = sceneFunctionEnv(true);
   const layers = scene.draws
     .map((draw) => {
       if (draw?.hidden) return null;
-      const fn = scene.functions.find((entry) => entry.id === draw?.equationId);
-      const color = scene.colors.find((entry) => entry.id === draw?.colorId);
-      const restriction = scene.restrictions.find((entry) => entry.id === draw?.restrictionId);
+      const fn = resolveFunctionEntry(draw?.equationId);
+      const color = resolveColorEntry(draw?.colorId);
+      const restriction = resolveBoundaryEntry(draw?.restrictionId);
       if (!fn || !color || !restriction) return null;
       if (
         validateExpression(fn.expression, env, [fn.id]).status === "invalid" ||
@@ -1645,6 +1773,7 @@ function skipSpacesRight(source, index) {
 
 function validateScene() {
   const env = Object.fromEntries(scene.functions.filter((entry) => entry.id.trim()).map((entry) => [entry.id, entry.expression]));
+  const drawEnv = sceneFunctionEnv(true);
   const duplicateIds = {
     functions: duplicateEntryIds(scene.functions),
     colors: duplicateEntryIds(scene.colors),
@@ -1695,20 +1824,24 @@ function validateScene() {
       return { status: "valid", message: "Draw layer hidden" };
     }
     const missing = [];
-    const functionIndex = scene.functions.findIndex((candidate) => candidate.id === entry.equationId);
-    const colorIndex = scene.colors.findIndex((candidate) => candidate.id === entry.colorId);
-    const restrictionIndex = scene.restrictions.findIndex((candidate) => candidate.id === entry.restrictionId);
-    if (functionIndex === -1) missing.push("function");
-    if (colorIndex === -1) missing.push("color");
-    if (restrictionIndex === -1) missing.push("boundary");
+    const fn = resolveFunctionEntry(entry.equationId);
+    const color = resolveColorEntry(entry.colorId);
+    const restriction = resolveBoundaryEntry(entry.restrictionId);
+    if (!fn) missing.push("function");
+    if (!color) missing.push("color");
+    if (!restriction) missing.push("boundary");
     if (missing.length) return { status: "invalid", message: `Missing ${missing.join(", ")}` };
-    const affected = [
-      diagnostics.functions[functionIndex],
-      diagnostics.colors[colorIndex],
-      diagnostics.restrictions[restrictionIndex]
-    ].find((item) => item?.status === "invalid");
-    return affected
+    const affected = combineDiagnostics([
+      validateExpression(fn.expression, drawEnv, [fn.id]),
+      validateExpression(color.red, drawEnv),
+      validateExpression(color.green, drawEnv),
+      validateExpression(color.blue, drawEnv),
+      validateExpression(restriction.expression, drawEnv)
+    ]);
+    return affected.status === "invalid"
       ? { status: "invalid", message: `Draw layer skipped: ${affected.message}` }
+      : affected.status === "warning" || affected.status === "info"
+        ? affected
       : { status: "valid", message: "Draw layer is valid" };
   });
 
