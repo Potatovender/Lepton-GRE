@@ -422,6 +422,7 @@ select {
 
 .entry-list-text {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -822,6 +823,33 @@ select {
   min-height: 34px;
 }
 
+.brand-link {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #182033;
+  text-decoration: none;
+}
+
+.brand-link img {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  object-fit: contain;
+}
+
+.brand-link:hover,
+.brand-link:focus-visible {
+  color: #255a9c;
+  outline: none;
+}
+
+.brand-link:focus-visible img {
+  box-shadow: 0 0 0 2px rgba(79, 125, 217, 0.35);
+}
+
 .brand-row .toolbar-button {
   width: 76px;
   justify-self: end;
@@ -1036,9 +1064,13 @@ select {
   min-height: 0;
   height: 100%;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
   padding: 12px;
+}
+
+.text-mode-panel:has(.tutorial-panel) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .text-language-help {
@@ -1049,7 +1081,7 @@ select {
 .scene-textarea {
   width: 100%;
   height: 100%;
-  min-height: 0;
+  min-height: 320px;
   resize: none;
   border: 1px solid #cfd5df;
   border-radius: 6px;

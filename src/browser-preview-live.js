@@ -135,7 +135,7 @@ const HELP_TEXT = {
   standard: "Standard mode is the visual editor. Use tabs for functions, colors, bounds, draw layers, and settings.",
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
   functions: "Functions are named formulas. Declare an ID, write the math, then reuse that ID in colors, bounds, draw layers, or other functions.",
-  colors: "Colors map red, green, and blue channels to function IDs. For example C:rgb~r~g~b uses functions named r, g, and b.",
+  colors: "Colors map red, green, and blue channels to function IDs. For example colour rgb = r~g~b uses functions named r, g, and b.",
   restrictions: "Bounds draw only where their function is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
   draws: "Draw layers connect a function, color, and bound. Layers are drawn in order and can be hidden or dragged.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
@@ -212,7 +212,10 @@ function renderApp() {
       <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
         <header class="panel-header">
           <div class="brand-row">
-            <strong>Lepton GRE</strong>
+            <a class="brand-link" href="./index.html" aria-label="Go to Lepton landing page">
+              <img src="./src/assets/lepton-logo-transparent.png" alt="" />
+              <strong>Lepton GRE</strong>
+            </a>
             <button class="tutorial-button" data-action="tutorial" type="button">What do I do?</button>
             <button class="toolbar-button primary" data-action="render">Refresh</button>
           </div>
