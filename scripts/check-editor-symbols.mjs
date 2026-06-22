@@ -184,6 +184,12 @@ check("whole-token constants render as LaTeX without splitting longer identifier
   assert(latex === "twopi+pifour+\\pi", latex);
 });
 
+check("operator constants wait for identifier boundaries before rendering", () => {
+  assert(sandbox.completeIdentifierConstants("pixel") === "pixel", "pixel should not change while identifier is still active");
+  assert(sandbox.completeIdentifierConstants("pi+x") === "π+x", "pi should render after + completes the token");
+  assert(sandbox.completeIdentifierConstants("twopi+pi") === "twopi+π", "pi inside twopi should stay plain");
+});
+
 check("help tooltip position clamps inside viewport edges", () => {
   const leftEdge = sandbox.helpTooltipPosition(
     { left: 4, right: 54, top: 90, bottom: 110, width: 50, height: 20 },
@@ -262,7 +268,77 @@ S:angle_mode~radians`);
 
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("D~eq~rgb~rest~1"), exported);
+  assert(exported.includes("draw(eq,rgb,rest,True)"), exported);
+});
+
+check("new Lepton language exports settings first without section dividers", () => {
+  const imported = sandbox.importScene(`function f1 = x+y
+colour c1=f1~f1~f1
+boundary r1=f1~False
+draw(f1,c1,r1,False)
+set x_min = -15
+set x_max = 15
+set y_min = -15
+set y_max = 15
+set max_recursion = 100
+set angle_mode = radians
+set background_color = 0`);
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(!exported.includes("~~~~~"), exported);
+  assert(exported.startsWith("set x_min = -15\nset x_max = 15"), exported);
+  assert(exported.includes("\nfunction f1 = x+y"), exported);
+  assert(exported.includes("\ncolour c1 = f1~f1~f1"), exported);
+  assert(exported.includes("\nboundary r1 = f1~False"), exported);
+  assert(exported.includes("\ndraw(f1,c1,r1,False)"), exported);
+});
+
+check("new Lepton language accepts aliases booleans and invalid angle fallback", () => {
+  const imported = sandbox.importScene(`set angle_mode = sideways
+set max_recursion = 33
+function f1 = pi+x
+color c1 = f1~f1~f1
+restriction r1 = f1~true
+draw(f1,c1,r1,true)`);
+  assert(imported.settings.angleMode === "radians", JSON.stringify(imported.settings));
+  assert(imported.settings.maxRecursion === 33, JSON.stringify(imported.settings));
+  assert(imported.colors[0].id === "c1", JSON.stringify(imported.colors));
+  assert(imported.restrictions[0].checkSmaller === true, JSON.stringify(imported.restrictions));
+  assert(imported.draws[0].hidden === true, JSON.stringify(imported.draws));
+});
+
+check("legacy sectioned Lepton language still imports", () => {
+  const imported = sandbox.importScene(`F:f1~x+y
+~~~~~
+C:c1~f1~f1~f1
+~~~~~
+R:r1~f1~0
+~~~~~
+D~f1~default~default~0
+~~~~~
+S:x_min~-15
+S:x_max~15
+S:y_min~-15
+S:y_max~15
+S:max_recursion~100
+S:angle_mode~degrees
+S:background_color~0`);
+  assert(imported.functions[0].id === "f1", JSON.stringify(imported.functions));
+  assert(imported.colors[0].id === "c1", JSON.stringify(imported.colors));
+  assert(imported.restrictions[0].id === "r1", JSON.stringify(imported.restrictions));
+  assert(imported.settings.angleMode === "degrees", JSON.stringify(imported.settings));
+});
+
+check("refresh text requires confirmation", () => {
+  const previousConfirm = sandbox.window.confirm;
+  let message = "";
+  sandbox.window.confirm = (text) => {
+    message = text;
+    return false;
+  };
+  assert(sandbox.confirmTextRefresh() === false, "confirmation should cancel");
+  assert(message.includes("lose unsaved text edits"), message);
+  sandbox.window.confirm = previousConfirm;
 });
 
 check("hidden draw layers do not invalidate the scene", () => {
@@ -372,7 +448,7 @@ S:background_color~bg`);
   sandbox.__debugSetScene(imported);
   assert(sandbox.__debugScene.settings.backgroundColor === "bg", JSON.stringify(sandbox.__debugScene.settings));
   const exported = sandbox.exportScene();
-  assert(exported.includes("S:background_color~bg"), exported);
+  assert(exported.includes("set background_color = bg"), exported);
 });
 
 check("missing background color falls back to default", () => {

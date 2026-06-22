@@ -1036,7 +1036,7 @@ select {
   min-height: 0;
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 10px;
   padding: 12px;
 }
@@ -1075,18 +1075,18 @@ select {
 }
 
 .tutorial-panel {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  padding: 14px;
+  border: 1px solid #c9d9f5;
+  border-radius: 7px;
+  padding: 10px;
+  background: #f5f9ff;
+  box-shadow: 0 8px 20px rgba(35, 74, 135, 0.08);
 }
 
 .tutorial-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 4px;
   align-items: start;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .tutorial-kicker {
@@ -1101,42 +1101,23 @@ select {
 .tutorial-header h2 {
   margin: 0;
   color: #182033;
-  font-size: 22px;
+  font-size: 15px;
   line-height: 1.1;
 }
 
-.tutorial-content {
-  display: grid;
-  gap: 10px;
-}
-
-.tutorial-card {
-  border: 1px solid #e2e7ef;
-  border-radius: 7px;
-  padding: 11px 12px;
-  background: #ffffff;
-}
-
-.tutorial-card h3 {
-  margin: 0 0 6px;
-  color: #202938;
-  font-size: 14px;
-}
-
-.tutorial-card p {
+.tutorial-panel p {
   margin: 0;
   color: #596273;
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
-.tutorial-card code {
-  border-radius: 4px;
-  padding: 1px 4px;
-  background: #eef1f5;
-  color: #202938;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
+.tutorial-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
 }
 
 .settings-row {

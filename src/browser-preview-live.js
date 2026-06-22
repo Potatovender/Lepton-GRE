@@ -139,9 +139,9 @@ const HELP_TEXT = {
   restrictions: "Bounds draw only where their function is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
   draws: "Draw layers connect a function, color, and bound. Layers are drawn in order and can be hidden or dragged.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
-  textLanguage: "Lepton text is the same graph in one copyable script: F declares functions, C colors, R bounds, D draw layers, and S settings. Separate sections with ~~~~~.",
+  textLanguage: "Lepton text is the same graph in one copyable script. Use set, function, colour/color, boundary/restriction, and draw(...).",
   applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
-  refreshText: "Refresh text rewrites this script from the current Standard editor state without changing the graph.",
+  refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
   backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
   boundaryDirection: "Unchecked draws where this bound is greater than or equal to zero. Checked draws where it is less than or equal to zero.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
@@ -154,7 +154,39 @@ let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380")
 let sidebarCollapsed = localStorage.getItem("lepton-sidebar-collapsed") === "true";
 let viewport = loadViewport();
 let panRenderFrame = 0;
-let tutorialOpen = false;
+let tutorialStep = null;
+const TUTORIAL_STEPS = [
+  {
+    mode: "standard",
+    tab: "functions",
+    title: "Step 1: Make a function",
+    body: "Functions are reusable formulas. Press Add function, name it eq or f1, then type something like sin(x)+cos(y). The graph can reuse that ID anywhere."
+  },
+  {
+    mode: "standard",
+    tab: "colors",
+    title: "Step 2: Make a colour",
+    body: "Colours point their red, green, and blue channels at function IDs. A simple colour can use the same function three times; richer graphs use separate r, g, and b functions."
+  },
+  {
+    mode: "standard",
+    tab: "restrictions",
+    title: "Step 3: Add a boundary",
+    body: "Boundaries decide where a layer draws. Unchecked draws when the boundary function is >= 0. Checked draws when it is <= 0. Use the default boundary for no restriction."
+  },
+  {
+    mode: "standard",
+    tab: "draws",
+    title: "Step 4: Connect a draw layer",
+    body: "Draw chooses the function, colour, and boundary to render. Blank graphs offer f1, default colour, and default boundary so there is always a valid starting layer."
+  },
+  {
+    mode: "text",
+    tab: "draws",
+    title: "Step 5: Share or bulk edit",
+    body: "Text mode is the same graph as script. Settings appear first, followed by function, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
+  }
+];
 const listControls = {
   functions: { query: "", sort: "custom" },
   colors: { query: "", sort: "custom" },
@@ -304,13 +336,10 @@ function closestMathFieldTarget(target) {
 function renderPanel() {
   const diagnostics = validateScene();
 
-  if (tutorialOpen) {
-    return tutorialPanel();
-  }
-
   if (displayMode === "text") {
     return `
       <div class="text-mode-panel">
+        ${tutorialCoachmark()}
         <div class="text-language-help">
           <span>${helpDash("Lepton language", "textLanguage")}</span>
         </div>
@@ -325,6 +354,7 @@ function renderPanel() {
 
   if (activeTab === "functions") {
     return [
+      tutorialCoachmark(),
       listControlBar("functions", "Search functions"),
       ...visibleEntries(scene.functions, "functions").map(
         ([entry, index]) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", `
@@ -338,6 +368,7 @@ function renderPanel() {
 
   if (activeTab === "colors") {
     return [
+      tutorialCoachmark(),
       listControlBar("colors", "Search colors"),
       ...visibleEntries(scene.colors, "colors").map(
         ([entry, index]) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
@@ -353,6 +384,7 @@ function renderPanel() {
 
   if (activeTab === "restrictions") {
     return [
+      tutorialCoachmark(),
       listControlBar("restrictions", "Search bounds"),
       ...visibleEntries(scene.restrictions, "restrictions").map(
         ([entry, index]) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
@@ -367,6 +399,7 @@ function renderPanel() {
 
   if (activeTab === "draws") {
     return [
+      tutorialCoachmark(),
       ...scene.draws.map(
         (entry, index) => expressionRow(diagnostics.draws[index]?.status ?? "invalid", diagnostics.draws[index]?.message ?? "", `
           <div class="draw-layer-toolbar">
@@ -383,6 +416,7 @@ function renderPanel() {
   }
 
   return `
+    ${tutorialCoachmark()}
     <div class="settings-grid">
       ${settingsField("xMin", "x minimum")}
       ${settingsField("xMax", "x maximum")}
@@ -498,50 +532,24 @@ function helpDash(label, key) {
   return `<span class="help-dash" data-help="${escapeHtml(HELP_TEXT[key] ?? "")}">${escapeHtml(label)}</span>`;
 }
 
-function tutorialPanel() {
-  // Keep this content in sync when Lepton grammar or editor features change.
+function tutorialCoachmark() {
+  if (tutorialStep === null) return "";
+  const step = TUTORIAL_STEPS[tutorialStep];
+  if (!step || step.mode !== displayMode || (displayMode === "standard" && step.tab !== activeTab)) return "";
   return `
-    <section class="tutorial-panel" aria-labelledby="tutorial-title">
+    <section class="tutorial-panel" aria-live="polite">
       <div class="tutorial-header">
         <div>
-          <p class="tutorial-kicker">Lepton Tutorial</p>
-          <h2 id="tutorial-title">What do I do?</h2>
+          <p class="tutorial-kicker">Lepton Tutorial ${tutorialStep + 1}/${TUTORIAL_STEPS.length}</p>
+          <h2>${escapeHtml(step.title)}</h2>
         </div>
-        <button class="toolbar-button" data-action="close-tutorial">Close</button>
       </div>
-      <div class="tutorial-content">
-        ${tutorialSection("1. Make the first formula", `
-          Open <strong>Functions</strong>, press <strong>Add function</strong>, name it <code>eq</code>, and type <code>sin(x)+cos(y)</code>. The status light turns green when the expression can compile. This formula is now a reusable field: every pixel on the right evaluates <code>eq</code> at that pixel's <code>x,y</code> coordinate.
-        `)}
-        ${tutorialSection("2. Turn math into color", `
-          Go to <strong>Colors</strong> and create a color called <code>rgb</code>. Pick function IDs for the red, green, and blue channels. A simple start is <code>eq</code>, <code>eq</code>, <code>eq</code>; a richer graph usually uses helper functions like <code>r</code>, <code>g</code>, and <code>b</code> so each channel can have its own formula.
-        `)}
-        ${tutorialSection("3. Decide where it should draw", `
-          Bounds are filters. Add a bound called <code>rest</code> and choose a function. With the checkbox off, Lepton draws where that function is greater than or equal to zero. Turn the checkbox on to draw where it is less than or equal to zero. Use <code>1</code> or the default bound when you want no restriction.
-        `)}
-        ${tutorialSection("4. Connect it in Draw", `
-          Open <strong>Draw</strong>, add a layer, then choose the function, color, and bound. That one row tells Lepton: draw this equation, using this color, only where this bound allows it. If you have not declared anything yet, Draw offers defaults: <code>f1=x</code>, color <code>default=x,x,x</code>, and bound <code>default=1</code>.
-        `)}
-        ${tutorialSection("5. Watch results while editing", `
-          Most standard-editor changes update the graph as you type or when a field changes. Use <strong>Refresh</strong> when you want to force a full redraw, especially after larger edits, text-mode imports, or resizing. Try changing <code>sin(x)</code> to <code>sin(3x)</code> and watch the bands tighten.
-        `)}
-        ${tutorialSection("6. Reuse variables and recurse carefully", `
-          Function IDs work like variables. If <code>ten=10</code>, then another function can use <code>ten+x</code>. A function can also reference itself or another recursive function. Lepton expands recursion up to <strong>max recursion</strong>, then uses zero as the base value. Very large expansions get blue or red flags before they slow the renderer down too much.
-        `)}
-        ${tutorialSection("7. Use Text mode for sharing", `
-          Text mode shows the same graph as plain Lepton language: <code>F:</code> functions, <code>C:</code> colors, <code>R:</code> bounds, <code>D</code> draw layers, and <code>S:</code> settings, separated by <code>~~~~~</code>. Paste a sample there, press <strong>Apply</strong>, then return to Standard mode to inspect each section visually.
-        `)}
+      <p>${escapeHtml(step.body)}</p>
+      <div class="tutorial-actions">
+        <button class="toolbar-button primary" data-action="tutorial-next">${tutorialStep === TUTORIAL_STEPS.length - 1 ? "Finish" : "Next"}</button>
+        <button class="toolbar-button" data-action="tutorial-skip">Skip to end</button>
       </div>
     </section>
-  `;
-}
-
-function tutorialSection(title, body) {
-  return `
-    <article class="tutorial-card">
-      <h3>${escapeHtml(title)}</h3>
-      <p>${body}</p>
-    </article>
   `;
 }
 
@@ -562,7 +570,6 @@ function bindEvents() {
 
   root.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", () => {
-      tutorialOpen = false;
       activeTab = button.dataset.tab;
       renderApp();
     });
@@ -571,7 +578,6 @@ function bindEvents() {
   root.querySelectorAll("[data-display-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       syncFields();
-      tutorialOpen = false;
       displayMode = button.dataset.displayMode;
       renderApp();
     });
@@ -579,12 +585,26 @@ function bindEvents() {
 
   root.querySelector('[data-action="tutorial"]')?.addEventListener("click", () => {
     syncFields();
-    tutorialOpen = true;
+    tutorialStep = 0;
+    displayMode = TUTORIAL_STEPS[0].mode;
+    activeTab = TUTORIAL_STEPS[0].tab;
     renderApp();
   });
 
-  root.querySelector('[data-action="close-tutorial"]')?.addEventListener("click", () => {
-    tutorialOpen = false;
+  root.querySelector('[data-action="tutorial-next"]')?.addEventListener("click", () => {
+    syncFields();
+    tutorialStep = tutorialStep === null ? 0 : tutorialStep + 1;
+    if (tutorialStep >= TUTORIAL_STEPS.length) {
+      tutorialStep = null;
+    } else {
+      displayMode = TUTORIAL_STEPS[tutorialStep].mode;
+      activeTab = TUTORIAL_STEPS[tutorialStep].tab;
+    }
+    renderApp();
+  });
+
+  root.querySelector('[data-action="tutorial-skip"]')?.addEventListener("click", () => {
+    tutorialStep = null;
     renderApp();
   });
 
@@ -632,6 +652,7 @@ function bindEvents() {
     renderApp();
   });
   root.querySelector('[data-action="refresh-text"]')?.addEventListener("click", () => {
+    if (!confirmTextRefresh()) return;
     const field = root.querySelector("[data-scene-text]");
     if (field) field.value = exportScene();
   });
@@ -816,6 +837,10 @@ function bindHelpTooltips() {
     eventTarget.addEventListener("mouseleave", () => hideHelpTooltip(target));
     eventTarget.addEventListener("focusout", () => hideHelpTooltip(target));
   });
+}
+
+function confirmTextRefresh() {
+  return window.confirm("Are you sure you want to refresh text? You will lose unsaved text edits in this text box.");
 }
 
 function scheduleHelpTooltip(target) {
@@ -2159,7 +2184,30 @@ function handlePlainMathInsert(field, event) {
   event.preventDefault();
   pushEditorHistory(field);
   insertTextAtSelection(event.data);
+  if (/[^A-Za-z0-9_]/.test(event.data)) {
+    completeVisibleIdentifierConstants(field);
+  }
   field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+}
+
+function completeIdentifierConstants(source) {
+  return String(source ?? "")
+    .replaceAll(/\bpi\b/g, "π")
+    .replaceAll(/\btheta\b/g, "θ");
+}
+
+function completeVisibleIdentifierConstants(field) {
+  const selection = window.getSelection();
+  const offset = getCaretOffset(field);
+  const walker = document.createTreeWalker(field, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const nextText = completeIdentifierConstants(node.textContent ?? "");
+    if (nextText !== node.textContent) node.textContent = nextText;
+    node = walker.nextNode();
+  }
+  if (selection) setCaretOffset(field, Math.min(offset, field.textContent?.length ?? offset));
+  syncMathField(field);
 }
 
 function normalizeMathFieldDom(field) {
@@ -2664,7 +2712,7 @@ function serializeMathField(field) {
 }
 
 function serializeMathNode(node) {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  if (node.nodeType === Node.TEXT_NODE) return sourceFromLatexText(node.textContent ?? "");
   if (node.nodeType !== Node.ELEMENT_NODE) return "";
   if (node.classList.contains("mq-atom")) {
     const command = node.dataset.command;
@@ -3842,23 +3890,48 @@ function matchingParen(source, openIndex) {
   return -1;
 }
 
+function formatLeptonBoolean(value) {
+  return value ? "True" : "False";
+}
+
+function parseLeptonBoolean(value) {
+  return /^(true|1|yes)$/i.test(String(value ?? "").trim());
+}
+
+function normalizeAngleMode(value) {
+  const mode = String(value ?? "").trim().toLowerCase();
+  if (mode.startsWith("degree")) return "degrees";
+  if (mode.startsWith("radian")) return "radians";
+  return "radians";
+}
+
+function setSceneSetting(target, key, value) {
+  const settingMap = { x_min: "xMin", x_max: "xMax", y_min: "yMin", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode", background_color: "backgroundColor" };
+  const mapped = settingMap[String(key ?? "").trim()];
+  if (!mapped) return;
+  if (mapped === "angleMode") {
+    target.settings[mapped] = normalizeAngleMode(value);
+  } else if (mapped === "backgroundColor") {
+    target.settings[mapped] = String(value ?? "").trim() || "0";
+  } else {
+    const number = Number(value);
+    if (Number.isFinite(number)) target.settings[mapped] = number;
+  }
+}
+
 function exportScene() {
   return [
-    ...scene.functions.map((entry) => `F:${entry.id}~${textModeExpression(entry.expression)}`),
-    "~~~~~",
-    ...scene.colors.map((entry) => `C:${entry.id}~${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
-    "~~~~~",
-    ...scene.restrictions.map((entry) => `R:${entry.id}~${textModeExpression(entry.expression)}~${entry.checkSmaller ? 1 : 0}`),
-    "~~~~~",
-    ...scene.draws.map((entry) => `D~${entry.equationId}~${entry.colorId}~${entry.restrictionId}~${entry.hidden ? 1 : 0}`),
-    "~~~~~",
-    `S:x_min~${scene.settings.xMin}`,
-    `S:x_max~${scene.settings.xMax}`,
-    `S:y_min~${scene.settings.yMin}`,
-    `S:y_max~${scene.settings.yMax}`,
-    `S:max_recursion~${scene.settings.maxRecursion}`,
-    `S:angle_mode~${scene.settings.angleMode}`,
-    `S:background_color~${scene.settings.backgroundColor ?? "0"}`
+    `set x_min = ${scene.settings.xMin}`,
+    `set x_max = ${scene.settings.xMax}`,
+    `set y_min = ${scene.settings.yMin}`,
+    `set y_max = ${scene.settings.yMax}`,
+    `set max_recursion = ${scene.settings.maxRecursion}`,
+    `set angle_mode = ${normalizeAngleMode(scene.settings.angleMode)}`,
+    `set background_color = ${scene.settings.backgroundColor ?? "0"}`,
+    ...scene.functions.map((entry) => `function ${entry.id} = ${textModeExpression(entry.expression)}`),
+    ...scene.colors.map((entry) => `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
+    ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`),
+    ...scene.draws.map((entry) => `draw(${entry.equationId},${entry.colorId},${entry.restrictionId},${formatLeptonBoolean(entry.hidden)})`)
   ].join("\n");
 }
 
@@ -3947,15 +4020,37 @@ function importScene(raw) {
     } else if (line.startsWith("R:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [expression = "1", flag = "0"] = rest.split("~");
-      next.restrictions.push({ id, expression: convertDivisionsToFrac(expression), checkSmaller: flag === "1" });
+      next.restrictions.push({ id, expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) });
     } else if (line.startsWith("D~")) {
       const [, equationId, colorId, restrictionId, hidden = "0"] = line.split("~");
-      next.draws.push({ equationId, colorId, restrictionId, hidden: hidden === "1" });
+      next.draws.push({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) });
     } else if (line.startsWith("S:")) {
       const [key, value] = splitFirst(line.slice(2), "~");
-      const settingMap = { x_min: "xMin", x_max: "xMax", y_min: "yMin", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode", background_color: "backgroundColor" };
-      const mapped = settingMap[key];
-      if (mapped) next.settings[mapped] = ["angleMode", "backgroundColor"].includes(mapped) ? value : Number(value);
+      setSceneSetting(next, key, value);
+    } else if (/^set\s+/i.test(line)) {
+      const assignment = line.match(/^set\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      if (assignment) setSceneSetting(next, assignment[1], assignment[2]);
+    } else if (/^function\s+/i.test(line)) {
+      const assignment = line.match(/^function\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      if (assignment) next.functions.push({ id: assignment[1], expression: convertDivisionsToFrac(assignment[2].trim()) });
+    } else if (/^(colour|color)\s+/i.test(line)) {
+      const assignment = line.match(/^(?:colour|color)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      if (assignment) {
+        const [red = "0", green = "0", blue = "0"] = assignment[2].split("~").map((part) => part.trim());
+        next.colors.push({ id: assignment[1], red, green, blue });
+      }
+    } else if (/^(boundary|restriction)\s+/i.test(line)) {
+      const assignment = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      if (assignment) {
+        const [expression = "1", flag = "False"] = assignment[2].split("~").map((part) => part.trim());
+        next.restrictions.push({ id: assignment[1], expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) });
+      }
+    } else if (/^draw\s*\(/i.test(line)) {
+      const call = line.match(/^draw\s*\((.*)\)\s*$/i);
+      if (call) {
+        const [equationId = "", colorId = "", restrictionId = "", hidden = "False"] = splitFunctionArgs(call[1]).map((part) => part.trim());
+        next.draws.push({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) });
+      }
     }
   }
 
