@@ -78,7 +78,8 @@ const BUILTIN_NAMES = new Set([
   "NaN"
 ]);
 
-const RESERVED_FUNCTION_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["x", "y", "z", "pi", "e", "Math", "ref", "NaN"].includes(name)));
+const EXACT_RESERVED_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["Math", "PI", "ref", "NaN"].includes(name)));
+const SUBSTRING_RESERVED_NAMES = new Set([...EXACT_RESERVED_NAMES].filter((name) => !["x", "y", "z", "e"].includes(name)));
 const LATEX_FUNCTIONS = {
   sin: { internal: "sin", args: 1, display: "sin" },
   cos: { internal: "cos", args: 1, display: "cos" },
@@ -126,20 +127,23 @@ const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
 const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
 const NODE_RED_FLAG_THRESHOLD = 2 ** 16;
 const DEFAULT_DRAW_FUNCTION = { id: "f1", expression: "x" };
-const DEFAULT_DRAW_COLOR = { id: "c1", red: "f1", green: "f1", blue: "f1" };
-const DEFAULT_DRAW_BOUNDARY = { id: "rest", expression: "1", checkSmaller: false };
+const DEFAULT_DRAW_COLOR = { id: "default", label: "default", red: "x", green: "x", blue: "x" };
+const DEFAULT_DRAW_BOUNDARY = { id: "default", label: "default", expression: "1", checkSmaller: false };
+const LEGACY_DEFAULT_COLOR_IDS = new Set(["c1"]);
+const LEGACY_DEFAULT_BOUNDARY_IDS = new Set(["rest"]);
 const HELP_TEXT = {
   standard: "Standard mode is the visual editor. Use tabs for functions, colors, bounds, draw layers, and settings.",
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
-  functions: "Functions declare reusable formulas like F:eq~sin(x)+cos(y). They can use x, y, constants, built-in math, and other functions by ID.",
+  functions: "Functions are named formulas. Declare an ID, write the math, then reuse that ID in colors, bounds, draw layers, or other functions.",
   colors: "Colors map red, green, and blue channels to function IDs. For example C:rgb~r~g~b uses functions named r, g, and b.",
-  restrictions: "Bounds choose a function and decide which side of zero is drawn. A bound of 1 means no restriction.",
+  restrictions: "Bounds draw only where their function is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
   draws: "Draw layers connect a function, color, and bound. Layers are drawn in order and can be hidden or dragged.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
-  textLanguage: "Lepton text uses sections: F for functions, C for colors, R for bounds, D for draw layers, and S for settings. Sections are separated by ~~~~~.",
-  applyText: "Apply parses the text editor and replaces the current scene with that text.",
-  refreshText: "Refresh text regenerates the text view from the current visual editor state.",
+  textLanguage: "Lepton text is the same graph in one copyable script: F declares functions, C colors, R bounds, D draw layers, and S settings. Separate sections with ~~~~~.",
+  applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
+  refreshText: "Refresh text rewrites this script from the current Standard editor state without changing the graph.",
   backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
+  boundaryDirection: "Unchecked draws where this bound is greater than or equal to zero. Checked draws where it is less than or equal to zero.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
 };
 
@@ -160,12 +164,15 @@ const editorHistory = new Map();
 const sceneHistory = { undo: [], redo: [], last: "" };
 const entryScrollTops = new Map();
 let pendingScrollTarget = null;
+let helpTooltipTimer = null;
+let activeHelpTarget = null;
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
 
 function renderApp() {
   rememberEntryScroll();
+  hideHelpTooltip();
   const diagnostics = validateScene();
   const scrollKey = panelScrollKey();
   root.innerHTML = `
@@ -351,7 +358,7 @@ function renderPanel() {
         ([entry, index]) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
           <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Restriction id" />
           <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, scene.functions, entry.expression, "Boundary function")}</label>
-          <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> <= 0</label>
+          <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> draw when less than or equal to 0 ${helpMark("boundaryDirection")}</label>
         `, "restrictions", index)
       ),
       addRow("Add boundary", "restrictions")
@@ -479,7 +486,7 @@ function options(entries, selected) {
   const hasSelected = entries.some((entry) => entry.id === selected);
   return [
     ...(hasSelected || !selected ? [] : [`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (missing)</option>`]),
-    ...entries.map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === selected ? "selected" : ""}>${escapeHtml(entry.id)}</option>`)
+    ...entries.map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === selected ? "selected" : ""}>${escapeHtml(entry.label ?? entry.id)}</option>`)
   ].join("");
 }
 
@@ -503,26 +510,26 @@ function tutorialPanel() {
         <button class="toolbar-button" data-action="close-tutorial">Close</button>
       </div>
       <div class="tutorial-content">
-        ${tutorialSection("Start with a function", `
-          A function is a named formula. Use the Functions tab to declare things like <code>eq = sin(x)+cos(y)</code>, or make variables like <code>ten = 10</code>. Function IDs can be reused anywhere else in the graph, so small named pieces are easier to experiment with than one giant equation.
+        ${tutorialSection("1. Make the first formula", `
+          Open <strong>Functions</strong>, press <strong>Add function</strong>, name it <code>eq</code>, and type <code>sin(x)+cos(y)</code>. The status light turns green when the expression can compile. This formula is now a reusable field: every pixel on the right evaluates <code>eq</code> at that pixel's <code>x,y</code> coordinate.
         `)}
-        ${tutorialSection("Make color from math", `
-          The Colors tab maps red, green, and blue channels to function IDs. A color like <code>rgb</code> can reference functions named <code>r</code>, <code>g</code>, and <code>b</code>. Because colors are also math, you can make gradients, heat maps, glowing fields, or animated-looking bands from the same variables that define your shape.
+        ${tutorialSection("2. Turn math into color", `
+          Go to <strong>Colors</strong> and create a color called <code>rgb</code>. Pick function IDs for the red, green, and blue channels. A simple start is <code>eq</code>, <code>eq</code>, <code>eq</code>; a richer graph usually uses helper functions like <code>r</code>, <code>g</code>, and <code>b</code> so each channel can have its own formula.
         `)}
-        ${tutorialSection("Control where things draw", `
-          Bounds use a function as a boundary. With the default direction, Lepton draws where the boundary value is at least zero. A boundary function of <code>1</code> means no restriction. Flip the checkbox when you want the opposite side of the boundary.
+        ${tutorialSection("3. Decide where it should draw", `
+          Bounds are filters. Add a bound called <code>rest</code> and choose a function. With the checkbox off, Lepton draws where that function is greater than or equal to zero. Turn the checkbox on to draw where it is less than or equal to zero. Use <code>1</code> or the default bound when you want no restriction.
         `)}
-        ${tutorialSection("Connect layers in Draw", `
-          Draw layers combine a function, a color, and a bound. Layers draw in order, can be hidden, and can be dragged to reorder. If you have not declared anything yet, Draw offers defaults: <code>f1=x</code>, <code>c1=f1,f1,f1</code>, and <code>rest=1</code>.
+        ${tutorialSection("4. Connect it in Draw", `
+          Open <strong>Draw</strong>, add a layer, then choose the function, color, and bound. That one row tells Lepton: draw this equation, using this color, only where this bound allows it. If you have not declared anything yet, Draw offers defaults: <code>f1=x</code>, color <code>default=x,x,x</code>, and bound <code>default=1</code>.
         `)}
-        ${tutorialSection("Try changing a graph", `
-          A good first experiment is to change one number at a time. Try replacing <code>sin(x)</code> with <code>sin(3x)</code>, change a color function from <code>120+80*sin(eq)</code> to <code>180+60*cos(eq)</code>, or add a bound like <code>1-(x^2+y^2)</code> to clip a field into a circle.
+        ${tutorialSection("5. Watch results while editing", `
+          Most standard-editor changes update the graph as you type or when a field changes. Use <strong>Refresh</strong> when you want to force a full redraw, especially after larger edits, text-mode imports, or resizing. Try changing <code>sin(x)</code> to <code>sin(3x)</code> and watch the bands tighten.
         `)}
-        ${tutorialSection("Use recursion carefully", `
-          A function can reference itself or mutually reference another function. Lepton expands recursive references up to the max recursion setting, then uses a base value of zero. Large recursive graphs get blue or red flags depending on estimated node count, so recursion can stay powerful without freezing the renderer.
+        ${tutorialSection("6. Reuse variables and recurse carefully", `
+          Function IDs work like variables. If <code>ten=10</code>, then another function can use <code>ten+x</code>. A function can also reference itself or another recursive function. Lepton expands recursion up to <strong>max recursion</strong>, then uses zero as the base value. Very large expansions get blue or red flags before they slow the renderer down too much.
         `)}
-        ${tutorialSection("Understand Text mode", `
-          Text mode is the compact Lepton language. <code>F:</code> lines declare functions, <code>C:</code> colors, <code>R:</code> bounds, <code>D</code> draw layers, and <code>S:</code> settings. Sections are separated by <code>~~~~~</code>. Use it for copy-paste, samples, sharing, and precise bulk edits.
+        ${tutorialSection("7. Use Text mode for sharing", `
+          Text mode shows the same graph as plain Lepton language: <code>F:</code> functions, <code>C:</code> colors, <code>R:</code> bounds, <code>D</code> draw layers, and <code>S:</code> settings, separated by <code>~~~~~</code>. Paste a sample there, press <strong>Apply</strong>, then return to Standard mode to inspect each section visually.
         `)}
       </div>
     </section>
@@ -551,6 +558,7 @@ function searchableReference(field, entries, selected, label) {
 
 function bindEvents() {
   bindSidebarResize();
+  bindHelpTooltips();
 
   root.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -659,7 +667,7 @@ function bindEvents() {
     const initialValue = el.dataset.value ?? "";
 
     const mathField = MQ.MathField(el, {
-      autoCommands: "pi theta sqrt sum",
+      autoCommands: "sqrt sum",
       autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan",
       handlers: {
         edit: () => {
@@ -798,6 +806,94 @@ function bindEvents() {
       renderApp();
     });
   });
+}
+
+function bindHelpTooltips() {
+  root.querySelectorAll("[data-help]").forEach((target) => {
+    const eventTarget = target.closest("button, label") ?? target;
+    eventTarget.addEventListener("mouseenter", () => scheduleHelpTooltip(target));
+    eventTarget.addEventListener("focusin", () => scheduleHelpTooltip(target));
+    eventTarget.addEventListener("mouseleave", () => hideHelpTooltip(target));
+    eventTarget.addEventListener("focusout", () => hideHelpTooltip(target));
+  });
+}
+
+function scheduleHelpTooltip(target) {
+  clearHelpTooltipTimer();
+  activeHelpTarget = target;
+  helpTooltipTimer = setTimeout(() => showHelpTooltip(target), 450);
+}
+
+function clearHelpTooltipTimer() {
+  if (!helpTooltipTimer) return;
+  clearTimeout(helpTooltipTimer);
+  helpTooltipTimer = null;
+}
+
+function helpTooltipElement() {
+  let tooltip = document.querySelector(".help-tooltip-layer");
+  if (tooltip || !document.body) return tooltip;
+  tooltip = document.createElement("div");
+  tooltip.className = "help-tooltip-layer";
+  tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  return tooltip;
+}
+
+function showHelpTooltip(target) {
+  if (activeHelpTarget !== target) return;
+  const text = target.dataset.help ?? "";
+  if (!text.trim()) return;
+  const tooltip = helpTooltipElement();
+  if (!tooltip) return;
+  tooltip.textContent = text;
+  tooltip.hidden = false;
+  tooltip.classList.add("is-visible");
+  tooltip.style.left = "0px";
+  tooltip.style.top = "0px";
+
+  const rect = target.getBoundingClientRect();
+  const margin = 10;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 1;
+  const position = helpTooltipPosition(
+    rect,
+    { width: Math.min(tooltip.offsetWidth, viewportWidth - margin * 2), height: tooltip.offsetHeight },
+    { width: viewportWidth, height: viewportHeight },
+    margin
+  );
+  tooltip.style.left = `${position.left}px`;
+  tooltip.style.top = `${position.top}px`;
+}
+
+function hideHelpTooltip(target = null) {
+  if (target && activeHelpTarget !== target) return;
+  clearHelpTooltipTimer();
+  activeHelpTarget = null;
+  const tooltip = document.querySelector(".help-tooltip-layer");
+  if (!tooltip) return;
+  tooltip.classList.remove("is-visible");
+  tooltip.hidden = true;
+}
+
+function helpTooltipPosition(targetRect, tooltipSize, viewportSize, margin = 10) {
+  const width = Math.min(tooltipSize.width, viewportSize.width - margin * 2);
+  const height = tooltipSize.height;
+  const left = clampNumber(
+    targetRect.left + targetRect.width / 2 - width / 2,
+    margin,
+    Math.max(margin, viewportSize.width - width - margin)
+  );
+  let top = targetRect.top - height - 9;
+  if (top < margin) {
+    top = targetRect.bottom + 9;
+  }
+  top = clampNumber(top, margin, Math.max(margin, viewportSize.height - height - margin));
+  return { left, top };
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function filterReferencePicker(field) {
@@ -1017,25 +1113,29 @@ function resolveFunctionEntry(id) {
 }
 
 function resolveColorEntry(id) {
-  return scene.colors.find((entry) => entry.id === id) ?? (id === DEFAULT_DRAW_COLOR.id ? DEFAULT_DRAW_COLOR : null);
+  return scene.colors.find((entry) => entry.id === id) ??
+    (id === DEFAULT_DRAW_COLOR.id || LEGACY_DEFAULT_COLOR_IDS.has(id) ? DEFAULT_DRAW_COLOR : null);
 }
 
 function resolveBoundaryEntry(id) {
-  return scene.restrictions.find((entry) => entry.id === id) ?? (id === DEFAULT_DRAW_BOUNDARY.id ? DEFAULT_DRAW_BOUNDARY : null);
+  return scene.restrictions.find((entry) => entry.id === id) ??
+    (id === DEFAULT_DRAW_BOUNDARY.id || LEGACY_DEFAULT_BOUNDARY_IDS.has(id) ? DEFAULT_DRAW_BOUNDARY : null);
 }
 
 function drawFunctionEntries() {
-  return scene.functions.some((entry) => entry.id === DEFAULT_DRAW_FUNCTION.id)
-    ? scene.functions
-    : [DEFAULT_DRAW_FUNCTION, ...scene.functions];
+  return scene.functions.length ? scene.functions : [DEFAULT_DRAW_FUNCTION];
 }
 
 function drawColorEntries() {
-  return scene.colors.length ? scene.colors : [DEFAULT_DRAW_COLOR];
+  return scene.colors.some((entry) => entry.id === DEFAULT_DRAW_COLOR.id)
+    ? scene.colors
+    : [DEFAULT_DRAW_COLOR, ...scene.colors];
 }
 
 function drawBoundaryEntries() {
-  return scene.restrictions.length ? scene.restrictions : [DEFAULT_DRAW_BOUNDARY];
+  return scene.restrictions.some((entry) => entry.id === DEFAULT_DRAW_BOUNDARY.id)
+    ? scene.restrictions
+    : [DEFAULT_DRAW_BOUNDARY, ...scene.restrictions];
 }
 
 function sceneFunctionEnv(includeDefault = false) {
@@ -1791,22 +1891,16 @@ function validateScene() {
   diagnostics.functions = scene.functions.map((entry) => {
     const idResult = validateEntryId(entry.id, "Function", env);
     if (idResult.status === "invalid") return idResult;
-    const duplicateWarning = duplicateIdWarning(entry.id, "Function", duplicateIds.functions);
+    const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Function", duplicateIds.functions);
     const result = validateExpression(entry.expression, env, [entry.id]);
-    if (result.status === "valid" && duplicateWarning) {
-      return duplicateWarning;
-    }
-    if (result.status === "valid" && RESERVED_FUNCTION_NAMES.has(entry.id)) {
-      return { status: "warning", message: `"${entry.id}" shadows a built-in function name` };
-    }
-    return result;
+    return combineDiagnostics([duplicateDiagnostic, idResult, result]);
   });
   diagnostics.colors = scene.colors.map((entry) => {
     const idResult = validateEntryId(entry.id, "Color", env);
     if (idResult.status === "invalid") return idResult;
-    const duplicateWarning = duplicateIdWarning(entry.id, "Color", duplicateIds.colors);
+    const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Color", duplicateIds.colors);
     return combineDiagnostics([
-      duplicateWarning,
+      duplicateDiagnostic,
       idResult,
       validateExpression(entry.red, env),
       validateExpression(entry.green, env),
@@ -1816,8 +1910,8 @@ function validateScene() {
   diagnostics.restrictions = scene.restrictions.map((entry) => {
     const idResult = validateEntryId(entry.id, "Boundary", env);
     if (idResult.status === "invalid") return idResult;
-    const duplicateWarning = duplicateIdWarning(entry.id, "Boundary", duplicateIds.restrictions);
-    return combineDiagnostics([duplicateWarning, idResult, validateExpression(entry.expression, env)]);
+    const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Boundary", duplicateIds.restrictions);
+    return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, env)]);
   });
   diagnostics.draws = scene.draws.map((entry) => {
     if (entry.hidden) {
@@ -1864,18 +1958,28 @@ function duplicateEntryIds(entries) {
   return new Set([...counts].filter(([, count]) => count > 1).map(([id]) => id));
 }
 
-function duplicateIdWarning(id, label, duplicates) {
+function duplicateIdDiagnostic(id, label, duplicates) {
   return duplicates.has(id.trim())
-    ? { status: "warning", message: `${label} name "${id}" is duplicated` }
+    ? { status: "invalid", message: `${label} name "${id}" is duplicated` }
     : null;
 }
 
 function validateEntryId(id, label, env = {}) {
-  if (!id.trim()) {
+  const trimmed = id.trim();
+  if (!trimmed) {
     return { status: "invalid", message: `${label} name cannot be blank` };
   }
-  if (!/^[A-Za-z_]\w*$/.test(id)) {
+  if (!/^[A-Za-z_]\w*$/.test(trimmed)) {
     return { status: "invalid", message: `${label} name must start with a letter or underscore` };
+  }
+  if (EXACT_RESERVED_NAMES.has(trimmed)) {
+    return { status: "invalid", message: `${label} name "${trimmed}" shadows a built-in name` };
+  }
+  const substring = [...SUBSTRING_RESERVED_NAMES]
+    .sort((left, right) => right.length - left.length)
+    .find((name) => trimmed !== name && trimmed.includes(name));
+  if (substring) {
+    return { status: "warning", message: `${label} name "${trimmed}" contains reserved name "${substring}"` };
   }
   return { status: "valid", message: `${label} name is valid` };
 }

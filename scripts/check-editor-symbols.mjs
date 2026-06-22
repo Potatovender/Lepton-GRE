@@ -131,9 +131,10 @@ check("pi inside an identifier does not corrupt reference compilation", () => {
   assert(glsl === "(10.0)+1.0", glsl);
 });
 
-check("identifiers containing reserved names are not yellow-flagged", () => {
+check("identifiers containing reserved names are yellow-flagged without corrupting references", () => {
   const idResult = sandbox.validateEntryId("tempimaginary", "Function");
-  assert(idResult.status === "valid", JSON.stringify(idResult));
+  assert(idResult.status === "warning", JSON.stringify(idResult));
+  assert(idResult.message.includes("pi"), idResult.message);
 
   const expressionResult = sandbox.validateExpression("tempimaginary+1", { tempimaginary: "10" });
   assert(expressionResult.status === "valid", JSON.stringify(expressionResult));
@@ -142,7 +143,7 @@ check("identifiers containing reserved names are not yellow-flagged", () => {
   assert(eResult.status === "valid", JSON.stringify(eResult));
 });
 
-check("exact built-in function names are still yellow-flagged", () => {
+check("exact built-in function names are red-flagged", () => {
   sandbox.__debugSetScene({
     ...structuredClone(sandbox.__debugScene),
     functions: [{ id: "sin", expression: "x" }],
@@ -151,11 +152,11 @@ check("exact built-in function names are still yellow-flagged", () => {
     draws: []
   });
   const diagnostics = sandbox.validateScene();
-  assert(diagnostics.functions[0].status === "warning", JSON.stringify(diagnostics.functions[0]));
+  assert(diagnostics.functions[0].status === "invalid", JSON.stringify(diagnostics.functions[0]));
   assert(diagnostics.functions[0].message.includes("shadows"), diagnostics.functions[0].message);
 });
 
-check("duplicate entry ids are yellow-flagged", () => {
+check("duplicate entry ids are red-flagged", () => {
   sandbox.__debugSetScene({
     ...structuredClone(sandbox.__debugScene),
     functions: [
@@ -173,9 +174,32 @@ check("duplicate entry ids are yellow-flagged", () => {
     draws: []
   });
   const diagnostics = sandbox.validateScene();
-  assert(diagnostics.functions.every((item) => item.status === "warning"), JSON.stringify(diagnostics.functions));
-  assert(diagnostics.colors.every((item) => item.status === "warning"), JSON.stringify(diagnostics.colors));
-  assert(diagnostics.restrictions.every((item) => item.status === "warning"), JSON.stringify(diagnostics.restrictions));
+  assert(diagnostics.functions.every((item) => item.status === "invalid"), JSON.stringify(diagnostics.functions));
+  assert(diagnostics.colors.every((item) => item.status === "invalid"), JSON.stringify(diagnostics.colors));
+  assert(diagnostics.restrictions.every((item) => item.status === "invalid"), JSON.stringify(diagnostics.restrictions));
+});
+
+check("whole-token constants render as LaTeX without splitting longer identifiers", () => {
+  const latex = sandbox.latexSourceFromExpression("twopi+pifour+pi");
+  assert(latex === "twopi+pifour+\\pi", latex);
+});
+
+check("help tooltip position clamps inside viewport edges", () => {
+  const leftEdge = sandbox.helpTooltipPosition(
+    { left: 4, right: 54, top: 90, bottom: 110, width: 50, height: 20 },
+    { width: 320, height: 54 },
+    { width: 360, height: 640 }
+  );
+  assert(leftEdge.left >= 10, JSON.stringify(leftEdge));
+  assert(leftEdge.left + 320 <= 350, JSON.stringify(leftEdge));
+
+  const rightEdge = sandbox.helpTooltipPosition(
+    { left: 330, right: 356, top: 90, bottom: 110, width: 26, height: 20 },
+    { width: 320, height: 54 },
+    { width: 360, height: 640 }
+  );
+  assert(rightEdge.left >= 10, JSON.stringify(rightEdge));
+  assert(rightEdge.left + 320 <= 350, JSON.stringify(rightEdge));
 });
 
 check("recursion base case returns zero", () => {
@@ -266,6 +290,24 @@ check("draw layers can use virtual default function color and boundary", () => {
   const imported = sandbox.importScene(`~~~~~
 ~~~~~
 ~~~~~
+D~f1~default~default~0
+~~~~~
+S:x_min~-1
+S:x_max~1
+S:y_min~-1
+S:y_max~1
+S:max_recursion~20
+S:angle_mode~radians`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.draws[0].status === "valid", JSON.stringify(diagnostics.draws[0]));
+  assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
+});
+
+check("legacy virtual default draw ids still resolve", () => {
+  const imported = sandbox.importScene(`~~~~~
+~~~~~
+~~~~~
 D~f1~c1~rest~0
 ~~~~~
 S:x_min~-1
@@ -290,8 +332,10 @@ check("new draw layer uses virtual defaults on a blank scene", () => {
   });
   sandbox.addEntry("draws");
   assert(sandbox.__debugScene.draws[0].equationId === "f1", JSON.stringify(sandbox.__debugScene.draws[0]));
-  assert(sandbox.__debugScene.draws[0].colorId === "c1", JSON.stringify(sandbox.__debugScene.draws[0]));
-  assert(sandbox.__debugScene.draws[0].restrictionId === "rest", JSON.stringify(sandbox.__debugScene.draws[0]));
+  assert(sandbox.__debugScene.draws[0].colorId === "default", JSON.stringify(sandbox.__debugScene.draws[0]));
+  assert(sandbox.__debugScene.draws[0].restrictionId === "default", JSON.stringify(sandbox.__debugScene.draws[0]));
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.draws[0].status === "valid", JSON.stringify(diagnostics.draws[0]));
 });
 
 check("draw layers can be reordered", () => {

@@ -891,14 +891,10 @@ select {
   text-underline-offset: 3px;
 }
 
-.help-marker::after,
-.help-dash::after {
-  content: attr(data-help);
-  position: absolute;
-  z-index: 30;
-  left: 50%;
-  bottom: calc(100% + 9px);
-  width: min(260px, 72vw);
+.help-tooltip-layer {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(320px, calc(100vw - 20px));
   padding: 8px 10px;
   border: 1px solid #cfd5df;
   border-radius: 6px;
@@ -910,18 +906,13 @@ select {
   line-height: 1.35;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 3px);
-  transition: opacity 0.16s ease 0.45s, transform 0.16s ease 0.45s;
+  overflow-wrap: anywhere;
   white-space: normal;
+  transition: opacity 0.16s ease;
 }
 
-.help-marker:hover::after,
-.help-marker:focus-visible::after,
-.help-dash:hover::after,
-.tab-button:focus-visible .help-dash::after,
-.display-button:focus-visible .help-dash::after {
+.help-tooltip-layer.is-visible {
   opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 .loading-note {
@@ -1163,6 +1154,8 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.35;
 }
 
 .math-box:focus,
