@@ -16,6 +16,23 @@ const DEFAULT_SCENE = {
   }
 };
 
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260622-route-icon";
+
+function ensureLeptonFavicon() {
+  const iconHref =
+    typeof URL !== "undefined" && typeof document !== "undefined" ? new URL(LEPTON_ICON_PATH, document.baseURI).href : LEPTON_ICON_PATH;
+  for (const rel of ["icon", "shortcut icon", "apple-touch-icon"]) {
+    let link = document.querySelector(`link[rel="${rel}"]`);
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = rel;
+      document.head.append(link);
+    }
+    link.href = iconHref;
+    if (rel !== "apple-touch-icon") link.type = "image/png";
+  }
+}
+
 const tabs = [
   ["functions", "Functions"],
   ["colors", "Colors"],
@@ -4335,6 +4352,7 @@ window.addEventListener("resize", () => {
   renderScene();
 });
 document.addEventListener("keydown", handleGlobalHistoryKeydown);
+ensureLeptonFavicon();
 
 if (typeof URLSearchParams !== "undefined" && window.location && new URLSearchParams(window.location.search).get("capture") === "1") {
   document.body.classList.add("capture-mode");

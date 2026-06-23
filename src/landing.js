@@ -1,3 +1,22 @@
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260622-route-icon";
+
+function ensureLeptonFavicon() {
+  const iconHref =
+    typeof URL !== "undefined" && typeof document !== "undefined" ? new URL(LEPTON_ICON_PATH, document.baseURI).href : LEPTON_ICON_PATH;
+  for (const rel of ["icon", "shortcut icon", "apple-touch-icon"]) {
+    let link = document.querySelector(`link[rel="${rel}"]`);
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = rel;
+      document.head.append(link);
+    }
+    link.href = iconHref;
+    if (rel !== "apple-touch-icon") link.type = "image/png";
+  }
+}
+
+ensureLeptonFavicon();
+
 const sampleScenes = {
   fire: `set x_min = -15
 set x_max = 15

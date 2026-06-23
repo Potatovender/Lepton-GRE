@@ -524,10 +524,12 @@ select {
 }
 
 .mathquill-editor {
+  min-width: 0;
+  max-width: 100%;
   min-height: 0;
   border: none;
   background: transparent;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .mathquill-editor-small {
@@ -536,7 +538,9 @@ select {
 
 .mathquill-field {
   display: block;
+  min-width: 0;
   width: 100% !important;
+  max-width: 100% !important;
   box-sizing: border-box !important;
   background: #ffffff !important;
   color: #202938 !important;
@@ -591,8 +595,14 @@ select {
 
 .mathquill-field .mq-root-block {
   min-width: 100%;
-  width: max-content;
+  width: max-content !important;
+  max-width: none !important;
+  overflow: visible !important;
   white-space: nowrap;
+}
+
+.mathquill-field .mq-non-leaf {
+  max-width: none !important;
 }
 
 .mq-root::selection,
