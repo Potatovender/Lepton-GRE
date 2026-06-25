@@ -55,6 +55,7 @@ set y_max = 15
 set max_recursion = 100
 set angle_mode = radians
 set background_color = 0
+set ensure_square_grid = True
 function eq = sin(x)+cos(y)
 colour rgb = eq~eq~eq
 boundary rest = 1~False

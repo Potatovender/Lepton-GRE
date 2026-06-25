@@ -12,7 +12,8 @@ const DEFAULT_SCENE = {
     yPoints: 120,
     maxRecursion: 100,
     angleMode: "radians",
-    backgroundColor: "0"
+    backgroundColor: "0",
+    ensureSquareGrid: true
   }
 };
 
@@ -213,6 +214,9 @@ const editorHistory = new Map();
 const sceneHistory = { undo: [], redo: [], last: "" };
 const entryScrollTops = new Map();
 let pendingScrollTarget = null;
+let keyboardOpen = false;
+let keyboardTab = "pad";
+let activeKeyboardTarget = null;
 let helpTooltipTimer = null;
 let activeHelpTarget = null;
 
@@ -256,6 +260,8 @@ function renderApp() {
         <canvas class="grid-canvas"></canvas>
         <div class="render-overlay">${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
       </section>
+      <button class="keyboard-toggle" data-action="toggle-keyboard" type="button" aria-pressed="${keyboardOpen}" aria-label="${keyboardOpen ? "Hide keyboard" : "Show keyboard"}">⌨</button>
+      ${keyboardOpen ? renderKeyboardPanel() : ""}
     </main>
   `;
   if (root.dataset) root.dataset.panelKey = scrollKey;
@@ -268,6 +274,90 @@ function renderApp() {
 
 function panelScrollKey() {
   return displayMode === "text" ? "text" : activeTab;
+}
+
+function sortLabel(sort) {
+  if (sort === "az") return "ID A-Z";
+  if (sort === "za") return "ID Z-A";
+  return "In order";
+}
+
+function nextSort(sort) {
+  if (sort === "custom") return "az";
+  if (sort === "az") return "za";
+  return "custom";
+}
+
+function keyboardMode() {
+  const target = activeKeyboardElement();
+  return target?.classList?.contains("entry-id") ? "id" : "math";
+}
+
+function activeKeyboardElement() {
+  const active = document.activeElement;
+  if (active?.matches?.("[data-field]")) return active;
+  if (activeKeyboardTarget) {
+    const target = root.querySelector(`[data-field="${cssEscape(activeKeyboardTarget)}"]`);
+    if (target) return target;
+  }
+  return root.querySelector(".mathquill-field[data-field]");
+}
+
+function renderKeyboardPanel() {
+  const mode = keyboardMode();
+  return `
+    <section class="keyboard-panel" aria-label="On-screen keyboard">
+      <div class="keyboard-header">
+        <strong>${mode === "id" ? "ID keyboard" : "Math keyboard"}</strong>
+        <button class="keyboard-close" data-action="close-keyboard" type="button" aria-label="Hide keyboard">×</button>
+      </div>
+      ${mode === "id" ? renderIdKeyboard() : renderMathKeyboard()}
+    </section>
+  `;
+}
+
+function renderIdKeyboard() {
+  const rows = ["abcdefghi", "jklmnopqr", "stuvwxyz_", "0123456789"];
+  return `
+    <div class="keyboard-grid keyboard-grid-letters">
+      ${rows.flatMap((row) => [...row].map((key) => keyboardButton(key, key))).join("")}
+      ${keyboardButton("Backspace", "⌫", "keyboard-wide")}
+      ${keyboardButton("ArrowLeft", "←")}
+      ${keyboardButton("ArrowRight", "→")}
+    </div>
+  `;
+}
+
+function renderMathKeyboard() {
+  const primary = [
+    "7", "8", "9", "+", "-", "4", "5", "6", "*", "/", "1", "2", "3", "^", "sqrt", "0", ".", "x", "y", "pi",
+    "(", ")", "sin", "cos", "tan", "abs", "e", "Backspace", "ArrowLeft", "ArrowRight"
+  ];
+  const extra = Object.keys(LATEX_FUNCTIONS).filter((name) => !primary.includes(name) && !["frac"].includes(name));
+  const variables = scene.functions.map((entry) => entry.id).filter(Boolean);
+  return `
+    <div class="keyboard-tabs" role="tablist" aria-label="Keyboard tabs">
+      <button class="keyboard-tab" data-keyboard-tab="pad" aria-selected="${keyboardTab === "pad"}" type="button">Pad</button>
+      <button class="keyboard-tab" data-keyboard-tab="variables" aria-selected="${keyboardTab === "variables"}" type="button">Variables</button>
+    </div>
+    ${keyboardTab === "variables" ? `
+      <div class="keyboard-library">
+        ${variables.length ? variables.map((id) => keyboardButton(id, id)).join("") : `<span class="keyboard-empty">No variables yet</span>`}
+      </div>
+    ` : `
+      <div class="keyboard-grid">
+        ${primary.map((key) => keyboardButton(key, key === "Backspace" ? "⌫" : key === "ArrowLeft" ? "←" : key === "ArrowRight" ? "→" : key)).join("")}
+      </div>
+      <details class="keyboard-extra">
+        <summary>More functions</summary>
+        <div class="keyboard-library">${extra.map((key) => keyboardButton(key, key)).join("")}</div>
+      </details>
+    `}
+  `;
+}
+
+function keyboardButton(value, label, className = "") {
+  return `<button class="keyboard-key ${className}" data-key="${escapeHtml(value)}" type="button">${escapeHtml(label)}</button>`;
 }
 
 function rememberEntryScroll() {
@@ -355,14 +445,27 @@ function closestMathFieldTarget(target) {
 
 function keepHorizontalCaretVisible(field) {
   const cursor = field.querySelector(".mq-cursor");
-  if (!cursor) return;
+  const selection = field.querySelector(".mq-selection");
+  const target = cursor ?? selection;
+  if (!target) return;
   const fieldRect = field.getBoundingClientRect();
-  const cursorRect = cursor.getBoundingClientRect();
+  const cursorRect = target.getBoundingClientRect();
   const inset = 18;
   if (cursorRect.right > fieldRect.right - inset) {
     field.scrollLeft += cursorRect.right - fieldRect.right + inset;
   } else if (cursorRect.left < fieldRect.left + inset) {
     field.scrollLeft -= fieldRect.left + inset - cursorRect.left;
+  }
+}
+
+function scrollFieldNearPointer(field, event) {
+  if (field.scrollWidth <= field.clientWidth) return;
+  const rect = field.getBoundingClientRect();
+  const edge = 28;
+  if (event.clientX > rect.right - edge) {
+    field.scrollLeft += Math.max(8, event.clientX - (rect.right - edge));
+  } else if (event.clientX < rect.left + edge) {
+    field.scrollLeft -= Math.max(8, rect.left + edge - event.clientX);
   }
 }
 
@@ -379,6 +482,87 @@ function keepTextInputCaretVisible(field) {
   if (field.selectionStart !== field.selectionEnd) return;
   if (field.selectionStart === field.value.length) {
     field.scrollLeft = field.scrollWidth;
+  }
+}
+
+function insertIntoTextField(field, text) {
+  field.focus();
+  const start = field.selectionStart ?? field.value.length;
+  const end = field.selectionEnd ?? start;
+  field.setRangeText(text, start, end, "end");
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  keepTextInputCaretVisible(field);
+}
+
+function activateKeyboardTarget(target) {
+  const previousTarget = activeKeyboardTarget;
+  const field = target?.closest?.("[data-field]");
+  if (field) activeKeyboardTarget = field.dataset.field;
+  if (keyboardOpen && previousTarget !== activeKeyboardTarget) {
+    renderApp();
+  }
+}
+
+function syncMathApiField(field) {
+  const mathField = field.__mathField;
+  if (!mathField) return;
+  field.dataset.value = mathField.latex();
+  updateField(field);
+  const diagnostics = validateScene();
+  updateStatusLights(diagnostics);
+  renderScene(diagnostics);
+  requestAnimationFrame(() => keepHorizontalCaretVisible(field));
+}
+
+function insertKeyboardValue(value) {
+  const target = activeKeyboardElement();
+  if (!target) return;
+  if (target.classList?.contains("mathquill-field")) {
+    const mathField = target.__mathField;
+    if (!mathField) return;
+    mathField.focus();
+    if (value === "Backspace" || value === "ArrowLeft" || value === "ArrowRight") {
+      mathField.keystroke(value);
+    } else if (value === "sqrt") {
+      mathField.cmd("\\sqrt");
+    } else if (value === "pi") {
+      mathField.cmd("\\pi");
+    } else if (LATEX_FUNCTIONS[value] && value !== "frac") {
+      mathField.typedText(`${value}(`);
+    } else {
+      mathField.typedText(value);
+    }
+    syncMathApiField(target);
+    return;
+  }
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    if (value === "Backspace") {
+      const start = target.selectionStart ?? target.value.length;
+      const end = target.selectionEnd ?? start;
+      if (start !== end) {
+        target.setRangeText("", start, end, "end");
+      } else if (start > 0) {
+        target.setRangeText("", start - 1, end, "end");
+      }
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+    } else if (value === "ArrowLeft" || value === "ArrowRight") {
+      const delta = value === "ArrowLeft" ? -1 : 1;
+      const next = Math.max(0, Math.min(target.value.length, (target.selectionStart ?? target.value.length) + delta));
+      target.setSelectionRange(next, next);
+    } else if (/^[A-Za-z0-9_]$/.test(value)) {
+      insertIntoTextField(target, value);
+    }
+    keepTextInputCaretVisible(target);
+  }
+}
+
+function handleDocumentSelectionScroll() {
+  const target = activeKeyboardElement();
+  if (!target) return;
+  if (target.classList?.contains("mathquill-field")) {
+    keepHorizontalCaretVisible(target);
+  } else if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    keepTextInputCaretVisible(target);
   }
 }
 
@@ -472,6 +656,10 @@ function renderPanel() {
       ${settingsField("yMin", "y minimum")}
       ${settingsField("yMax", "y maximum")}
       ${settingsField("maxRecursion", "max recursion depth")}
+      <label class="inline-check">
+        <input type="checkbox" data-field="settings.ensureSquareGrid" ${scene.settings.ensureSquareGrid !== false ? "checked" : ""} />
+        ensure square grid
+      </label>
       <label class="settings-row">
         <span>Angle mode</span>
         <select class="compact-field" data-field="settings.angleMode">
@@ -502,11 +690,7 @@ function listControlBar(kind, label) {
   return `
     <div class="list-controls" data-list-controls="${kind}">
       <input class="list-search compact-field" data-entry-search="${kind}" value="${escapeHtml(state.query)}" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)}" />
-      <select class="list-sort compact-field" data-entry-sort="${kind}" aria-label="Sort ${escapeHtml(kind)} by ID">
-        <option value="custom" ${state.sort === "custom" ? "selected" : ""}>In order</option>
-        <option value="az" ${state.sort === "az" ? "selected" : ""}>ID A-Z</option>
-        <option value="za" ${state.sort === "za" ? "selected" : ""}>ID Z-A</option>
-      </select>
+      <button class="list-sort compact-field" data-entry-sort="${kind}" type="button" aria-label="Sort ${escapeHtml(kind)} by ID: ${sortLabel(state.sort)}">${sortLabel(state.sort)}</button>
     </div>
   `;
 }
@@ -619,6 +803,10 @@ function searchableReference(field, entries, selected, label) {
 function bindEvents() {
   bindSidebarResize();
   bindHelpTooltips();
+  root.onfocusin = (event) => activateKeyboardTarget(event.target);
+  root.onclick = (event) => {
+    if (event.target?.closest?.("[data-field]")) activateKeyboardTarget(event.target);
+  };
 
   root.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -672,11 +860,31 @@ function bindEvents() {
     });
   });
 
-  root.querySelectorAll("[data-entry-sort]").forEach((field) => {
-    field.addEventListener("change", () => {
-      listControls[field.dataset.entrySort].sort = field.value;
+  root.querySelectorAll("[data-entry-sort]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const kind = button.dataset.entrySort;
+      listControls[kind].sort = nextSort(listControls[kind].sort);
       renderApp();
     });
+  });
+
+  root.querySelector('[data-action="toggle-keyboard"]')?.addEventListener("click", () => {
+    keyboardOpen = !keyboardOpen;
+    renderApp();
+  });
+  root.querySelector('[data-action="close-keyboard"]')?.addEventListener("click", () => {
+    keyboardOpen = false;
+    renderApp();
+  });
+  root.querySelectorAll("[data-keyboard-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      keyboardTab = button.dataset.keyboardTab;
+      renderApp();
+    });
+  });
+  root.querySelectorAll("[data-key]").forEach((button) => {
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => insertKeyboardValue(button.dataset.key));
   });
 
   root.querySelectorAll("[data-reference-filter]").forEach((field) => {
@@ -776,12 +984,22 @@ function bindEvents() {
     });
 
     mathField.latex(initialValue);
+    el.__mathField = mathField;
   });
 
   root.querySelectorAll(".mathquill-field").forEach((field) => {
+    field.addEventListener("focusin", () => activateKeyboardTarget(field));
     field.addEventListener("keydown", (event) => {
-      if (!handleFieldHistoryKeydown(event)) return;
-      event.preventDefault();
+      if (handleFieldHistoryKeydown(event)) {
+        event.preventDefault();
+        return;
+      }
+      requestAnimationFrame(() => keepHorizontalCaretVisible(field));
+    });
+    field.addEventListener("keyup", () => requestAnimationFrame(() => keepHorizontalCaretVisible(field)));
+    field.addEventListener("mouseup", () => requestAnimationFrame(() => keepHorizontalCaretVisible(field)));
+    field.addEventListener("pointermove", (event) => {
+      if (event.buttons) scrollFieldNearPointer(field, event);
     });
     field.addEventListener(
       "wheel",
@@ -793,7 +1011,13 @@ function bindEvents() {
   });
 
   root.querySelectorAll("input, textarea").forEach((field) => {
+    field.addEventListener("focusin", () => activateKeyboardTarget(field));
     field.addEventListener("input", () => keepTextInputCaretVisible(field));
+    field.addEventListener("keyup", () => keepTextInputCaretVisible(field));
+    field.addEventListener("mouseup", () => keepTextInputCaretVisible(field));
+    field.addEventListener("pointermove", (event) => {
+      if (event.buttons) scrollFieldNearPointer(field, event);
+    });
     field.addEventListener(
       "wheel",
       (event) => {
@@ -1161,7 +1385,11 @@ function updateField(field) {
   if (property === "id") value = value.trim();
 
   if (collection === "settings") {
-    scene.settings[rawIndex] = ["angleMode", "backgroundColor"].includes(rawIndex) ? value : Number(value);
+    if (rawIndex === "ensureSquareGrid") {
+      scene.settings[rawIndex] = Boolean(value);
+    } else {
+      scene.settings[rawIndex] = ["angleMode", "backgroundColor"].includes(rawIndex) ? value : Number(value);
+    }
     if (["xMin", "xMax", "yMin", "yMax"].includes(rawIndex)) {
       viewport = sceneViewport();
       saveViewport();
@@ -1311,6 +1539,11 @@ function renderScene(diagnostics = validateScene()) {
     window.__leptonRenderHit = (window.__leptonRenderHit ?? 0) + 1;
     const canvas = root.querySelector(".grid-canvas");
     if (!canvas) return;
+    const viewportIssue = diagnostics.settings?.find((item) => item.status === "invalid");
+    if (viewportIssue) {
+      drawErrorState(canvas, viewportIssue.message);
+      return;
+    }
 
     if (renderSceneWebGl(canvas)) {
       return;
@@ -1611,6 +1844,17 @@ function drawGrid(ctx, width, height, solidBackground = null) {
 }
 
 function displayViewportForSize(baseViewport, width, height) {
+  if (!isValidViewport(baseViewport)) {
+    baseViewport = {
+      xMin: DEFAULT_SCENE.settings.xMin,
+      xMax: DEFAULT_SCENE.settings.xMax,
+      yMin: DEFAULT_SCENE.settings.yMin,
+      yMax: DEFAULT_SCENE.settings.yMax
+    };
+  }
+  if (scene.settings.ensureSquareGrid === false) {
+    return { ...baseViewport };
+  }
   const targetAspect = Math.max(1, width) / Math.max(1, height);
   const xRange = baseViewport.xMax - baseViewport.xMin;
   const yRange = baseViewport.yMax - baseViewport.yMin;
@@ -1972,9 +2216,11 @@ function validateScene() {
     colors: [],
     restrictions: [],
     draws: [],
+    settings: [],
     hasErrors: false,
     summary: "GLSL ready"
   };
+  diagnostics.settings = [viewportDiagnostic()];
 
   diagnostics.functions = scene.functions.map((entry) => {
     const idResult = validateEntryId(entry.id, "Function", env);
@@ -2027,13 +2273,32 @@ function validateScene() {
       : { status: "valid", message: "Draw layer is valid" };
   });
 
-  const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.draws];
+  const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.draws, ...diagnostics.settings];
   const firstError = all.find((item) => item.status === "invalid");
   const firstInfo = all.find((item) => item.status === "info");
   const firstWarning = all.find((item) => item.status === "warning");
   diagnostics.hasErrors = Boolean(firstError);
   diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
+}
+
+function viewportDiagnostic() {
+  const valid = isValidViewport(sceneViewport());
+  if (valid) return { status: "valid", message: "Viewport bounds are valid" };
+  return scene.settings.ensureSquareGrid !== false
+    ? { status: "warning", message: "Invalid bounds; square grid is using the default viewport" }
+    : { status: "invalid", message: "Invalid bounds: minimum values must be less than maximum values" };
+}
+
+function isValidViewport(candidate) {
+  return (
+    Number.isFinite(candidate.xMin) &&
+    Number.isFinite(candidate.xMax) &&
+    Number.isFinite(candidate.yMin) &&
+    Number.isFinite(candidate.yMax) &&
+    candidate.xMin < candidate.xMax &&
+    candidate.yMin < candidate.yMax
+  );
 }
 
 function duplicateEntryIds(entries) {
@@ -3969,13 +4234,24 @@ function normalizeAngleMode(value) {
 }
 
 function setSceneSetting(target, key, value) {
-  const settingMap = { x_min: "xMin", x_max: "xMax", y_min: "yMin", y_max: "yMax", max_recursion: "maxRecursion", angle_mode: "angleMode", background_color: "backgroundColor" };
+  const settingMap = {
+    x_min: "xMin",
+    x_max: "xMax",
+    y_min: "yMin",
+    y_max: "yMax",
+    max_recursion: "maxRecursion",
+    angle_mode: "angleMode",
+    background_color: "backgroundColor",
+    ensure_square_grid: "ensureSquareGrid"
+  };
   const mapped = settingMap[String(key ?? "").trim()];
   if (!mapped) return;
   if (mapped === "angleMode") {
     target.settings[mapped] = normalizeAngleMode(value);
   } else if (mapped === "backgroundColor") {
     target.settings[mapped] = String(value ?? "").trim() || "0";
+  } else if (mapped === "ensureSquareGrid") {
+    target.settings[mapped] = parseLeptonBoolean(value);
   } else {
     const number = Number(value);
     if (Number.isFinite(number)) target.settings[mapped] = number;
@@ -3991,6 +4267,7 @@ function exportScene() {
     `set max_recursion = ${scene.settings.maxRecursion}`,
     `set angle_mode = ${normalizeAngleMode(scene.settings.angleMode)}`,
     `set background_color = ${scene.settings.backgroundColor ?? "0"}`,
+    `set ensure_square_grid = ${formatLeptonBoolean(scene.settings.ensureSquareGrid !== false)}`,
     ...scene.functions.map((entry) => `function ${entry.id} = ${textModeExpression(entry.expression)}`),
     ...scene.colors.map((entry) => `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
     ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`),
@@ -4395,6 +4672,7 @@ window.addEventListener("resize", () => {
   renderScene();
 });
 document.addEventListener("keydown", handleGlobalHistoryKeydown);
+document.addEventListener("selectionchange", () => requestAnimationFrame(handleDocumentSelectionScroll));
 ensureLeptonFavicon();
 
 if (typeof URLSearchParams !== "undefined" && window.location && new URLSearchParams(window.location.search).get("capture") === "1") {
