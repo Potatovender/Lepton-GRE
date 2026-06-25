@@ -16,7 +16,7 @@ const DEFAULT_SCENE = {
   }
 };
 
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260622-route-icon";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260625-ui-polish";
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -160,7 +160,7 @@ const HELP_TEXT = {
   applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
   refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
   backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
-  boundaryDirection: "Unchecked draws where this bound is greater than or equal to zero. Checked draws where it is less than or equal to zero.",
+  boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
 };
 
@@ -353,6 +353,35 @@ function closestMathFieldTarget(target) {
   return element?.closest?.(".mathquill-field, .mq-editable-field") ?? null;
 }
 
+function keepHorizontalCaretVisible(field) {
+  const cursor = field.querySelector(".mq-cursor");
+  if (!cursor) return;
+  const fieldRect = field.getBoundingClientRect();
+  const cursorRect = cursor.getBoundingClientRect();
+  const inset = 18;
+  if (cursorRect.right > fieldRect.right - inset) {
+    field.scrollLeft += cursorRect.right - fieldRect.right + inset;
+  } else if (cursorRect.left < fieldRect.left + inset) {
+    field.scrollLeft -= fieldRect.left + inset - cursorRect.left;
+  }
+}
+
+function scrollFieldHorizontally(field, event) {
+  if (field.scrollWidth <= field.clientWidth) return false;
+  const horizontal = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+  if (!horizontal) return false;
+  field.scrollLeft += horizontal;
+  return true;
+}
+
+function keepTextInputCaretVisible(field) {
+  if (field.selectionStart == null || field.selectionEnd == null) return;
+  if (field.selectionStart !== field.selectionEnd) return;
+  if (field.selectionStart === field.value.length) {
+    field.scrollLeft = field.scrollWidth;
+  }
+}
+
 function renderPanel() {
   const diagnostics = validateScene();
 
@@ -375,11 +404,11 @@ function renderPanel() {
   if (activeTab === "functions") {
     return [
       tutorialCoachmark(),
-      listControlBar("functions", "Search functions"),
+      listControlBar("functions", "functions"),
       ...visibleEntries(scene.functions, "functions").map(
         ([entry, index]) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", `
-          <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Function id" />
-          ${mathEditor(`functions.${index}.expression`, entry.expression, "Function expression")}
+          <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Function id" />
+          ${mathEditor(`functions.${index}.expression`, entry.expression, "Function expression", false, "enter function here")}
         `, "functions", index)
       ),
       addRow("Add function", "functions")
@@ -389,13 +418,13 @@ function renderPanel() {
   if (activeTab === "colors") {
     return [
       tutorialCoachmark(),
-      listControlBar("colors", "Search colors"),
+      listControlBar("colors", "colors"),
       ...visibleEntries(scene.colors, "colors").map(
         ([entry, index]) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
-          <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Color id" />
-          <label class="channel-row"><span class="channel-label">r</span>${searchableReference(`colors.${index}.red`, scene.functions, entry.red, "Red function")}</label>
-          <label class="channel-row"><span class="channel-label">g</span>${searchableReference(`colors.${index}.green`, scene.functions, entry.green, "Green function")}</label>
-          <label class="channel-row"><span class="channel-label">b</span>${searchableReference(`colors.${index}.blue`, scene.functions, entry.blue, "Blue function")}</label>
+          <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Color id" />
+          <label class="channel-row"><span class="channel-label">red channel</span>${searchableReference(`colors.${index}.red`, scene.functions, entry.red, "Red function")}</label>
+          <label class="channel-row"><span class="channel-label">green channel</span>${searchableReference(`colors.${index}.green`, scene.functions, entry.green, "Green function")}</label>
+          <label class="channel-row"><span class="channel-label">blue channel</span>${searchableReference(`colors.${index}.blue`, scene.functions, entry.blue, "Blue function")}</label>
         `, "colors", index)
       ),
       addRow("Add color", "colors")
@@ -405,10 +434,10 @@ function renderPanel() {
   if (activeTab === "restrictions") {
     return [
       tutorialCoachmark(),
-      listControlBar("restrictions", "Search bounds"),
+      listControlBar("restrictions", "bounds"),
       ...visibleEntries(scene.restrictions, "restrictions").map(
         ([entry, index]) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
-          <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" aria-label="Restriction id" />
+          <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Restriction id" />
           <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, scene.functions, entry.expression, "Boundary function")}</label>
           <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> draw when less than or equal to 0 ${helpMark("boundaryDirection")}</label>
         `, "restrictions", index)
@@ -442,7 +471,7 @@ function renderPanel() {
       ${settingsField("xMax", "x maximum")}
       ${settingsField("yMin", "y minimum")}
       ${settingsField("yMax", "y maximum")}
-      ${settingsField("maxRecursion", "max recursion")}
+      ${settingsField("maxRecursion", "max recursion depth")}
       <label class="settings-row">
         <span>Angle mode</span>
         <select class="compact-field" data-field="settings.angleMode">
@@ -467,13 +496,14 @@ function renderPanel() {
   `;
 }
 
-function listControlBar(kind, placeholder) {
+function listControlBar(kind, label) {
   const state = listControls[kind];
+  const placeholder = `search for ${label} by ID`;
   return `
     <div class="list-controls" data-list-controls="${kind}">
-      <input class="list-search compact-field" data-entry-search="${kind}" value="${escapeHtml(state.query)}" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)} by ID" />
+      <input class="list-search compact-field" data-entry-search="${kind}" value="${escapeHtml(state.query)}" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)}" />
       <select class="list-sort compact-field" data-entry-sort="${kind}" aria-label="Sort ${escapeHtml(kind)} by ID">
-        <option value="custom" ${state.sort === "custom" ? "selected" : ""}>Custom</option>
+        <option value="custom" ${state.sort === "custom" ? "selected" : ""}>In order</option>
         <option value="az" ${state.sort === "az" ? "selected" : ""}>ID A-Z</option>
         <option value="za" ${state.sort === "za" ? "selected" : ""}>ID Z-A</option>
       </select>
@@ -497,21 +527,23 @@ function visibleEntries(entries, kind) {
   return indexed;
 }
 
-function mathEditor(field, value, label, small = false) {
+function mathEditor(field, value, label, small = false, placeholder = "") {
   const source = normalizeExpressionDisplayText(value);
   const latex = latexSourceFromExpression(source);
+  const placeholderAttr = placeholder ? ` data-placeholder="${escapeHtml(placeholder)}"` : "";
   return `
     <div class="mathquill-editor ${small ? "mathquill-editor-small" : ""}">
-      <span class="mathquill-field ${small ? "mathquill-field-small" : ""}" data-field="${field}" data-value="${escapeHtml(latex)}" aria-label="${escapeHtml(label)}"></span>
+      <span class="mathquill-field ${small ? "mathquill-field-small" : ""}" data-field="${field}" data-value="${escapeHtml(latex)}"${placeholderAttr} aria-label="${escapeHtml(label)}"></span>
     </div>
   `;
 }
 
 function expressionRow(status, message, content, kind = null, index = null, options = {}) {
   const entryAttrs = kind ? `data-entry-kind="${kind}" data-entry-index="${index}"` : "";
+  const statusLabel = status === "valid" ? "status: valid" : message || `status: ${status}`;
   return `
     <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
-      <span class="entry-status ${status}" aria-label="${escapeHtml(message || status)}"></span>
+      <span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>
       <div class="entry-content">${content}</div>
       ${kind ? `<button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
     </div>
@@ -716,6 +748,7 @@ function bindEvents() {
           el.dataset.value = latex;
 
           const cleanExpr = latexToLeptonText(latex);
+          requestAnimationFrame(() => keepHorizontalCaretVisible(el));
 
           const [collection, rawIndex, property] = fieldName.split(".");
           const index = Number(rawIndex);
@@ -753,11 +786,18 @@ function bindEvents() {
     field.addEventListener(
       "wheel",
       (event) => {
-        if (field.scrollWidth <= field.clientWidth) return;
-        const horizontal = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-        if (!horizontal) return;
-        field.scrollLeft += horizontal;
-        event.preventDefault();
+      if (scrollFieldHorizontally(field, event)) event.preventDefault();
+      },
+      { passive: false }
+    );
+  });
+
+  root.querySelectorAll("input, textarea").forEach((field) => {
+    field.addEventListener("input", () => keepTextInputCaretVisible(field));
+    field.addEventListener(
+      "wheel",
+      (event) => {
+        if (scrollFieldHorizontally(field, event)) event.preventDefault();
       },
       { passive: false }
     );
@@ -788,7 +828,10 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       const kind = button.dataset.add;
-      if (listControls[kind]) listControls[kind].query = "";
+      if (listControls[kind]) {
+        listControls[kind].query = "";
+        listControls[kind].sort = "custom";
+      }
       const target = addEntry(kind);
       recordSceneHistory(before);
       pendingScrollTarget = target;
@@ -1193,7 +1236,7 @@ function sceneFunctionEnv(includeDefault = false) {
 
 function addEntry(kind) {
   if (kind === "functions") {
-    scene.functions.push({ id: `f${scene.functions.length + 1}`, expression: "x+y" });
+    scene.functions.push({ id: `f${scene.functions.length + 1}`, expression: "" });
     return { kind, index: scene.functions.length - 1 };
   }
   if (kind === "colors") {

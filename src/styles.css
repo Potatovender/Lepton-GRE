@@ -272,12 +272,17 @@ body {
 .sample-card {
   min-height: 292px;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(220px, 1fr) auto;
   border: 1px solid #cfd7e4;
   border-radius: 8px;
   overflow: hidden;
   background: #ffffff;
   transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.sample-card img {
+  min-height: 220px;
+  background: #050711;
 }
 
 .sample-card:hover {
@@ -391,7 +396,8 @@ select {
 }
 
 .tab-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
   border-bottom: 1px solid #eceff4;
@@ -399,12 +405,19 @@ select {
 
 .tab-button,
 .toolbar-button {
+  min-width: 0;
   border: 0;
   border-radius: 5px;
   padding: 8px 10px;
   background: #eef1f5;
   color: #4c5668;
   cursor: pointer;
+}
+
+.tab-button {
+  padding-inline: 4px;
+  font-size: 14px;
+  text-align: center;
 }
 
 .tab-button[aria-selected="true"],
@@ -537,6 +550,7 @@ select {
 }
 
 .mathquill-field {
+  position: relative;
   display: block;
   min-width: 0;
   width: 100% !important;
@@ -554,6 +568,22 @@ select {
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
   white-space: nowrap;
+}
+
+.mathquill-field.mq-empty[data-placeholder]::before,
+.mathquill-field[data-placeholder]:has(.mq-root-block.mq-empty)::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  z-index: 1;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  color: #9aa3b2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .mathquill-field::-webkit-scrollbar {
@@ -813,7 +843,7 @@ select {
 
 .channel-row {
   display: grid;
-  grid-template-columns: 34px 1fr;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
   gap: 8px;
   align-items: start;
 }
@@ -891,6 +921,7 @@ select {
 }
 
 .display-button {
+  min-width: 0;
   border: 0;
   border-radius: 5px;
   padding: 7px 9px;
@@ -999,12 +1030,16 @@ select {
 
 .entry-id {
   width: 72px;
+  min-width: 0;
   border: 1px solid #cfd5df;
   border-radius: 5px;
   padding: 6px 8px;
   background: #f8fafc;
   color: #2c3444;
   font-size: 13px;
+  overflow-x: auto;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .row-action {
@@ -1043,11 +1078,21 @@ select {
 
 .compact-field {
   width: 100%;
+  min-width: 0;
   border: 1px solid #cfd5df;
   border-radius: 5px;
   padding: 8px 9px;
   background: #ffffff;
   color: #202938;
+}
+
+input.compact-field,
+textarea.compact-field,
+.list-search,
+.reference-filter {
+  overflow-x: auto;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .reference-picker {
