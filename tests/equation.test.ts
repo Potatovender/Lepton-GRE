@@ -11,6 +11,14 @@ describe("Equation", () => {
     expect(new Equation("sin(90)").evaluate(0, 0, "degrees")).toBeCloseTo(1);
   });
 
+  test("keeps inverse aliases and scalar functions aligned with the live renderer", () => {
+    expect(new Equation("asin(0.5)").evaluate(0, 0)).toBeCloseTo(new Equation("arcsin(0.5)").evaluate(0, 0) as number);
+    expect(new Equation("acos(0.5)").evaluate(0, 0)).toBeCloseTo(new Equation("arccos(0.5)").evaluate(0, 0) as number);
+    expect(new Equation("atan(1)").evaluate(0, 0)).toBeCloseTo(new Equation("arctan(1)").evaluate(0, 0) as number);
+    expect(new Equation("log(e)").evaluate(0, 0)).toBeCloseTo(1);
+    expect(new Equation("clamp(10,0,3)+min(2,3)+max(2,3)").evaluate(0, 0)).toBeCloseTo(8);
+  });
+
   test("supports custom variable references like ~eq~", () => {
     const env = { eq: new Equation("x*y") };
     expect(new Equation("~eq~ + 2").evaluate(3, 5, "radians", env)).toBeCloseTo(17);

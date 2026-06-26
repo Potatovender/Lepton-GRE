@@ -13,7 +13,9 @@ const DEFAULT_SCENE = {
     maxRecursion: 100,
     angleMode: "radians",
     backgroundColor: "0",
-    ensureSquareGrid: true
+    ensureSquareGrid: true,
+    aspectRatio: "1:1",
+    drawOnlyInsideBoundary: false
   }
 };
 
@@ -142,6 +144,13 @@ const LATEX_FUNCTIONS = {
   frac: { internal: "frac", args: 2, display: "frac" }
 };
 const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
+const COMMON_ASPECT_RATIOS = [
+  { value: "1:1", label: "1:1" },
+  { value: "4:3", label: "4:3" },
+  { value: "3:2", label: "3:2" },
+  { value: "16:9", label: "16:9" },
+  { value: "2:1", label: "2:1" }
+];
 const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
 const NODE_RED_FLAG_THRESHOLD = 2 ** 16;
 const DEFAULT_DRAW_FUNCTION = { id: "f1", expression: "x" };
@@ -219,6 +228,11 @@ let keyboardTab = "pad";
 let activeKeyboardTarget = null;
 let helpTooltipTimer = null;
 let activeHelpTarget = null;
+let pointerSelectionField = null;
+let lastPointerClientX = null;
+let boundaryPulseUntil = 0;
+let boundaryPulseTimer = 0;
+let aspectRatioCustomOpen = false;
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -258,6 +272,7 @@ function renderApp() {
           <span aria-hidden="true"></span>
         </button>
         <canvas class="grid-canvas"></canvas>
+        <div class="grid-boundary-overlay" aria-hidden="true"></div>
         <div class="render-overlay">${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
       </section>
       <button class="keyboard-toggle" data-action="toggle-keyboard" type="button" aria-pressed="${keyboardOpen}" aria-label="${keyboardOpen ? "Hide keyboard" : "Show keyboard"}">⌨</button>
@@ -290,6 +305,10 @@ function nextSort(sort) {
 
 function keyboardMode() {
   const target = activeKeyboardElement();
+  return keyboardModeForElement(target);
+}
+
+function keyboardModeForElement(target) {
   return target?.classList?.contains("entry-id") ? "id" : "math";
 }
 
@@ -330,10 +349,20 @@ function renderIdKeyboard() {
 
 function renderMathKeyboard() {
   const primary = [
-    "7", "8", "9", "+", "-", "4", "5", "6", "*", "/", "1", "2", "3", "^", "sqrt", "0", ".", "x", "y", "pi",
-    "(", ")", "sin", "cos", "tan", "abs", "e", "Backspace", "ArrowLeft", "ArrowRight"
+    "7", "8", "9", "+", "-", "4", "5", "6", "*", "/", "1", "2", "3", "^", "sqrt", "0", ".", ",", "x", "y",
+    "pi", "(", ")", "sin", "cos", "tan", "abs", "e", "Backspace", "ArrowLeft", "ArrowRight"
   ];
-  const extra = Object.keys(LATEX_FUNCTIONS).filter((name) => !primary.includes(name) && !["frac"].includes(name));
+  const extraPriority = ["sec", "csc", "cot"];
+  const extra = Object.keys(LATEX_FUNCTIONS)
+    .filter((name) => !primary.includes(name) && !["frac"].includes(name))
+    .sort((left, right) => {
+      const leftIndex = extraPriority.indexOf(left);
+      const rightIndex = extraPriority.indexOf(right);
+      if (leftIndex !== -1 || rightIndex !== -1) {
+        return (leftIndex === -1 ? 100 : leftIndex) - (rightIndex === -1 ? 100 : rightIndex);
+      }
+      return left.localeCompare(right);
+    });
   const variables = scene.functions.map((entry) => entry.id).filter(Boolean);
   return `
     <div class="keyboard-tabs" role="tablist" aria-label="Keyboard tabs">
@@ -496,10 +525,16 @@ function insertIntoTextField(field, text) {
 
 function activateKeyboardTarget(target) {
   const previousTarget = activeKeyboardTarget;
+  const previousMode = keyboardMode();
   const field = target?.closest?.("[data-field]");
   if (field) activeKeyboardTarget = field.dataset.field;
-  if (keyboardOpen && previousTarget !== activeKeyboardTarget) {
+  const nextMode = keyboardModeForElement(field);
+  if (keyboardOpen && previousTarget !== activeKeyboardTarget && previousMode !== nextMode) {
     renderApp();
+    requestAnimationFrame(() => {
+      const nextField = activeKeyboardElement();
+      nextField?.focus?.();
+    });
   }
 }
 
@@ -536,6 +571,7 @@ function insertKeyboardValue(value) {
     return;
   }
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    const idMode = target.classList.contains("entry-id");
     if (value === "Backspace") {
       const start = target.selectionStart ?? target.value.length;
       const end = target.selectionEnd ?? start;
@@ -549,11 +585,20 @@ function insertKeyboardValue(value) {
       const delta = value === "ArrowLeft" ? -1 : 1;
       const next = Math.max(0, Math.min(target.value.length, (target.selectionStart ?? target.value.length) + delta));
       target.setSelectionRange(next, next);
-    } else if (/^[A-Za-z0-9_]$/.test(value)) {
-      insertIntoTextField(target, value);
+    } else if (idMode) {
+      if (/^[A-Za-z0-9_]$/.test(value)) insertIntoTextField(target, value);
+    } else {
+      insertIntoTextField(target, keyboardTextForValue(value));
     }
     keepTextInputCaretVisible(target);
   }
+}
+
+function keyboardTextForValue(value) {
+  if (value === "pi") return "pi";
+  if (value === "sqrt") return "sqrt(";
+  if (LATEX_FUNCTIONS[value] && value !== "frac") return `${LATEX_FUNCTIONS[value].internal}(`;
+  return value;
 }
 
 function handleDocumentSelectionScroll() {
@@ -564,6 +609,27 @@ function handleDocumentSelectionScroll() {
   } else if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
     keepTextInputCaretVisible(target);
   }
+}
+
+function beginSelectionPointerScroll(field) {
+  pointerSelectionField = field;
+}
+
+function handleDocumentPointerScroll(event) {
+  lastPointerClientX = event.clientX;
+  const field = pointerSelectionField;
+  if (!field || !event.buttons) return;
+  scrollFieldNearPointer(field, event);
+  if (field.classList?.contains("mathquill-field")) {
+    keepHorizontalCaretVisible(field);
+  } else if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+    keepTextInputCaretVisible(field);
+  }
+}
+
+function stopSelectionPointerScroll() {
+  pointerSelectionField = null;
+  lastPointerClientX = null;
 }
 
 function renderPanel() {
@@ -651,15 +717,32 @@ function renderPanel() {
   return `
     ${tutorialCoachmark()}
     <div class="settings-grid">
-      ${settingsField("xMin", "x minimum")}
-      ${settingsField("xMax", "x maximum")}
-      ${settingsField("yMin", "y minimum")}
-      ${settingsField("yMax", "y maximum")}
-      ${settingsField("maxRecursion", "max recursion depth")}
-      <label class="inline-check">
-        <input type="checkbox" data-field="settings.ensureSquareGrid" ${scene.settings.ensureSquareGrid !== false ? "checked" : ""} />
-        ensure square grid
-      </label>
+      <section class="settings-section">
+        <h3>Grid rendering</h3>
+        ${settingsField("xMin", "x minimum", "text")}
+        ${settingsField("xMax", "x maximum", "text")}
+        ${settingsField("yMin", "y minimum", "text")}
+        ${settingsField("yMax", "y maximum", "text")}
+        <label class="inline-check">
+          <input type="checkbox" data-field="settings.ensureSquareGrid" ${scene.settings.ensureSquareGrid !== false ? "checked" : ""} />
+          ensure square grid
+        </label>
+        <label class="settings-row">
+          <span>Aspect ratio</span>
+          <select class="compact-field" data-aspect-ratio-preset>
+            ${aspectRatioOptions()}
+          </select>
+        </label>
+        ${isCustomAspectRatio() ? settingsField("aspectRatio", "custom ratio", "text") : ""}
+        <label class="inline-check">
+          <input type="checkbox" data-field="settings.drawOnlyInsideBoundary" ${scene.settings.drawOnlyInsideBoundary ? "checked" : ""} />
+          draw only inside boundary
+        </label>
+      </section>
+      <section class="settings-section">
+        <h3>Calculation</h3>
+        ${settingsField("maxRecursion", "max recursion depth")}
+      </section>
       <label class="settings-row">
         <span>Angle mode</span>
         <select class="compact-field" data-field="settings.angleMode">
@@ -743,13 +826,26 @@ function addRow(label, kind) {
   `;
 }
 
-function settingsField(key, label) {
+function settingsField(key, label, type = "number") {
   return `
     <label class="settings-row">
       <span>${label}</span>
-      <input class="compact-field" type="number" data-field="settings.${key}" value="${scene.settings[key]}" />
+      <input class="compact-field" type="${type}" data-field="settings.${key}" value="${escapeHtml(scene.settings[key])}" />
     </label>
   `;
+}
+
+function isCustomAspectRatio() {
+  const value = String(scene.settings.aspectRatio ?? "1:1");
+  return aspectRatioCustomOpen || !COMMON_ASPECT_RATIOS.some((ratio) => ratio.value === value);
+}
+
+function aspectRatioOptions() {
+  const value = String(scene.settings.aspectRatio ?? "1:1");
+  return [
+    ...COMMON_ASPECT_RATIOS.map((ratio) => `<option value="${ratio.value}" ${ratio.value === value ? "selected" : ""}>${ratio.label}</option>`),
+    `<option value="custom" ${isCustomAspectRatio() ? "selected" : ""}>Custom</option>`
+  ].join("");
 }
 
 function options(entries, selected) {
@@ -895,6 +991,7 @@ function bindEvents() {
 
   root.querySelector('[data-action="render"]')?.addEventListener("click", () => {
     syncFields();
+    triggerBoundaryOverlay();
     renderApp();
   });
   root.querySelector('[data-action="toggle-sidebar"]')?.addEventListener("click", () => {
@@ -915,6 +1012,17 @@ function bindEvents() {
     if (!confirmTextRefresh()) return;
     const field = root.querySelector("[data-scene-text]");
     if (field) field.value = exportScene();
+    triggerBoundaryOverlay();
+  });
+  root.querySelector("[data-aspect-ratio-preset]")?.addEventListener("change", (event) => {
+    const before = sceneSnapshot();
+    aspectRatioCustomOpen = event.target.value === "custom";
+    if (!aspectRatioCustomOpen) scene.settings.aspectRatio = event.target.value;
+    viewport = sceneViewport();
+    if (isValidViewport(viewport)) saveViewport();
+    recordSceneHistory(before);
+    triggerBoundaryOverlay();
+    renderApp();
   });
   root.querySelector("[data-background-mode]")?.addEventListener("change", (event) => {
     const before = sceneSnapshot();
@@ -989,6 +1097,10 @@ function bindEvents() {
 
   root.querySelectorAll(".mathquill-field").forEach((field) => {
     field.addEventListener("focusin", () => activateKeyboardTarget(field));
+    field.addEventListener("pointerdown", () => {
+      activateKeyboardTarget(field);
+      beginSelectionPointerScroll(field);
+    });
     field.addEventListener("keydown", (event) => {
       if (handleFieldHistoryKeydown(event)) {
         event.preventDefault();
@@ -1012,6 +1124,10 @@ function bindEvents() {
 
   root.querySelectorAll("input, textarea").forEach((field) => {
     field.addEventListener("focusin", () => activateKeyboardTarget(field));
+    field.addEventListener("pointerdown", () => {
+      activateKeyboardTarget(field);
+      beginSelectionPointerScroll(field);
+    });
     field.addEventListener("input", () => keepTextInputCaretVisible(field));
     field.addEventListener("keyup", () => keepTextInputCaretVisible(field));
     field.addEventListener("mouseup", () => keepTextInputCaretVisible(field));
@@ -1385,14 +1501,18 @@ function updateField(field) {
   if (property === "id") value = value.trim();
 
   if (collection === "settings") {
-    if (rawIndex === "ensureSquareGrid") {
+    if (["ensureSquareGrid", "drawOnlyInsideBoundary"].includes(rawIndex)) {
       scene.settings[rawIndex] = Boolean(value);
+    } else if (["angleMode", "backgroundColor", "aspectRatio"].includes(rawIndex)) {
+      scene.settings[rawIndex] = String(value);
+      if (rawIndex === "aspectRatio") aspectRatioCustomOpen = true;
     } else {
-      scene.settings[rawIndex] = ["angleMode", "backgroundColor"].includes(rawIndex) ? value : Number(value);
+      scene.settings[rawIndex] = rawIndex === "maxRecursion" ? Number(value) : String(value);
     }
-    if (["xMin", "xMax", "yMin", "yMax"].includes(rawIndex)) {
+    if (["xMin", "xMax", "yMin", "yMax", "ensureSquareGrid", "aspectRatio", "drawOnlyInsideBoundary"].includes(rawIndex)) {
       viewport = sceneViewport();
-      saveViewport();
+      if (isValidViewport(viewport)) saveViewport();
+      triggerBoundaryOverlay();
     }
     return;
   }
@@ -1592,6 +1712,9 @@ function renderSceneCpu(canvas) {
 
   const env = buildRuntimeEnv(sceneFunctionEnv(true));
   const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
+  updateBoundaryOverlay(canvas, visibleViewport);
+  const clipViewport = scene.settings.drawOnlyInsideBoundary ? sceneViewport() : null;
+  const shouldClip = clipViewport && isValidViewport(clipViewport);
   const xPoints = axis(visibleViewport.xMin, visibleViewport.xMax, scene.settings.xPoints);
   const yPoints = axis(visibleViewport.yMin, visibleViewport.yMax, scene.settings.yPoints);
   const pixelWidth = rect.width / Math.max(1, xPoints.length - 1);
@@ -1623,6 +1746,7 @@ function renderSceneCpu(canvas) {
       for (let xi = 0; xi < xPoints.length; xi += 1) {
         const x = xPoints[xi];
         const y = yPoints[yi];
+        if (shouldClip && (x < clipViewport.xMin || x > clipViewport.xMax || y < clipViewport.yMin || y > clipViewport.yMax)) continue;
         const boundaryValue = boundary(x, y, env);
         if (!Number.isFinite(boundaryValue)) continue;
         if (restriction.checkSmaller ? boundaryValue > 0 : boundaryValue < 0) continue;
@@ -1646,6 +1770,7 @@ function renderSceneWebGl(canvas) {
   canvas.width = Math.max(1, Math.floor(rect.width * dpr));
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
+  updateBoundaryOverlay(canvas, visibleViewport);
   gl.viewport(0, 0, canvas.width, canvas.height);
 
   const fragmentSource = buildFragmentShader();
@@ -1680,6 +1805,17 @@ function renderSceneWebGl(canvas) {
     visibleViewport.xMax,
     visibleViewport.yMin,
     visibleViewport.yMax
+  );
+  const clipViewport = sceneViewport();
+  const clipEnabled = scene.settings.drawOnlyInsideBoundary && isValidViewport(clipViewport);
+  const safeClipViewport = clipEnabled ? clipViewport : visibleViewport;
+  gl.uniform1i(gl.getUniformLocation(program, "u_clip_enabled"), clipEnabled ? 1 : 0);
+  gl.uniform4f(
+    gl.getUniformLocation(program, "u_clip_bounds"),
+    safeClipViewport.xMin,
+    safeClipViewport.xMax,
+    safeClipViewport.yMin,
+    safeClipViewport.yMax
   );
   const backgroundColor = resolveBackgroundColor();
   gl.clearColor(backgroundColor.rgb[0] / 255, backgroundColor.rgb[1] / 255, backgroundColor.rgb[2] / 255, 1);
@@ -1775,6 +1911,8 @@ function buildFragmentShader() {
       precision highp float;
       uniform vec2 u_resolution;
       uniform vec4 u_bounds;
+      uniform vec4 u_clip_bounds;
+      uniform bool u_clip_enabled;
 
     float frac(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
     float ln(float value) { return value > 0.0 ? log(value) : 0.0; }
@@ -1806,6 +1944,10 @@ function buildFragmentShader() {
       float y = mix(u_bounds.z, u_bounds.w, uv.y);
       vec3 color = ${backgroundColor};
       bool painted = false;
+      if (u_clip_enabled && (x < u_clip_bounds.x || x > u_clip_bounds.y || y < u_clip_bounds.z || y > u_clip_bounds.w)) {
+        gl_FragColor = vec4(color, 1.0);
+        return;
+      }
       ${layerShader}
       gl_FragColor = vec4(color, 1.0);
     }
@@ -1846,10 +1988,10 @@ function drawGrid(ctx, width, height, solidBackground = null) {
 function displayViewportForSize(baseViewport, width, height) {
   if (!isValidViewport(baseViewport)) {
     baseViewport = {
-      xMin: DEFAULT_SCENE.settings.xMin,
-      xMax: DEFAULT_SCENE.settings.xMax,
-      yMin: DEFAULT_SCENE.settings.yMin,
-      yMax: DEFAULT_SCENE.settings.yMax
+      xMin: Number(DEFAULT_SCENE.settings.xMin),
+      xMax: Number(DEFAULT_SCENE.settings.xMax),
+      yMin: Number(DEFAULT_SCENE.settings.yMin),
+      yMax: Number(DEFAULT_SCENE.settings.yMax)
     };
   }
   if (scene.settings.ensureSquareGrid === false) {
@@ -1879,6 +2021,45 @@ function displayViewportForSize(baseViewport, width, height) {
     yMin: centerY - adjustedY / 2,
     yMax: centerY + adjustedY / 2
   };
+}
+
+function updateBoundaryOverlay(canvas = root.querySelector(".grid-canvas"), visibleViewport = null) {
+  const overlay = root.querySelector(".grid-boundary-overlay");
+  if (!overlay || !canvas) return;
+  if (Date.now() > boundaryPulseUntil) {
+    overlay.classList.remove("active");
+    return;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  visibleViewport ??= displayViewportForSize(viewport, rect.width, rect.height);
+  let boundary = sceneViewport();
+  if (!isValidViewport(boundary)) {
+    boundary = {
+      xMin: Number(DEFAULT_SCENE.settings.xMin),
+      xMax: Number(DEFAULT_SCENE.settings.xMax),
+      yMin: Number(DEFAULT_SCENE.settings.yMin),
+      yMax: Number(DEFAULT_SCENE.settings.yMax)
+    };
+  }
+
+  const visibleX = visibleViewport.xMax - visibleViewport.xMin;
+  const visibleY = visibleViewport.yMax - visibleViewport.yMin;
+  const left = ((boundary.xMin - visibleViewport.xMin) / visibleX) * rect.width;
+  const right = ((boundary.xMax - visibleViewport.xMin) / visibleX) * rect.width;
+  const top = ((visibleViewport.yMax - boundary.yMax) / visibleY) * rect.height;
+  const bottom = ((visibleViewport.yMax - boundary.yMin) / visibleY) * rect.height;
+  overlay.style.left = `${left}px`;
+  overlay.style.top = `${top}px`;
+  overlay.style.width = `${right - left}px`;
+  overlay.style.height = `${bottom - top}px`;
+  overlay.classList.add("active");
+}
+
+function triggerBoundaryOverlay() {
+  boundaryPulseUntil = Date.now() + 2600;
+  window.clearTimeout(boundaryPulseTimer);
+  boundaryPulseTimer = window.setTimeout(() => updateBoundaryOverlay(), 2600);
 }
 
 function drawErrorCanvas(canvas, message) {
@@ -2671,7 +2852,10 @@ function shouldAutoRefreshVisualSource(source) {
   const value = String(source ?? "").trim();
   if (!value) return true;
   if (/^[A-Za-z_]\w*\^(?:[A-Za-z_]\w*|\d+(?:\.\d+)?)$/.test(value)) return true;
-  if (/^(?:sqrt|cbrt|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|exp|sec|csc|cot)\([^()]*\)$/.test(value)) return true;
+  for (const config of Object.values(LATEX_FUNCTIONS)) {
+    const call = parseFunctionCall(value, config.internal);
+    if (call && call.length === config.args && call.every((arg) => !/[()]/.test(arg))) return true;
+  }
   if (/^frac\{[^{}]*\}\{[^{}]*\}$/.test(value)) return true;
   return false;
 }
@@ -2717,11 +2901,13 @@ function hasIncompletePower(source) {
 }
 
 function hasRenderableLatex(source) {
-  return /\\(?:operatorname|frac|sqrt|left\||lvert|lfloor|lceil|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|min|max|exp|sec|csc|cot|round|clamp)\b/.test(source);
+  const commands = Object.keys(LATEX_FUNCTIONS).join("|");
+  return new RegExp(`\\\\(?:operatorname|${commands}|left\\||lvert|lfloor|lceil)\\b`).test(source);
 }
 
 function hasInternalRenderableCall(source) {
-  return /\b(?:frac|sqrt|abs|floor|ceil|sin|cos|tan|asin|acos|atan|arcsin|arccos|arctan|log|ln|min|max|exp|sec|csc|cot|round|clamp)\(/.test(source);
+  const names = [...new Set(Object.values(LATEX_FUNCTIONS).map((config) => config.internal))].join("|");
+  return new RegExp(`\\b(?:${names})\\(`).test(source);
 }
 
 function renderEditableLatex(source) {
@@ -3121,17 +3307,40 @@ const STANDARD_LATEX_COMMANDS = {
   asin: "\\arcsin",
   acos: "\\arccos",
   atan: "\\arctan",
+  arcsin: "\\arcsin",
+  arccos: "\\arccos",
+  arctan: "\\arctan",
+  arcsec: "\\operatorname{arcsec}",
+  arccsc: "\\operatorname{arccsc}",
+  arccot: "\\operatorname{arccot}",
   sinh: "\\sinh",
   cosh: "\\cosh",
   tanh: "\\tanh",
+  sech: "\\operatorname{sech}",
+  csch: "\\operatorname{csch}",
+  coth: "\\operatorname{coth}",
+  arcsinh: "\\operatorname{arcsinh}",
+  arccosh: "\\operatorname{arccosh}",
+  arctanh: "\\operatorname{arctanh}",
+  arcsech: "\\operatorname{arcsech}",
+  arccsch: "\\operatorname{arccsch}",
+  arccoth: "\\operatorname{arccoth}",
   log: "\\log",
   ln: "\\ln",
+  sqrt: "\\sqrt",
+  cbrt: "\\operatorname{cbrt}",
+  abs: "\\operatorname{abs}",
+  sign: "\\operatorname{sign}",
+  floor: "\\operatorname{floor}",
+  ceil: "\\operatorname{ceil}",
+  round: "\\operatorname{round}",
   exp: "\\exp",
   sec: "\\sec",
   csc: "\\csc",
   cot: "\\cot",
   min: "\\min",
-  max: "\\max"
+  max: "\\max",
+  clamp: "\\operatorname{clamp}"
 };
 
 function tokenizeLatex(source) {
@@ -4242,7 +4451,9 @@ function setSceneSetting(target, key, value) {
     max_recursion: "maxRecursion",
     angle_mode: "angleMode",
     background_color: "backgroundColor",
-    ensure_square_grid: "ensureSquareGrid"
+    ensure_square_grid: "ensureSquareGrid",
+    aspect_ratio: "aspectRatio",
+    draw_only_inside_boundary: "drawOnlyInsideBoundary"
   };
   const mapped = settingMap[String(key ?? "").trim()];
   if (!mapped) return;
@@ -4250,11 +4461,15 @@ function setSceneSetting(target, key, value) {
     target.settings[mapped] = normalizeAngleMode(value);
   } else if (mapped === "backgroundColor") {
     target.settings[mapped] = String(value ?? "").trim() || "0";
-  } else if (mapped === "ensureSquareGrid") {
+  } else if (["ensureSquareGrid", "drawOnlyInsideBoundary"].includes(mapped)) {
     target.settings[mapped] = parseLeptonBoolean(value);
-  } else {
+  } else if (mapped === "aspectRatio") {
+    target.settings[mapped] = String(value ?? "").trim() || "1:1";
+  } else if (mapped === "maxRecursion") {
     const number = Number(value);
     if (Number.isFinite(number)) target.settings[mapped] = number;
+  } else {
+    target.settings[mapped] = String(value ?? "").trim();
   }
 }
 
@@ -4268,6 +4483,8 @@ function exportScene() {
     `set angle_mode = ${normalizeAngleMode(scene.settings.angleMode)}`,
     `set background_color = ${scene.settings.backgroundColor ?? "0"}`,
     `set ensure_square_grid = ${formatLeptonBoolean(scene.settings.ensureSquareGrid !== false)}`,
+    `set aspect_ratio = ${scene.settings.aspectRatio ?? "1:1"}`,
+    `set draw_only_inside_boundary = ${formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))}`,
     ...scene.functions.map((entry) => `function ${entry.id} = ${textModeExpression(entry.expression)}`),
     ...scene.colors.map((entry) => `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
     ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`),
@@ -4559,11 +4776,64 @@ function attachRuntimeGuard(env) {
 }
 
 function sceneViewport() {
+  const rawViewport = {
+    xMin: evaluateScalarSetting(scene.settings.xMin),
+    xMax: evaluateScalarSetting(scene.settings.xMax),
+    yMin: evaluateScalarSetting(scene.settings.yMin),
+    yMax: evaluateScalarSetting(scene.settings.yMax)
+  };
+  return scene.settings.ensureSquareGrid === false ? rawViewport : applyAspectRatioToViewport(rawViewport);
+}
+
+function evaluateScalarSetting(source) {
+  const text = String(source ?? "").trim();
+  if (!text) return NaN;
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return direct;
+  try {
+    const env = buildRuntimeEnv(sceneFunctionEnv(true));
+    const value = compileExpression(text)(0, 0, env);
+    return Number.isFinite(value) ? value : NaN;
+  } catch {
+    return NaN;
+  }
+}
+
+function aspectRatioValue() {
+  const raw = String(scene.settings.aspectRatio ?? "1:1");
+  const [left, right] = raw.split(":");
+  if (right === undefined) return 1;
+  const width = evaluateScalarSetting(left);
+  const height = evaluateScalarSetting(right);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1;
+  return width / height;
+}
+
+function applyAspectRatioToViewport(candidate) {
+  if (!isValidViewport(candidate)) return candidate;
+  const ratio = aspectRatioValue();
+  const xRange = candidate.xMax - candidate.xMin;
+  const yRange = candidate.yMax - candidate.yMin;
+  const currentRatio = xRange / Math.max(Number.EPSILON, yRange);
+  const centerX = (candidate.xMin + candidate.xMax) / 2;
+  const centerY = (candidate.yMin + candidate.yMax) / 2;
+
+  if (currentRatio < ratio) {
+    const adjustedX = yRange * ratio;
+    return {
+      xMin: centerX - adjustedX / 2,
+      xMax: centerX + adjustedX / 2,
+      yMin: candidate.yMin,
+      yMax: candidate.yMax
+    };
+  }
+
+  const adjustedY = xRange / ratio;
   return {
-    xMin: scene.settings.xMin,
-    xMax: scene.settings.xMax,
-    yMin: scene.settings.yMin,
-    yMax: scene.settings.yMax
+    xMin: candidate.xMin,
+    xMax: candidate.xMax,
+    yMin: centerY - adjustedY / 2,
+    yMax: centerY + adjustedY / 2
   };
 }
 
@@ -4673,6 +4943,9 @@ window.addEventListener("resize", () => {
 });
 document.addEventListener("keydown", handleGlobalHistoryKeydown);
 document.addEventListener("selectionchange", () => requestAnimationFrame(handleDocumentSelectionScroll));
+document.addEventListener("pointermove", handleDocumentPointerScroll);
+document.addEventListener("pointerup", stopSelectionPointerScroll);
+document.addEventListener("pointercancel", stopSelectionPointerScroll);
 ensureLeptonFavicon();
 
 if (typeof URLSearchParams !== "undefined" && window.location && new URLSearchParams(window.location.search).get("capture") === "1") {

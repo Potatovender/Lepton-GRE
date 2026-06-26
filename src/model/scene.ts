@@ -30,7 +30,11 @@ export const defaultSettings = (): GridSettings => ({
   yMax: 15,
   yPoints: 100,
   maxRecursion: 100,
-  angleMode: "radians"
+  angleMode: "radians",
+  backgroundColor: "0",
+  ensureSquareGrid: true,
+  aspectRatio: "1:1",
+  drawOnlyInsideBoundary: false
 });
 
 export const createDefaultScene = (): SceneState => ({
@@ -111,7 +115,11 @@ export function exportScene(scene: SceneState): string {
     `S:y_points~${scene.settings.yPoints}`,
     `S:y_max~${scene.settings.yMax}`,
     `S:max_recursion~${scene.settings.maxRecursion}`,
-    `S:angle_mode~${scene.settings.angleMode}`
+    `S:angle_mode~${scene.settings.angleMode}`,
+    `S:background_color~${scene.settings.backgroundColor}`,
+    `S:ensure_square_grid~${scene.settings.ensureSquareGrid ? 1 : 0}`,
+    `S:aspect_ratio~${scene.settings.aspectRatio}`,
+    `S:draw_only_inside_boundary~${scene.settings.drawOnlyInsideBoundary ? 1 : 0}`
   ].join("\n");
 }
 
@@ -129,7 +137,31 @@ function applySetting(settings: GridSettings, raw: string): void {
     return;
   }
 
+  if (key === "background_color") {
+    settings.backgroundColor = value || "0";
+    return;
+  }
+
+  if (key === "ensure_square_grid") {
+    settings.ensureSquareGrid = value === "1" || value.toLowerCase() === "true";
+    return;
+  }
+
+  if (key === "aspect_ratio") {
+    settings.aspectRatio = value || "1:1";
+    return;
+  }
+
+  if (key === "draw_only_inside_boundary") {
+    settings.drawOnlyInsideBoundary = value === "1" || value.toLowerCase() === "true";
+    return;
+  }
+
   if (!Number.isFinite(numberValue)) {
+    if (key === "x_min") settings.xMin = value;
+    if (key === "x_max") settings.xMax = value;
+    if (key === "y_min") settings.yMin = value;
+    if (key === "y_max") settings.yMax = value;
     return;
   }
 

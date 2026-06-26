@@ -1119,6 +1119,21 @@ textarea.compact-field,
   padding: 12px;
 }
 
+.settings-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d7deea;
+  border-radius: 7px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+
+.settings-section h3 {
+  margin: 0;
+  color: #26364f;
+  font-size: 13px;
+}
+
 .text-mode-panel {
   min-height: 0;
   height: 100%;
@@ -1331,6 +1346,51 @@ textarea.compact-field,
   height: 100%;
   display: block;
   cursor: grab;
+}
+
+.grid-boundary-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  border: 2px solid rgba(98, 112, 136, 0);
+  border-radius: 3px;
+  box-shadow: 0 0 0 9999px rgba(255, 255, 255, 0);
+  opacity: 0;
+  transform: scale(1.018);
+  transition:
+    opacity 900ms ease,
+    border-color 900ms ease,
+    box-shadow 900ms ease,
+    transform 1200ms ease;
+}
+
+.grid-boundary-overlay.active {
+  animation: boundary-shift 2.6s ease forwards;
+}
+
+@keyframes boundary-shift {
+  0% {
+    opacity: 0;
+    border-color: rgba(86, 100, 120, 0);
+    box-shadow: 0 0 0 9999px rgba(255, 255, 255, 0);
+    transform: scale(1.018);
+  }
+  12% {
+    opacity: 1;
+    border-color: rgba(78, 93, 112, 0.8);
+    box-shadow: 0 0 0 9999px rgba(232, 235, 240, 0.18);
+    transform: scale(1);
+  }
+  55% {
+    border-color: rgba(142, 150, 163, 0.72);
+    box-shadow: 0 0 0 9999px rgba(215, 220, 228, 0.12);
+  }
+  100% {
+    opacity: 0;
+    border-color: rgba(78, 93, 112, 0);
+    box-shadow: 0 0 0 9999px rgba(255, 255, 255, 0);
+    transform: scale(1.006);
+  }
 }
 
 .renderer-pane.is-panning .grid-canvas {

@@ -3,14 +3,18 @@ export type AngleMode = "radians" | "degrees";
 export type NumericResult = number | "nan" | "invalid";
 
 export interface GridSettings {
-  xMin: number;
-  xMax: number;
+  xMin: number | string;
+  xMax: number | string;
   xPoints: number;
-  yMin: number;
-  yMax: number;
+  yMin: number | string;
+  yMax: number | string;
   yPoints: number;
   maxRecursion: number;
   angleMode: AngleMode;
+  backgroundColor: string;
+  ensureSquareGrid: boolean;
+  aspectRatio: string;
+  drawOnlyInsideBoundary: boolean;
 }
 
 export interface RegistryEntry {

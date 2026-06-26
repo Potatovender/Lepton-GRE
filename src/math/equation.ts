@@ -20,6 +20,9 @@ type Operator =
   | "sec"
   | "csc"
   | "cot"
+  | "asin"
+  | "acos"
+  | "atan"
   | "arcsin"
   | "arccos"
   | "arctan"
@@ -68,6 +71,9 @@ const PRECEDENCE: Record<Operator, [number, number]> = {
   sec: [4, 1],
   csc: [4, 1],
   cot: [4, 1],
+  asin: [4, 1],
+  acos: [4, 1],
+  atan: [4, 1],
   arcsin: [4, 1],
   arccos: [4, 1],
   arctan: [4, 1],
@@ -86,7 +92,7 @@ const PRECEDENCE: Record<Operator, [number, number]> = {
   arcsech: [4, 1],
   arccsch: [4, 1],
   arccoth: [4, 1],
-  log: [4, 2],
+  log: [4, 1],
   ln: [4, 1],
   sqrt: [4, 1],
   cbrt: [4, 1],
@@ -449,7 +455,7 @@ function evaluateOperator(op: string, vals: number[], useRadians: boolean): Eval
   if (op === "exp") return Math.exp(vals[0]);
   if (op === "frac") return vals[1] !== 0 ? vals[0] / vals[1] : "nan";
   if (op === "ln") return vals[0] > 0 ? Math.log(vals[0]) : "nan";
-  if (op === "log") return vals[0] > 0 && vals[0] !== 1 && vals[1] > 0 ? Math.log(vals[1]) / Math.log(vals[0]) : "nan";
+  if (op === "log") return vals[0] > 0 ? Math.log(vals[0]) : "nan";
   if (op === "sqrt") return vals[0] >= 0 ? Math.sqrt(vals[0]) : "nan";
   if (op === "cbrt") return Math.cbrt(vals[0]);
 
@@ -462,9 +468,12 @@ function evaluateOperator(op: string, vals: number[], useRadians: boolean): Eval
   if (op === "csc") return Math.sin(trigInput) !== 0 ? 1 / Math.sin(trigInput) : "nan";
 
   if (op === "arctan") return fromRadians(Math.atan(vals[0]), useRadians);
+  if (op === "atan") return fromRadians(Math.atan(vals[0]), useRadians);
   if (op === "arccot") return fromRadians(Math.PI / 2 - Math.atan(vals[0]), useRadians);
   if (op === "arcsin") return Math.abs(vals[0]) <= 1 ? fromRadians(Math.asin(vals[0]), useRadians) : "nan";
+  if (op === "asin") return Math.abs(vals[0]) <= 1 ? fromRadians(Math.asin(vals[0]), useRadians) : "nan";
   if (op === "arccos") return Math.abs(vals[0]) <= 1 ? fromRadians(Math.acos(vals[0]), useRadians) : "nan";
+  if (op === "acos") return Math.abs(vals[0]) <= 1 ? fromRadians(Math.acos(vals[0]), useRadians) : "nan";
   if (op === "arcsec") return vals[0] ** 2 >= 1 ? fromRadians(Math.acos(1 / vals[0]), useRadians) : "nan";
   if (op === "arccsc") return vals[0] ** 2 >= 1 ? fromRadians(Math.asin(1 / vals[0]), useRadians) : "nan";
 

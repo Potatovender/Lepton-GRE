@@ -307,6 +307,43 @@ draw(f1,c1,r1,true)`);
   assert(imported.draws[0].hidden === true, JSON.stringify(imported.draws));
 });
 
+check("grid settings accept math expressions aspect ratios and clip export", () => {
+  const imported = sandbox.importScene(`set x_min = -pi
+set x_max = pi
+set y_min = -1
+set y_max = 1
+set ensure_square_grid = True
+set aspect_ratio = sqrt(2):1
+set draw_only_inside_boundary = True
+function f1 = x`);
+  sandbox.__debugSetScene(imported);
+  const viewport = sandbox.sceneViewport();
+  assert(Math.abs(viewport.xMin + Math.PI) < 1e-9, JSON.stringify(viewport));
+  assert(Math.abs(viewport.xMax - Math.PI) < 1e-9, JSON.stringify(viewport));
+  assert(viewport.yMin < -2 && viewport.yMax > 2, JSON.stringify(viewport));
+  const exported = sandbox.exportScene();
+  assert(exported.includes("set aspect_ratio = sqrt(2):1"), exported);
+  assert(exported.includes("set draw_only_inside_boundary = True"), exported);
+});
+
+check("invalid viewport bounds warn with square grid and error without it", () => {
+  const warningScene = sandbox.importScene(`set x_min = 2
+set x_max = 1
+set y_min = -1
+set y_max = 1
+set ensure_square_grid = True`);
+  sandbox.__debugSetScene(warningScene);
+  assert(sandbox.validateScene().settings[0].status === "warning", JSON.stringify(sandbox.validateScene().settings[0]));
+
+  const errorScene = sandbox.importScene(`set x_min = 2
+set x_max = 1
+set y_min = -1
+set y_max = 1
+set ensure_square_grid = False`);
+  sandbox.__debugSetScene(errorScene);
+  assert(sandbox.validateScene().settings[0].status === "invalid", JSON.stringify(sandbox.validateScene().settings[0]));
+});
+
 check("legacy sectioned Lepton language still imports", () => {
   const imported = sandbox.importScene(`F:f1~x+y
 ~~~~~
