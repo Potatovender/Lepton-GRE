@@ -19,7 +19,7 @@ const DEFAULT_SCENE = {
   }
 };
 
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260625-ui-polish";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260626-grid-rendering2";
 
 function ensureLeptonFavicon() {
   const iconHref =

@@ -1,4 +1,4 @@
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260625-ui-polish";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260626-grid-rendering2";
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -25,6 +25,9 @@ set y_max = 15
 set max_recursion = 100
 set angle_mode = radians
 set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
 function eq = arctan(2sin(-2x-y/8+cos(3y-x-sin(cos(sin(sin(x*y)+x))+x-y+arccot(x)*arctan(y))))+frac{(x^{2}+frac{y^{2}}{14})}{3}-(frac{100}{x^{2}+y^{2}})+e^{-4-y})
 function r = 255((-x-(cos(3.7(-x+0.8))/3))/2.8+1.28)
 function g = 255(sin(1.5(-x+pi/2))/2.8+0.5)
@@ -40,6 +43,9 @@ set y_max = 2
 set max_recursion = 12
 set angle_mode = radians
 set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
 function real = real^2-imaginary^2+x
 function imaginary = 2*real*imaginary+y
 function one = 1
@@ -55,6 +61,9 @@ set y_max = 8
 set max_recursion = 40
 set angle_mode = radians
 set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
 function eq = sin(sqrt(x^2+y^2)*4)+cos(x*2-y*1.5)
 function r = 120+80*sin(eq)
 function g = 150+90*cos(x/2)
@@ -70,6 +79,9 @@ set y_max = 8
 set max_recursion = 40
 set angle_mode = radians
 set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
 function rad = sqrt(x^2+y^2)
 function fade = e^(0-rad^2/18)
 function theta = arctan(y/(x+0.02))
