@@ -19,7 +19,7 @@ const DEFAULT_SCENE = {
   }
 };
 
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260626-grid-settings1";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260627-editor-drag1";
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -230,7 +230,6 @@ let helpTooltipTimer = null;
 let activeHelpTarget = null;
 let pointerSelectionField = null;
 let lastPointerClientX = null;
-let pointerSelectionAnchor = null;
 let boundaryPulseUntil = 0;
 let boundaryPulseTimer = 0;
 let aspectRatioCustomOpen = false;
@@ -266,6 +265,8 @@ function renderApp() {
             .join("")}
         </nav>
         <div class="entry-list ${displayMode === "text" ? "entry-list-text" : ""}">${renderPanel()}</div>
+        <button class="keyboard-toggle" data-action="toggle-keyboard" type="button" aria-pressed="${keyboardOpen}" aria-label="${keyboardOpen ? "Hide keyboard" : "Show keyboard"}">⌨</button>
+        ${keyboardOpen ? renderKeyboardPanel() : ""}
       </section>
       <div class="sidebar-resizer" role="separator" aria-label="Resize expression panel" tabindex="0"></div>
       <section class="renderer-pane" aria-label="Grid renderer">
@@ -276,8 +277,6 @@ function renderApp() {
         <div class="grid-boundary-overlay" aria-hidden="true"></div>
         <div class="render-overlay">${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
       </section>
-      <button class="keyboard-toggle" data-action="toggle-keyboard" type="button" aria-pressed="${keyboardOpen}" aria-label="${keyboardOpen ? "Hide keyboard" : "Show keyboard"}">⌨</button>
-      ${keyboardOpen ? renderKeyboardPanel() : ""}
     </main>
   `;
   if (root.dataset) root.dataset.panelKey = scrollKey;
@@ -476,7 +475,8 @@ function closestMathFieldTarget(target) {
 function keepHorizontalCaretVisible(field) {
   const cursor = field.querySelector(".mq-cursor");
   const selection = field.querySelector(".mq-selection");
-  const target = cursor ?? selection;
+  if (selection) return;
+  const target = cursor;
   if (!target) return;
   const fieldRect = field.getBoundingClientRect();
   const cursorRect = target.getBoundingClientRect();
@@ -491,15 +491,15 @@ function keepHorizontalCaretVisible(field) {
 function scrollFieldNearPointer(field, event) {
   if (field.scrollWidth <= field.clientWidth) return;
   const rect = field.getBoundingClientRect();
-  const rightEdge = 30;
-  const leftEdge = 56;
-  const maxStep = 18;
+  const rightEdge = 44;
+  const leftEdge = 64;
+  const maxStep = 7;
   if (event.clientX > rect.right - rightEdge) {
     const pressure = event.clientX - (rect.right - rightEdge);
-    field.scrollLeft += clampNumber(pressure * 0.45, 3, maxStep);
+    field.scrollLeft += clampNumber(pressure * 0.12, 1, maxStep);
   } else if (event.clientX < rect.left + leftEdge) {
     const pressure = rect.left + leftEdge - event.clientX;
-    field.scrollLeft -= clampNumber(pressure * 0.55, 4, maxStep);
+    field.scrollLeft -= clampNumber(pressure * 0.12, 1, maxStep);
   }
 }
 
@@ -513,6 +513,7 @@ function scrollFieldHorizontally(field, event) {
 
 function keepTextInputCaretVisible(field, event = null) {
   if (field.selectionStart == null || field.selectionEnd == null) return;
+  if (field.selectionStart !== field.selectionEnd) return;
   const caretIndex = textInputVisibleCaretIndex(field, event);
   if (caretIndex === field.value.length) {
     field.scrollLeft = field.scrollWidth;
@@ -545,32 +546,6 @@ function textWidthForInput(field, text) {
   context.font = `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} / ${style.lineHeight} ${style.fontFamily}`;
   const padding = parseFloat(style.paddingLeft || "0") + 2;
   return context.measureText(text).width + padding;
-}
-
-function textInputIndexFromClientX(field, clientX) {
-  const rect = field.getBoundingClientRect();
-  const target = field.scrollLeft + clientX - rect.left;
-  let low = 0;
-  let high = field.value.length;
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (textWidthForInput(field, field.value.slice(0, mid)) < target) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-  return clampNumber(low, 0, field.value.length);
-}
-
-function updateTextInputSelectionFromPointer(field, event) {
-  if (!(field instanceof HTMLInputElement) || field.selectionStart == null || field.selectionEnd == null) return;
-  pointerSelectionAnchor ??= field.selectionStart ?? field.selectionEnd ?? 0;
-  const focusIndex = textInputIndexFromClientX(field, event.clientX);
-  const start = Math.min(pointerSelectionAnchor, focusIndex);
-  const end = Math.max(pointerSelectionAnchor, focusIndex);
-  const direction = focusIndex < pointerSelectionAnchor ? "backward" : "forward";
-  field.setSelectionRange(start, end, direction);
 }
 
 function insertIntoTextField(field, text) {
@@ -672,13 +647,6 @@ function handleDocumentSelectionScroll() {
 
 function beginSelectionPointerScroll(field) {
   pointerSelectionField = field;
-  pointerSelectionAnchor = null;
-  requestAnimationFrame(() => {
-    if (pointerSelectionField !== field) return;
-    if (field instanceof HTMLInputElement && field.selectionStart != null) {
-      pointerSelectionAnchor = field.selectionStart;
-    }
-  });
 }
 
 function handleDocumentPointerScroll(event) {
@@ -689,7 +657,6 @@ function handleDocumentPointerScroll(event) {
   if (field.classList?.contains("mathquill-field")) {
     keepHorizontalCaretVisible(field);
   } else if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
-    updateTextInputSelectionFromPointer(field, event);
     keepTextInputCaretVisible(field, event);
   }
 }
@@ -697,7 +664,6 @@ function handleDocumentPointerScroll(event) {
 function stopSelectionPointerScroll() {
   pointerSelectionField = null;
   lastPointerClientX = null;
-  pointerSelectionAnchor = null;
 }
 
 function renderPanel() {
@@ -909,10 +875,10 @@ function settingsField(key, label, type = "number") {
 
 function settingsMathField(key, label) {
   return `
-    <label class="settings-row settings-row-math">
+    <div class="settings-row settings-row-math">
       <span>${label}</span>
       ${mathEditor(`settings.${key}`, String(scene.settings[key] ?? ""), label, true, "enter function here")}
-    </label>
+    </div>
   `;
 }
 
@@ -926,14 +892,14 @@ function aspectRatioParts() {
 function aspectRatioFields() {
   const [left, right] = aspectRatioParts();
   return `
-    <label class="settings-row settings-row-ratio">
+    <div class="settings-row settings-row-ratio">
       <span>custom ratio</span>
       <div class="ratio-fields">
         ${mathEditor("settings.aspectRatioLeft", left, "Aspect ratio left side", true, "enter function here")}
         <span class="ratio-separator">:</span>
         ${mathEditor("settings.aspectRatioRight", right, "Aspect ratio right side", true, "enter function here")}
       </div>
-    </label>
+    </div>
   `;
 }
 
@@ -1234,13 +1200,11 @@ function bindEvents() {
     field.addEventListener("pointermove", (event) => {
       if (event.buttons) {
         scrollFieldNearPointer(field, event);
-        keepHorizontalCaretVisible(field);
       }
     });
     field.addEventListener("mousemove", (event) => {
       if (event.buttons) {
         scrollFieldNearPointer(field, event);
-        keepHorizontalCaretVisible(field);
       }
     });
     field.addEventListener(
