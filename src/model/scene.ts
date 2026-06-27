@@ -23,11 +23,11 @@ export interface SceneState {
 }
 
 export const defaultSettings = (): GridSettings => ({
-  xMin: -15,
-  xMax: 15,
+  xMin: -10,
+  xMax: 10,
   xPoints: 100,
-  yMin: -15,
-  yMax: 15,
+  yMin: -10,
+  yMax: 10,
   yPoints: 100,
   maxRecursion: 100,
   angleMode: "radians",

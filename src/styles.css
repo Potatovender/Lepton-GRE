@@ -1134,6 +1134,17 @@ textarea.compact-field,
   font-size: 13px;
 }
 
+.settings-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-section-title .entry-status {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
 .text-mode-panel {
   min-height: 0;
   height: 100%;
@@ -1229,6 +1240,24 @@ textarea.compact-field,
 .settings-row {
   display: grid;
   gap: 6px;
+}
+
+.settings-row-math,
+.settings-row-ratio {
+  min-width: 0;
+}
+
+.ratio-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ratio-separator {
+  color: #647083;
+  font-weight: 700;
 }
 
 .settings-row span,

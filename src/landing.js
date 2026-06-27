@@ -1,4 +1,4 @@
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260626-grid-rendering2";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260626-grid-settings1";
 
 function ensureLeptonFavicon() {
   const iconHref =

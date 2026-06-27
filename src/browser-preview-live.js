@@ -4,11 +4,11 @@ const DEFAULT_SCENE = {
   restrictions: [],
   draws: [],
   settings: {
-    xMin: -15,
-    xMax: 15,
+    xMin: -10,
+    xMax: 10,
     xPoints: 120,
-    yMin: -15,
-    yMax: 15,
+    yMin: -10,
+    yMax: 10,
     yPoints: 120,
     maxRecursion: 100,
     angleMode: "radians",
@@ -19,7 +19,7 @@ const DEFAULT_SCENE = {
   }
 };
 
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260626-grid-rendering2";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260626-grid-settings1";
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -230,6 +230,7 @@ let helpTooltipTimer = null;
 let activeHelpTarget = null;
 let pointerSelectionField = null;
 let lastPointerClientX = null;
+let pointerSelectionAnchor = null;
 let boundaryPulseUntil = 0;
 let boundaryPulseTimer = 0;
 let aspectRatioCustomOpen = false;
@@ -490,11 +491,15 @@ function keepHorizontalCaretVisible(field) {
 function scrollFieldNearPointer(field, event) {
   if (field.scrollWidth <= field.clientWidth) return;
   const rect = field.getBoundingClientRect();
-  const edge = 28;
-  if (event.clientX > rect.right - edge) {
-    field.scrollLeft += Math.max(8, event.clientX - (rect.right - edge));
-  } else if (event.clientX < rect.left + edge) {
-    field.scrollLeft -= Math.max(8, rect.left + edge - event.clientX);
+  const rightEdge = 30;
+  const leftEdge = 56;
+  const maxStep = 18;
+  if (event.clientX > rect.right - rightEdge) {
+    const pressure = event.clientX - (rect.right - rightEdge);
+    field.scrollLeft += clampNumber(pressure * 0.45, 3, maxStep);
+  } else if (event.clientX < rect.left + leftEdge) {
+    const pressure = rect.left + leftEdge - event.clientX;
+    field.scrollLeft -= clampNumber(pressure * 0.55, 4, maxStep);
   }
 }
 
@@ -506,12 +511,66 @@ function scrollFieldHorizontally(field, event) {
   return true;
 }
 
-function keepTextInputCaretVisible(field) {
+function keepTextInputCaretVisible(field, event = null) {
   if (field.selectionStart == null || field.selectionEnd == null) return;
-  if (field.selectionStart !== field.selectionEnd) return;
-  if (field.selectionStart === field.value.length) {
+  const caretIndex = textInputVisibleCaretIndex(field, event);
+  if (caretIndex === field.value.length) {
     field.scrollLeft = field.scrollWidth;
+    return;
   }
+  const caretLeft = textWidthForInput(field, field.value.slice(0, caretIndex));
+  const inset = 20;
+  const visibleLeft = field.scrollLeft;
+  const visibleRight = field.scrollLeft + field.clientWidth;
+  if (caretLeft < visibleLeft + inset) {
+    field.scrollLeft = Math.max(0, caretLeft - inset);
+  } else if (caretLeft > visibleRight - inset) {
+    field.scrollLeft = Math.max(0, caretLeft - field.clientWidth + inset);
+  }
+}
+
+function textInputVisibleCaretIndex(field, event = null) {
+  if (field.selectionStart === field.selectionEnd || !event) {
+    return field.selectionEnd ?? field.selectionStart ?? field.value.length;
+  }
+  const rect = field.getBoundingClientRect();
+  const midpoint = rect.left + rect.width / 2;
+  return event.clientX < midpoint ? field.selectionStart : field.selectionEnd;
+}
+
+function textWidthForInput(field, text) {
+  const style = getComputedStyle(field);
+  const canvas = textWidthForInput.canvas ??= document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  context.font = `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} / ${style.lineHeight} ${style.fontFamily}`;
+  const padding = parseFloat(style.paddingLeft || "0") + 2;
+  return context.measureText(text).width + padding;
+}
+
+function textInputIndexFromClientX(field, clientX) {
+  const rect = field.getBoundingClientRect();
+  const target = field.scrollLeft + clientX - rect.left;
+  let low = 0;
+  let high = field.value.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (textWidthForInput(field, field.value.slice(0, mid)) < target) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return clampNumber(low, 0, field.value.length);
+}
+
+function updateTextInputSelectionFromPointer(field, event) {
+  if (!(field instanceof HTMLInputElement) || field.selectionStart == null || field.selectionEnd == null) return;
+  pointerSelectionAnchor ??= field.selectionStart ?? field.selectionEnd ?? 0;
+  const focusIndex = textInputIndexFromClientX(field, event.clientX);
+  const start = Math.min(pointerSelectionAnchor, focusIndex);
+  const end = Math.max(pointerSelectionAnchor, focusIndex);
+  const direction = focusIndex < pointerSelectionAnchor ? "backward" : "forward";
+  field.setSelectionRange(start, end, direction);
 }
 
 function insertIntoTextField(field, text) {
@@ -613,6 +672,13 @@ function handleDocumentSelectionScroll() {
 
 function beginSelectionPointerScroll(field) {
   pointerSelectionField = field;
+  pointerSelectionAnchor = null;
+  requestAnimationFrame(() => {
+    if (pointerSelectionField !== field) return;
+    if (field instanceof HTMLInputElement && field.selectionStart != null) {
+      pointerSelectionAnchor = field.selectionStart;
+    }
+  });
 }
 
 function handleDocumentPointerScroll(event) {
@@ -623,13 +689,15 @@ function handleDocumentPointerScroll(event) {
   if (field.classList?.contains("mathquill-field")) {
     keepHorizontalCaretVisible(field);
   } else if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
-    keepTextInputCaretVisible(field);
+    updateTextInputSelectionFromPointer(field, event);
+    keepTextInputCaretVisible(field, event);
   }
 }
 
 function stopSelectionPointerScroll() {
   pointerSelectionField = null;
   lastPointerClientX = null;
+  pointerSelectionAnchor = null;
 }
 
 function renderPanel() {
@@ -714,15 +782,19 @@ function renderPanel() {
     ].join("");
   }
 
+  const gridStatus = diagnostics.settings[0] ?? { status: "valid", message: "Grid rendering settings are valid" };
   return `
     ${tutorialCoachmark()}
     <div class="settings-grid">
       <section class="settings-section">
-        <h3>Grid rendering</h3>
-        ${settingsField("xMin", "x minimum", "text")}
-        ${settingsField("xMax", "x maximum", "text")}
-        ${settingsField("yMin", "y minimum", "text")}
-        ${settingsField("yMax", "y maximum", "text")}
+        <h3 class="settings-section-title">
+          <span class="entry-status ${gridStatus.status}" title="${escapeHtml(gridStatus.message)}" aria-label="${escapeHtml(gridStatus.message)}"></span>
+          Grid rendering
+        </h3>
+        ${settingsMathField("xMin", "x minimum")}
+        ${settingsMathField("xMax", "x maximum")}
+        ${settingsMathField("yMin", "y minimum")}
+        ${settingsMathField("yMax", "y maximum")}
         <label class="inline-check">
           <input type="checkbox" data-field="settings.ensureSquareGrid" ${scene.settings.ensureSquareGrid !== false ? "checked" : ""} />
           ensure square grid
@@ -733,7 +805,7 @@ function renderPanel() {
             ${aspectRatioOptions()}
           </select>
         </label>
-        ${isCustomAspectRatio() ? settingsField("aspectRatio", "custom ratio", "text") : ""}
+        ${isCustomAspectRatio() ? aspectRatioFields() : ""}
         <label class="inline-check">
           <input type="checkbox" data-field="settings.drawOnlyInsideBoundary" ${scene.settings.drawOnlyInsideBoundary ? "checked" : ""} />
           draw only inside boundary
@@ -831,6 +903,36 @@ function settingsField(key, label, type = "number") {
     <label class="settings-row">
       <span>${label}</span>
       <input class="compact-field" type="${type}" data-field="settings.${key}" value="${escapeHtml(scene.settings[key])}" />
+    </label>
+  `;
+}
+
+function settingsMathField(key, label) {
+  return `
+    <label class="settings-row settings-row-math">
+      <span>${label}</span>
+      ${mathEditor(`settings.${key}`, String(scene.settings[key] ?? ""), label, true, "enter function here")}
+    </label>
+  `;
+}
+
+function aspectRatioParts() {
+  const raw = String(scene.settings.aspectRatio ?? "1:1");
+  const index = raw.indexOf(":");
+  if (index === -1) return [raw || "1", "1"];
+  return [raw.slice(0, index) || "1", raw.slice(index + 1) || "1"];
+}
+
+function aspectRatioFields() {
+  const [left, right] = aspectRatioParts();
+  return `
+    <label class="settings-row settings-row-ratio">
+      <span>custom ratio</span>
+      <div class="ratio-fields">
+        ${mathEditor("settings.aspectRatioLeft", left, "Aspect ratio left side", true, "enter function here")}
+        <span class="ratio-separator">:</span>
+        ${mathEditor("settings.aspectRatioRight", right, "Aspect ratio right side", true, "enter function here")}
+      </div>
     </label>
   `;
 }
@@ -1069,7 +1171,12 @@ function bindEvents() {
           const [collection, rawIndex, property] = fieldName.split(".");
           const index = Number(rawIndex);
           const before = sceneSnapshot();
-          if (collection === "functions" && property === "expression") {
+          if (collection === "settings") {
+            updateSettingValue(rawIndex, cleanExpr);
+            viewport = sceneViewport();
+            if (isValidViewport(viewport)) saveViewport();
+            triggerBoundaryOverlay();
+          } else if (collection === "functions" && property === "expression") {
             const assignment = parseAssignment(cleanExpr);
             if (assignment) {
               scene.functions[index].id = assignment.id;
@@ -1101,9 +1208,23 @@ function bindEvents() {
       activateKeyboardTarget(field);
       beginSelectionPointerScroll(field);
     });
+    field.addEventListener("mousedown", () => {
+      activateKeyboardTarget(field);
+      beginSelectionPointerScroll(field);
+    });
     field.addEventListener("keydown", (event) => {
       if (handleFieldHistoryKeydown(event)) {
         event.preventDefault();
+        return;
+      }
+      if (event.key === "Enter" && field.dataset.field?.startsWith("functions.") && field.dataset.field?.endsWith(".expression")) {
+        event.preventDefault();
+        syncFields();
+        const before = sceneSnapshot();
+        const target = addEntry("functions");
+        recordSceneHistory(before);
+        pendingScrollTarget = target;
+        renderApp();
         return;
       }
       requestAnimationFrame(() => keepHorizontalCaretVisible(field));
@@ -1111,7 +1232,16 @@ function bindEvents() {
     field.addEventListener("keyup", () => requestAnimationFrame(() => keepHorizontalCaretVisible(field)));
     field.addEventListener("mouseup", () => requestAnimationFrame(() => keepHorizontalCaretVisible(field)));
     field.addEventListener("pointermove", (event) => {
-      if (event.buttons) scrollFieldNearPointer(field, event);
+      if (event.buttons) {
+        scrollFieldNearPointer(field, event);
+        keepHorizontalCaretVisible(field);
+      }
+    });
+    field.addEventListener("mousemove", (event) => {
+      if (event.buttons) {
+        scrollFieldNearPointer(field, event);
+        keepHorizontalCaretVisible(field);
+      }
     });
     field.addEventListener(
       "wheel",
@@ -1128,11 +1258,24 @@ function bindEvents() {
       activateKeyboardTarget(field);
       beginSelectionPointerScroll(field);
     });
+    field.addEventListener("mousedown", () => {
+      activateKeyboardTarget(field);
+      beginSelectionPointerScroll(field);
+    });
     field.addEventListener("input", () => keepTextInputCaretVisible(field));
     field.addEventListener("keyup", () => keepTextInputCaretVisible(field));
     field.addEventListener("mouseup", () => keepTextInputCaretVisible(field));
     field.addEventListener("pointermove", (event) => {
-      if (event.buttons) scrollFieldNearPointer(field, event);
+      if (event.buttons) {
+        scrollFieldNearPointer(field, event);
+        keepTextInputCaretVisible(field, event);
+      }
+    });
+    field.addEventListener("mousemove", (event) => {
+      if (event.buttons) {
+        scrollFieldNearPointer(field, event);
+        keepTextInputCaretVisible(field, event);
+      }
     });
     field.addEventListener(
       "wheel",
@@ -1495,21 +1638,48 @@ function schedulePanRender() {
   });
 }
 
+function updateSettingValue(key, value) {
+  if (["ensureSquareGrid", "drawOnlyInsideBoundary"].includes(key)) {
+    scene.settings[key] = Boolean(value);
+    return;
+  }
+  if (key === "aspectRatioLeft" || key === "aspectRatioRight") {
+    const [left, right] = aspectRatioParts();
+    const nextLeft = key === "aspectRatioLeft" ? String(value ?? "").trim() : left;
+    const nextRight = key === "aspectRatioRight" ? String(value ?? "").trim() : right;
+    scene.settings.aspectRatio = `${nextLeft || "1"}:${nextRight || "1"}`;
+    aspectRatioCustomOpen = true;
+    return;
+  }
+  if (key === "angleMode") {
+    scene.settings.angleMode = normalizeAngleMode(value);
+    return;
+  }
+  if (key === "backgroundColor") {
+    scene.settings.backgroundColor = String(value ?? "").trim() || "0";
+    return;
+  }
+  if (key === "aspectRatio") {
+    scene.settings.aspectRatio = String(value ?? "").trim() || "1:1";
+    aspectRatioCustomOpen = true;
+    return;
+  }
+  if (key === "maxRecursion") {
+    const number = Number(value);
+    scene.settings.maxRecursion = Number.isFinite(number) ? number : scene.settings.maxRecursion;
+    return;
+  }
+  scene.settings[key] = String(value ?? "").trim();
+}
+
 function updateField(field) {
   const [collection, rawIndex, property] = field.dataset.field.split(".");
   let value = readFieldValue(field);
   if (property === "id") value = value.trim();
 
   if (collection === "settings") {
-    if (["ensureSquareGrid", "drawOnlyInsideBoundary"].includes(rawIndex)) {
-      scene.settings[rawIndex] = Boolean(value);
-    } else if (["angleMode", "backgroundColor", "aspectRatio"].includes(rawIndex)) {
-      scene.settings[rawIndex] = String(value);
-      if (rawIndex === "aspectRatio") aspectRatioCustomOpen = true;
-    } else {
-      scene.settings[rawIndex] = rawIndex === "maxRecursion" ? Number(value) : String(value);
-    }
-    if (["xMin", "xMax", "yMin", "yMax", "ensureSquareGrid", "aspectRatio", "drawOnlyInsideBoundary"].includes(rawIndex)) {
+    updateSettingValue(rawIndex, value);
+    if (["xMin", "xMax", "yMin", "yMax", "ensureSquareGrid", "aspectRatio", "aspectRatioLeft", "aspectRatioRight", "drawOnlyInsideBoundary"].includes(rawIndex)) {
       viewport = sceneViewport();
       if (isValidViewport(viewport)) saveViewport();
       triggerBoundaryOverlay();
@@ -2464,8 +2634,12 @@ function validateScene() {
 }
 
 function viewportDiagnostic() {
+  const ratio = parseAspectRatioSetting();
+  if (!ratio.valid) {
+    return { status: "invalid", message: ratio.message };
+  }
   const valid = isValidViewport(sceneViewport());
-  if (valid) return { status: "valid", message: "Viewport bounds are valid" };
+  if (valid) return { status: "valid", message: "Grid rendering settings are valid" };
   return scene.settings.ensureSquareGrid !== false
     ? { status: "warning", message: "Invalid bounds; square grid is using the default viewport" }
     : { status: "invalid", message: "Invalid bounds: minimum values must be less than maximum values" };
@@ -2597,6 +2771,18 @@ function assertCompleteExpression(source) {
 
 function updateStatusLights(diagnostics) {
   const group = diagnostics[activeTab] ?? [];
+  if (activeTab === "settings") {
+    const gridStatus = diagnostics.settings?.[0];
+    const status = root.querySelector(".settings-section-title .entry-status");
+    if (status && gridStatus) {
+      status.classList.toggle("valid", gridStatus.status === "valid");
+      status.classList.toggle("invalid", gridStatus.status === "invalid");
+      status.classList.toggle("info", gridStatus.status === "info");
+      status.classList.toggle("warning", gridStatus.status === "warning");
+      status.setAttribute("title", gridStatus.message);
+      status.setAttribute("aria-label", gridStatus.message);
+    }
+  }
   root.querySelectorAll(".expression-row").forEach((row, index) => {
     const status = row.querySelector(".entry-status");
     const item = group[index];
@@ -4800,13 +4986,22 @@ function evaluateScalarSetting(source) {
 }
 
 function aspectRatioValue() {
-  const raw = String(scene.settings.aspectRatio ?? "1:1");
-  const [left, right] = raw.split(":");
-  if (right === undefined) return 1;
-  const width = evaluateScalarSetting(left);
-  const height = evaluateScalarSetting(right);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1;
-  return width / height;
+  const ratio = parseAspectRatioSetting();
+  return ratio.valid ? ratio.value : 1;
+}
+
+function parseAspectRatioSetting() {
+  const raw = String(scene.settings.aspectRatio ?? "1:1").trim();
+  const parts = raw.split(":");
+  if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
+    return { valid: false, value: 1, message: "Invalid aspect ratio: use two positive values separated by a colon" };
+  }
+  const width = evaluateScalarSetting(parts[0]);
+  const height = evaluateScalarSetting(parts[1]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { valid: false, value: 1, message: "Invalid aspect ratio: both sides must evaluate to positive numbers" };
+  }
+  return { valid: true, value: width / height, message: "Aspect ratio is valid" };
 }
 
 function applyAspectRatioToViewport(candidate) {
@@ -4946,6 +5141,8 @@ document.addEventListener("selectionchange", () => requestAnimationFrame(handleD
 document.addEventListener("pointermove", handleDocumentPointerScroll);
 document.addEventListener("pointerup", stopSelectionPointerScroll);
 document.addEventListener("pointercancel", stopSelectionPointerScroll);
+document.addEventListener("mousemove", handleDocumentPointerScroll);
+document.addEventListener("mouseup", stopSelectionPointerScroll);
 ensureLeptonFavicon();
 
 if (typeof URLSearchParams !== "undefined" && window.location && new URLSearchParams(window.location.search).get("capture") === "1") {
