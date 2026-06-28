@@ -19,7 +19,12 @@ export interface GridSettings {
 
 export interface RegistryEntry {
   id: string;
+  kind?: "variable" | "slider" | "function";
   expression: string;
+  params?: string[];
+  sliderMin?: string;
+  sliderMax?: string;
+  time?: boolean;
 }
 
 export interface DrawEntry {

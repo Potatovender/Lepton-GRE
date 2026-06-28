@@ -272,7 +272,7 @@ S:angle_mode~radians`);
 });
 
 check("new Lepton language exports settings first without section dividers", () => {
-  const imported = sandbox.importScene(`function f1 = x+y
+  const imported = sandbox.importScene(`variable f1 = x+y
 colour c1=f1~f1~f1
 boundary r1=f1~False
 draw(f1,c1,r1,False)
@@ -287,7 +287,7 @@ set background_color = 0`);
   const exported = sandbox.exportScene();
   assert(!exported.includes("~~~~~"), exported);
   assert(exported.startsWith("set x_min = -15\nset x_max = 15"), exported);
-  assert(exported.includes("\nfunction f1 = x+y"), exported);
+  assert(exported.includes("\nvariable f1 = x+y"), exported);
   assert(exported.includes("\ncolour c1 = f1~f1~f1"), exported);
   assert(exported.includes("\nboundary r1 = f1~False"), exported);
   assert(exported.includes("\ndraw(f1,c1,r1,False)"), exported);
@@ -296,7 +296,7 @@ set background_color = 0`);
 check("new Lepton language accepts aliases booleans and invalid angle fallback", () => {
   const imported = sandbox.importScene(`set angle_mode = sideways
 set max_recursion = 33
-function f1 = pi+x
+variable f1 = pi+x
 color c1 = f1~f1~f1
 restriction r1 = f1~true
 draw(f1,c1,r1,true)`);
@@ -307,6 +307,39 @@ draw(f1,c1,r1,true)`);
   assert(imported.draws[0].hidden === true, JSON.stringify(imported.draws));
 });
 
+check("typed function entries export and evaluate with local parameters", () => {
+  const imported = sandbox.importScene(`variable y = 100
+slider speed = 5
+time t = 0
+function f(x,y) = x+y
+colour c1 = f~f~f
+boundary r1 = f~False
+draw(f,c1,r1,False)`);
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("\nvariable y = 100"), exported);
+  assert(exported.includes("\nslider speed = 5"), exported);
+  assert(exported.includes("\ntime t = 0"), exported);
+  assert(exported.includes("\nfunction f(x,y) = x+y"), exported);
+
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  const value = sandbox.compileExpression("f(2,3)")(0, 0, env);
+  assert(value === 5, `expected local parameter call to return 5, got ${value}`);
+  const validation = sandbox.validateExpression("f(2,3)", sandbox.sceneFunctionEnv(true));
+  assert(validation.status === "valid", JSON.stringify(validation));
+  const glsl = sandbox.expressionToGlsl("f(2,3)", sandbox.sceneFunctionEnv(true));
+  assert(glsl.includes("2.0") && glsl.includes("3.0") && !glsl.includes("x") && !glsl.includes("y"), glsl);
+});
+
+check("function parameters shadow outer variables with a warning", () => {
+  const imported = sandbox.importScene(`variable banana = 10
+function f(banana) = banana+1`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.functions[1].status === "warning", JSON.stringify(diagnostics.functions));
+  assert(diagnostics.functions[1].message.includes("shadows an outer variable or slider"), diagnostics.functions[1].message);
+});
+
 check("grid settings accept math expressions aspect ratios and clip export", () => {
   const imported = sandbox.importScene(`set x_min = -pi
 set x_max = pi
@@ -315,7 +348,7 @@ set y_max = 1
 set ensure_square_grid = True
 set aspect_ratio = sqrt(2):1
 set draw_only_inside_boundary = True
-function f1 = x`);
+variable f1 = x`);
   sandbox.__debugSetScene(imported);
   const viewport = sandbox.sceneViewport();
   assert(Math.abs(viewport.xMin + Math.PI) < 1e-9, JSON.stringify(viewport));

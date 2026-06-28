@@ -19,7 +19,7 @@ const DEFAULT_SCENE = {
   }
 };
 
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260627-editor-drag1";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260627-function-types1";
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -153,11 +153,12 @@ const COMMON_ASPECT_RATIOS = [
 ];
 const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
 const NODE_RED_FLAG_THRESHOLD = 2 ** 16;
-const DEFAULT_DRAW_FUNCTION = { id: "f1", expression: "x" };
+const DEFAULT_DRAW_FUNCTION = { id: "f1", kind: "variable", expression: "x" };
 const DEFAULT_DRAW_COLOR = { id: "default", label: "default", red: "x", green: "x", blue: "x" };
 const DEFAULT_DRAW_BOUNDARY = { id: "default", label: "default", expression: "1", checkSmaller: false };
 const LEGACY_DEFAULT_COLOR_IDS = new Set(["c1"]);
 const LEGACY_DEFAULT_BOUNDARY_IDS = new Set(["rest"]);
+const FUNCTION_ENTRY_KINDS = new Set(["variable", "slider", "function"]);
 const HELP_TEXT = {
   standard: "Standard mode is the visual editor. Use tabs for functions, colors, bounds, draw layers, and settings.",
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
@@ -295,6 +296,50 @@ function sortLabel(sort) {
   if (sort === "az") return "ID A-Z";
   if (sort === "za") return "ID Z-A";
   return "In order";
+}
+
+function normalizeFunctionEntry(entry) {
+  const kind = FUNCTION_ENTRY_KINDS.has(entry?.kind) ? entry.kind : "variable";
+  return {
+    id: String(entry?.id ?? ""),
+    kind,
+    expression: String(entry?.expression ?? ""),
+    params: Array.isArray(entry?.params) ? entry.params.map((param) => String(param).trim()).filter(Boolean) : [],
+    sliderMin: String(entry?.sliderMin ?? "0"),
+    sliderMax: String(entry?.sliderMax ?? "1"),
+    time: Boolean(entry?.time)
+  };
+}
+
+function functionEntryExpression(entry) {
+  return String(normalizeFunctionEntry(entry).expression ?? "");
+}
+
+function functionEntryParams(entry) {
+  return normalizeFunctionEntry(entry).params;
+}
+
+function functionEntryKind(entry) {
+  return normalizeFunctionEntry(entry).kind;
+}
+
+function envEntry(env, name) {
+  const value = env?.[name];
+  if (!value) return null;
+  return typeof value === "string" ? normalizeFunctionEntry({ id: name, kind: "variable", expression: value }) : normalizeFunctionEntry(value);
+}
+
+function envExpression(env, name) {
+  const entry = envEntry(env, name);
+  return entry ? functionEntryExpression(entry) : "";
+}
+
+function envFunctionDefinitions(env) {
+  return Object.fromEntries(
+    Object.entries(env ?? {})
+      .map(([id, entry]) => [id, envEntry(env, id)])
+      .filter(([, entry]) => entry && entry.kind === "function")
+  );
 }
 
 function nextSort(sort) {
@@ -690,10 +735,7 @@ function renderPanel() {
       tutorialCoachmark(),
       listControlBar("functions", "functions"),
       ...visibleEntries(scene.functions, "functions").map(
-        ([entry, index]) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", `
-          <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Function id" />
-          ${mathEditor(`functions.${index}.expression`, entry.expression, "Function expression", false, "enter function here")}
-        `, "functions", index)
+        ([entry, index]) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", functionRowContent(entry, index), "functions", index)
       ),
       addRow("Add function", "functions")
     ].join("");
@@ -830,6 +872,55 @@ function visibleEntries(entries, kind) {
     });
   }
   return indexed;
+}
+
+function functionRowContent(entry, index) {
+  const normalized = normalizeFunctionEntry(entry);
+  return `
+    <div class="function-row-head">
+      <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(normalized.id)}" placeholder="ID" aria-label="Function id" />
+      ${functionKindSelector(normalized.kind, index)}
+    </div>
+    ${normalized.kind === "slider" ? sliderRowContent(normalized, index) : ""}
+    ${normalized.kind === "function" ? functionSignatureContent(normalized, index) : ""}
+    ${normalized.kind !== "slider" ? mathEditor(`functions.${index}.expression`, normalized.expression, "Function expression", false, "enter function here") : ""}
+  `;
+}
+
+function functionKindSelector(kind, index) {
+  return `
+    <div class="function-kind-selector" aria-label="Function entry type">
+      ${["variable", "slider", "function"].map((entryKind) => `
+        <button class="function-kind-button" type="button" data-function-kind="${index}.${entryKind}" aria-pressed="${kind === entryKind}">
+          ${entryKind}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function functionSignatureContent(entry, index) {
+  return `
+    <label class="function-params-row">
+      <span>inputs</span>
+      <input class="compact-field" data-field="functions.${index}.params" value="${escapeHtml(entry.params.join(","))}" placeholder="x,y" aria-label="Function input parameters" />
+    </label>
+  `;
+}
+
+function sliderRowContent(entry, index) {
+  return `
+    <div class="slider-controls">
+      <button class="slider-step" type="button" data-slider-step="${index}.-1" aria-label="Decrease slider value">−</button>
+      ${mathEditor(`functions.${index}.expression`, entry.expression, "Slider value", true, "value")}
+      <button class="slider-step" type="button" data-slider-step="${index}.1" aria-label="Increase slider value">+</button>
+    </div>
+    <div class="slider-range-row">
+      <label><span>min</span>${mathEditor(`functions.${index}.sliderMin`, entry.sliderMin, "Slider minimum", true, "min")}</label>
+      <label><span>max</span>${mathEditor(`functions.${index}.sliderMax`, entry.sliderMax, "Slider maximum", true, "max")}</label>
+      <label class="inline-check"><input type="checkbox" data-field="functions.${index}.time" ${entry.time ? "checked" : ""} /> time variable</label>
+    </div>
+  `;
 }
 
 function mathEditor(field, value, label, small = false, placeholder = "") {
@@ -1040,6 +1131,36 @@ function bindEvents() {
     keyboardOpen = false;
     renderApp();
   });
+  root.querySelectorAll("[data-function-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      const [rawIndex, kind] = button.dataset.functionKind.split(".");
+      const index = Number(rawIndex);
+      if (!FUNCTION_ENTRY_KINDS.has(kind) || !scene.functions[index]) return;
+      const before = sceneSnapshot();
+      const entry = normalizeFunctionEntry(scene.functions[index]);
+      entry.kind = kind;
+      scene.functions[index] = entry;
+      recordSceneHistory(before);
+      renderApp();
+    });
+  });
+  root.querySelectorAll("[data-slider-step]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      const [rawIndex, rawDirection] = button.dataset.sliderStep.split(".");
+      const index = Number(rawIndex);
+      const direction = Number(rawDirection);
+      const entry = normalizeFunctionEntry(scene.functions[index]);
+      const current = evaluateScalarSetting(entry.expression);
+      const next = Number.isFinite(current) ? current + direction : direction;
+      const before = sceneSnapshot();
+      entry.expression = String(next);
+      scene.functions[index] = entry;
+      recordSceneHistory(before);
+      renderApp();
+    });
+  });
   root.querySelectorAll("[data-keyboard-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       keyboardTab = button.dataset.keyboardTab;
@@ -1145,13 +1266,21 @@ function bindEvents() {
           } else if (collection === "functions" && property === "expression") {
             const assignment = parseAssignment(cleanExpr);
             if (assignment) {
-              scene.functions[index].id = assignment.id;
-              scene.functions[index].expression = assignment.expression;
+              const entry = normalizeFunctionEntry(scene.functions[index]);
+              entry.id = assignment.id;
+              entry.expression = assignment.expression;
+              scene.functions[index] = entry;
               const idInput = root.querySelector(`[data-field="functions.${index}.id"]`);
               if (idInput) idInput.value = assignment.id;
             } else {
-              scene.functions[index].expression = cleanExpr;
+              const entry = normalizeFunctionEntry(scene.functions[index]);
+              entry.expression = cleanExpr;
+              scene.functions[index] = entry;
             }
+          } else if (collection === "functions") {
+            const entry = normalizeFunctionEntry(scene.functions[index]);
+            entry[property] = cleanExpr;
+            scene.functions[index] = entry;
           } else {
             scene[collection][index][property] = cleanExpr;
           }
@@ -1654,16 +1783,31 @@ function updateField(field) {
   if (collection === "functions" && property === "expression") {
     const assignment = parseAssignment(value);
     if (assignment) {
-      scene.functions[Number(rawIndex)].id = assignment.id;
-      scene.functions[Number(rawIndex)].expression = assignment.expression;
+      const entry = normalizeFunctionEntry(scene.functions[Number(rawIndex)]);
+      entry.id = assignment.id;
+      entry.expression = assignment.expression;
+      scene.functions[Number(rawIndex)] = entry;
       return;
     }
   }
 
-  scene[collection][Number(rawIndex)][property] = value;
+  if (collection === "functions") {
+    const entry = normalizeFunctionEntry(scene.functions[Number(rawIndex)]);
+    entry[property] = property === "params" ? parseFunctionParams(value) : value;
+    scene.functions[Number(rawIndex)] = entry;
+  } else {
+    scene[collection][Number(rawIndex)][property] = value;
+  }
   if (field.classList?.contains("mathquill-field")) {
     field.dataset.value = latexSourceFromExpression(value);
   }
+}
+
+function parseFunctionParams(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((param) => param.trim())
+    .filter(Boolean);
 }
 
 function readFieldValue(field) {
@@ -1679,7 +1823,8 @@ function syncFields() {
 }
 
 function resolveFunctionEntry(id) {
-  return scene.functions.find((entry) => entry.id === id) ?? (id === DEFAULT_DRAW_FUNCTION.id ? DEFAULT_DRAW_FUNCTION : null);
+  const entry = scene.functions.find((item) => item.id === id);
+  return entry ? normalizeFunctionEntry(entry) : (id === DEFAULT_DRAW_FUNCTION.id ? DEFAULT_DRAW_FUNCTION : null);
 }
 
 function resolveColorEntry(id) {
@@ -1693,7 +1838,7 @@ function resolveBoundaryEntry(id) {
 }
 
 function drawFunctionEntries() {
-  return scene.functions.length ? scene.functions : [DEFAULT_DRAW_FUNCTION];
+  return scene.functions.length ? scene.functions.map(normalizeFunctionEntry) : [DEFAULT_DRAW_FUNCTION];
 }
 
 function drawColorEntries() {
@@ -1709,16 +1854,19 @@ function drawBoundaryEntries() {
 }
 
 function sceneFunctionEnv(includeDefault = false) {
-  const entries = scene.functions.map((entry) => [entry.id, entry.expression]);
+  const entries = scene.functions.map((entry) => {
+    const normalized = normalizeFunctionEntry(entry);
+    return [normalized.id, normalized];
+  });
   if (includeDefault && !scene.functions.some((entry) => entry.id === DEFAULT_DRAW_FUNCTION.id)) {
-    entries.push([DEFAULT_DRAW_FUNCTION.id, DEFAULT_DRAW_FUNCTION.expression]);
+    entries.push([DEFAULT_DRAW_FUNCTION.id, DEFAULT_DRAW_FUNCTION]);
   }
   return Object.fromEntries(entries);
 }
 
 function addEntry(kind) {
   if (kind === "functions") {
-    scene.functions.push({ id: `f${scene.functions.length + 1}`, expression: "" });
+    scene.functions.push({ id: `f${scene.functions.length + 1}`, kind: "variable", expression: "" });
     return { kind, index: scene.functions.length - 1 };
   }
   if (kind === "colors") {
@@ -1867,7 +2015,7 @@ function renderSceneCpu(canvas) {
     let blue;
     let boundary;
     try {
-      evaluate = compileExpression(fn.expression);
+      evaluate = compileExpression(fn.expression, fn.kind === "function" ? new Set(fn.params) : new Set());
       red = compileExpression(color.red);
       green = compileExpression(color.green);
       blue = compileExpression(color.blue);
@@ -1881,11 +2029,20 @@ function renderSceneCpu(canvas) {
         const x = xPoints[xi];
         const y = yPoints[yi];
         if (shouldClip && (x < clipViewport.xMin || x > clipViewport.xMax || y < clipViewport.yMin || y > clipViewport.yMax)) continue;
+        const previousLocals = env.__locals;
+        if (fn.kind === "function") {
+          env.__locals = Object.fromEntries(fn.params.map((param) => [param, param === "x" ? x : param === "y" ? y : 0]));
+        }
         const boundaryValue = boundary(x, y, env);
+        if (fn.kind === "function") env.__locals = previousLocals;
         if (!Number.isFinite(boundaryValue)) continue;
         if (restriction.checkSmaller ? boundaryValue > 0 : boundaryValue < 0) continue;
 
+        if (fn.kind === "function") {
+          env.__locals = Object.fromEntries(fn.params.map((param) => [param, param === "x" ? x : param === "y" ? y : 0]));
+        }
         const z = evaluate(x, y, env);
+        if (fn.kind === "function") env.__locals = previousLocals;
         if (!Number.isFinite(z)) continue;
 
         ctx.fillStyle = `rgb(${channel(red(z, 0, env))}, ${channel(green(z, 0, env))}, ${channel(blue(z, 0, env))})`;
@@ -1965,7 +2122,7 @@ function resolveBackgroundColor() {
   const color = scene.colors.find((entry) => entry.id === id);
   if (!color) return fallback;
   try {
-    const env = buildRuntimeEnv(Object.fromEntries(scene.functions.map((entry) => [entry.id, entry.expression])));
+    const env = buildRuntimeEnv(sceneFunctionEnv());
     const red = compileExpression(color.red)(0, 0, env);
     const green = compileExpression(color.green)(0, 0, env);
     const blue = compileExpression(color.blue)(0, 0, env);
@@ -2001,7 +2158,7 @@ function buildFragmentShader() {
       const restriction = resolveBoundaryEntry(draw?.restrictionId);
       if (!fn || !color || !restriction) return null;
       if (
-        validateExpression(fn.expression, env, [fn.id]).status === "invalid" ||
+        validateExpression(fn.expression, env, [fn.id], fn.kind === "function" ? new Set(fn.params) : new Set()).status === "invalid" ||
         validateExpression(color.red, env).status === "invalid" ||
         validateExpression(color.green, env).status === "invalid" ||
         validateExpression(color.blue, env).status === "invalid" ||
@@ -2011,7 +2168,7 @@ function buildFragmentShader() {
       }
       try {
         return {
-          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode),
+          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, fn.kind === "function" ? defaultParamGlslMap(fn.params) : {}),
           red: expressionToGlsl(color.red, env, "z", [], scene.settings.angleMode),
           green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode),
           blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode),
@@ -2259,8 +2416,14 @@ function axis(min, max, count) {
   return Array.from({ length: count }, (_, index) => min + step * index);
 }
 
-function compileExpression(source) {
+function compileExpression(source, localNames = new Set()) {
   let js = normalizeMathSyntax(normalizeExpressionText(source));
+  js = rewriteCustomFunctionCalls(js, sceneFunctionEnv(true), (entry, args) => {
+    if (args.length !== entry.params.length) {
+      throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
+    }
+    return `call("${entry.id}", [${args.join(",")}], x, y)`;
+  });
   js = convertPowers(js)
     .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
     .replaceAll(/\bpi\b/g, "Math.PI")
@@ -2268,7 +2431,12 @@ function compileExpression(source) {
     .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log|pow)\b/g, "Math.$1")
     .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
 
-  js = rewriteBareIdentifiers(js, (name) => `ref("${name}", x, y)`, new Set(["Math", "E", "PI"]));
+  js = rewriteBareIdentifiers(
+    js,
+    (name) => localNames.has(name) ? `local("${name}")` : `ref("${name}", x, y)`,
+    new Set(["Math", "E", "PI", "call", "local"]),
+    localNames
+  );
 
   return new Function(
     "x",
@@ -2295,6 +2463,7 @@ function compileExpression(source) {
       const arccsch = (value) => Math.asinh(1 / value);
       const arccoth = (value) => Math.atanh(1 / value);
       const runtime = env.__runtime ?? { depth: 0, maxDepth: ${recursionLimit()} };
+      const local = (name) => env.__locals?.[name] ?? NaN;
       const ref = (name, rx, ry) => {
         if (!env[name]) return NaN;
         if (runtime.depth >= runtime.maxDepth) return 0;
@@ -2305,6 +2474,9 @@ function compileExpression(source) {
           runtime.depth -= 1;
         }
       };
+      const call = (name, values, rx, ry) => {
+        return env.__call ? env.__call(name, values, rx, ry, env) : NaN;
+      };
       return ${js};
     `
   );
@@ -2312,19 +2484,93 @@ function compileExpression(source) {
 
 function buildRuntimeEnv(expressions) {
   const runtimeEnv = {};
-  for (const [id, expression] of Object.entries(expressions)) {
-    runtimeEnv[id] = (x, y, env) => compileExpression(expression)(x, y, env);
+  const definitions = {};
+  for (const [id, rawEntry] of Object.entries(expressions)) {
+    const entry = envEntry(expressions, id);
+    if (!entry) continue;
+    definitions[id] = entry;
+    runtimeEnv[id] = (x, y, env) => {
+      const localNames = entry.kind === "function" ? new Set(entry.params) : new Set();
+      const previousLocals = env.__locals;
+      if (entry.kind === "function") {
+        env.__locals = Object.fromEntries(entry.params.map((param) => [param, param === "x" ? x : param === "y" ? y : 0]));
+      }
+      try {
+        return compileExpression(entry.expression, localNames)(x, y, env);
+      } finally {
+        if (entry.kind === "function") env.__locals = previousLocals;
+      }
+    };
   }
+  Object.defineProperty(runtimeEnv, "__defs", { value: definitions, enumerable: false, configurable: true });
+  Object.defineProperty(runtimeEnv, "__call", {
+    value: (name, values, x, y, env) => {
+      const definition = definitions[name];
+      const runtime = env.__runtime ?? { depth: 0, maxDepth: recursionLimit() };
+      if (!definition || definition.kind !== "function") return NaN;
+      if (values.length !== definition.params.length) return NaN;
+      if (runtime.depth >= runtime.maxDepth) return 0;
+      const previousLocals = env.__locals;
+      env.__locals = Object.fromEntries(definition.params.map((param, index) => [param, values[index]]));
+      runtime.depth += 1;
+      try {
+        return compileExpression(definition.expression, new Set(definition.params))(x, y, env);
+      } finally {
+        runtime.depth -= 1;
+        env.__locals = previousLocals;
+      }
+    },
+    enumerable: false,
+    configurable: true
+  });
   return attachRuntimeGuard(runtimeEnv);
 }
 
-function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode = "radians") {
+function rewriteCustomFunctionCalls(expression, env, build) {
+  const definitions = envFunctionDefinitions(env);
+  let output = "";
+  let index = 0;
+  while (index < expression.length) {
+    const match = expression.slice(index).match(/^[A-Za-z_]\w*/);
+    if (!match) {
+      output += expression[index];
+      index += 1;
+      continue;
+    }
+    const name = match[0];
+    const nameStart = index;
+    index += name.length;
+    if (!definitions[name] || expression[index] !== "(") {
+      output += expression.slice(nameStart, index);
+      continue;
+    }
+    const close = matchingParen(expression, index);
+    if (close === -1) {
+      output += expression.slice(nameStart);
+      break;
+    }
+    const args = splitFunctionArgs(expression.slice(index + 1, close)).map((arg) => arg.trim()).filter((arg) => arg.length);
+    output += build(definitions[name], args);
+    index = close + 1;
+  }
+  return output;
+}
+
+function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode = "radians", localMap = {}) {
   if (stack.length > recursionLimit()) {
     return recursionBaseGlsl(zName);
   }
   let expression = normalizeExpressionText(source);
-  expression = inlineCustomVariables(expression, env, stack, zName, angleMode);
-  expression = inlineBareVariables(expression, env, stack, zName, angleMode);
+  expression = rewriteCustomFunctionCalls(expression, env, (entry, args) => {
+    if (args.length !== entry.params.length) {
+      throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
+    }
+    const expandedArgs = args.map((arg) => expressionToGlsl(arg, env, zName, stack, angleMode, localMap));
+    const nextLocalMap = Object.fromEntries(entry.params.map((param, index) => [param, `(${expandedArgs[index]})`]));
+    return `(${expressionToGlsl(entry.expression, env, zName, [...stack, entry.id], angleMode, nextLocalMap)})`;
+  });
+  expression = inlineCustomVariables(expression, env, stack, zName, angleMode, localMap);
+  expression = inlineBareVariables(expression, env, stack, zName, angleMode, localMap);
   expression = normalizeMathSyntax(expression);
   expression = expression
     .replaceAll(/\barcsin\b/g, "asin")
@@ -2420,35 +2666,50 @@ function recursionBaseGlsl(zName) {
   return "0.0";
 }
 
-function inlineCustomVariables(expression, env, stack, zName, angleMode = "radians") {
+function inlineCustomVariables(expression, env, stack, zName, angleMode = "radians", localMap = {}) {
   return expression.replaceAll(/~([A-Za-z]\w*)~/g, (_, name) => {
-    if (!env[name]) {
+    if (localMap[name]) {
+      return `(${localMap[name]})`;
+    }
+    const entry = envEntry(env, name);
+    if (!entry) {
       throw new Error(`Unknown reference ~${name}~`);
     }
     if (stack.length >= recursionLimit()) {
       return `(${recursionBaseGlsl(zName)})`;
     }
-    return `(${expressionToGlsl(env[name], env, zName, [...stack, name], angleMode)})`;
+    return `(${expressionToGlsl(entry.expression, env, zName, [...stack, name], angleMode, entry.kind === "function" ? defaultParamGlslMap(entry.params, zName) : {})})`;
   });
 }
 
-function inlineBareVariables(expression, env, stack, zName, angleMode = "radians") {
+function inlineBareVariables(expression, env, stack, zName, angleMode = "radians", localMap = {}) {
   return rewriteBareIdentifiers(
     expression,
     (name) => {
-      if (!env[name]) {
+      if (localMap[name]) {
+        return `(${localMap[name]})`;
+      }
+      const entry = envEntry(env, name);
+      if (!entry) {
         throw new Error(`Unknown variable: ${name}`);
       }
       if (stack.length >= recursionLimit()) {
         return `(${recursionBaseGlsl(zName)})`;
       }
-      return `(${expressionToGlsl(env[name], env, zName, [...stack, name], angleMode)})`;
+      return `(${expressionToGlsl(entry.expression, env, zName, [...stack, name], angleMode, entry.kind === "function" ? defaultParamGlslMap(entry.params, zName) : {})})`;
     },
-    new Set()
+    new Set(),
+    new Set(Object.keys(localMap))
   );
 }
 
-function rewriteBareIdentifiers(expression, replace, extraReserved) {
+function defaultParamGlslMap(params, zName = null) {
+  return Object.fromEntries(
+    params.map((param) => [param, param === "x" ? "x" : param === "y" ? "y" : param === "z" && zName ? zName : "0.0"])
+  );
+}
+
+function rewriteBareIdentifiers(expression, replace, extraReserved, overrideNames = new Set()) {
   const stringRanges = [];
   expression.replaceAll(/"[^"]*"/g, (match, offset) => {
     stringRanges.push([offset, offset + match.length]);
@@ -2457,6 +2718,7 @@ function rewriteBareIdentifiers(expression, replace, extraReserved) {
 
   return expression.replaceAll(/\b[A-Za-z_]\w*\b/g, (name, offset) => {
     if (stringRanges.some(([start, end]) => offset >= start && offset < end)) return name;
+    if (overrideNames.has(name)) return replace(name);
     if (BUILTIN_NAMES.has(name) || extraReserved.has(name)) return name;
     return replace(name);
   });
@@ -2519,7 +2781,7 @@ function skipSpacesRight(source, index) {
 }
 
 function validateScene() {
-  const env = Object.fromEntries(scene.functions.filter((entry) => entry.id.trim()).map((entry) => [entry.id, entry.expression]));
+  const env = sceneFunctionEnv();
   const drawEnv = sceneFunctionEnv(true);
   const duplicateIds = {
     functions: duplicateEntryIds(scene.functions),
@@ -2537,12 +2799,31 @@ function validateScene() {
   };
   diagnostics.settings = [viewportDiagnostic()];
 
-  diagnostics.functions = scene.functions.map((entry) => {
-    const idResult = validateEntryId(entry.id, "Function", env);
+  diagnostics.functions = scene.functions.map((rawEntry) => {
+    const entry = normalizeFunctionEntry(rawEntry);
+    const label = entry.kind === "slider" ? "Slider" : entry.kind === "function" ? "Function" : "Variable";
+    const idResult = validateEntryId(entry.id, label, env);
     if (idResult.status === "invalid") return idResult;
-    const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Function", duplicateIds.functions);
-    const result = validateExpression(entry.expression, env, [entry.id]);
-    return combineDiagnostics([duplicateDiagnostic, idResult, result]);
+    const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, label, duplicateIds.functions);
+    if (entry.kind === "slider") {
+      return combineDiagnostics([
+        duplicateDiagnostic,
+        idResult,
+        validateExpression(entry.expression, env, [entry.id]),
+        validateExpression(entry.sliderMin, env),
+        validateExpression(entry.sliderMax, env)
+      ]);
+    }
+    if (entry.kind === "function") {
+      const params = new Set(entry.params);
+      return combineDiagnostics([
+        duplicateDiagnostic,
+        idResult,
+        validateFunctionParams(entry, env),
+        validateExpression(entry.expression, env, [entry.id], params)
+      ]);
+    }
+    return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, env, [entry.id])]);
   });
   diagnostics.colors = scene.colors.map((entry) => {
     const idResult = validateEntryId(entry.id, "Color", env);
@@ -2575,7 +2856,7 @@ function validateScene() {
     if (!restriction) missing.push("boundary");
     if (missing.length) return { status: "invalid", message: `Missing ${missing.join(", ")}` };
     const affected = combineDiagnostics([
-      validateExpression(fn.expression, drawEnv, [fn.id]),
+      validateExpression(fn.expression, drawEnv, [fn.id], fn.kind === "function" ? new Set(fn.params) : new Set()),
       validateExpression(color.red, drawEnv),
       validateExpression(color.green, drawEnv),
       validateExpression(color.blue, drawEnv),
@@ -2656,36 +2937,64 @@ function validateEntryId(id, label, env = {}) {
   return { status: "valid", message: `${label} name is valid` };
 }
 
-function validateExpression(source, env, stack = []) {
+function validateFunctionParams(entry, env) {
+  const seen = new Set();
+  for (const param of entry.params) {
+    if (!/^[A-Za-z_]\w*$/.test(param)) {
+      return { status: "invalid", message: `Function input "${param}" must start with a letter or underscore` };
+    }
+    if (seen.has(param)) {
+      return { status: "invalid", message: `Function input "${param}" is duplicated` };
+    }
+    seen.add(param);
+  }
+  const shadow = entry.params.find((param) => {
+    const target = envEntry(env, param);
+    return target && target.id !== entry.id && target.kind !== "function";
+  });
+  if (shadow) {
+    return { status: "warning", message: `Input "${shadow}" shadows an outer variable or slider inside this function` };
+  }
+  return { status: "valid", message: "Function inputs are valid" };
+}
+
+function validateExpression(source, env, stack = [], localNames = new Set()) {
   try {
     const normalized = normalizeExpressionText(source);
     assertCompleteExpression(normalized);
     if (/\b[A-Za-z]\w*\(\s*\)/.test(normalized)) {
       throw new Error("Empty function argument");
     }
-    const nodeCount = estimateExpandedNodeCount(source, env, stack);
+    const nodeCount = estimateExpandedNodeCount(source, env, stack, new Map(), localNames);
     if (nodeCount > NODE_RED_FLAG_THRESHOLD) {
       throw new Error(`Equation is too large (${formatNodeCount(nodeCount)} nodes); refusing to generate`);
     }
     if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) {
       return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes); rendering may be slower` };
     }
-    expressionToGlsl(source, env, null, stack);
+    expressionToGlsl(source, env, null, stack, scene.settings.angleMode, Object.fromEntries([...localNames].map((name) => [name, name === "x" ? "x" : name === "y" ? "y" : "0.0"])));
     const runtimeEnv = buildRuntimeEnv(env);
-    compileExpression(source)(1, 1, runtimeEnv);
+    const previousLocals = runtimeEnv.__locals;
+    runtimeEnv.__locals = Object.fromEntries([...localNames].map((name) => [name, name === "x" ? 1 : name === "y" ? 1 : 0]));
+    try {
+      compileExpression(source, localNames)(1, 1, runtimeEnv);
+    } finally {
+      runtimeEnv.__locals = previousLocals;
+    }
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
     return { status: "invalid", message: error.message };
   }
 }
 
-function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map()) {
+function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map(), localNames = new Set()) {
   const normalized = normalizeExpressionText(source).replaceAll(/~([A-Za-z]\w*)~/g, "$1");
   let total = countLocalExpressionNodes(normalized);
   const identifiers = normalized.matchAll(/\b[A-Za-z_]\w*\b/g);
   for (const match of identifiers) {
     const name = match[0];
-    if (BUILTIN_NAMES.has(name) || !env[name]) continue;
+    const entry = envEntry(env, name);
+    if (BUILTIN_NAMES.has(name) || localNames.has(name) || !entry) continue;
     if (stack.length >= recursionLimit()) {
       total = cappedNodeAdd(total, 2);
       continue;
@@ -2695,7 +3004,7 @@ function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map(
       total = cappedNodeAdd(total, Math.max(0, memo.get(memoKey) - 1));
       continue;
     }
-    const value = estimateExpandedNodeCount(env[name], env, [...stack, name], memo);
+    const value = estimateExpandedNodeCount(entry.expression, env, [...stack, name], memo, entry.kind === "function" ? new Set(entry.params) : new Set());
     memo.set(memoKey, value);
     total = cappedNodeAdd(total, Math.max(0, value - 1));
   }
@@ -4635,11 +4944,23 @@ function exportScene() {
     `set ensure_square_grid = ${formatLeptonBoolean(scene.settings.ensureSquareGrid !== false)}`,
     `set aspect_ratio = ${scene.settings.aspectRatio ?? "1:1"}`,
     `set draw_only_inside_boundary = ${formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))}`,
-    ...scene.functions.map((entry) => `function ${entry.id} = ${textModeExpression(entry.expression)}`),
+    ...scene.functions.map(exportFunctionEntry),
     ...scene.colors.map((entry) => `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
     ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`),
     ...scene.draws.map((entry) => `draw(${entry.equationId},${entry.colorId},${entry.restrictionId},${formatLeptonBoolean(entry.hidden)})`)
   ].join("\n");
+}
+
+function exportFunctionEntry(rawEntry) {
+  const entry = normalizeFunctionEntry(rawEntry);
+  const expression = textModeExpression(entry.expression);
+  if (entry.kind === "slider") {
+    return `${entry.time ? "time" : "slider"} ${entry.id} = ${expression}`;
+  }
+  if (entry.kind === "function") {
+    return `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
+  }
+  return `variable ${entry.id} = ${expression}`;
 }
 
 function wrapIfNeeded(expr) {
@@ -4719,7 +5040,7 @@ function importScene(raw) {
     if (!line || line === "~~~~~") continue;
     if (line.startsWith("F:")) {
       const [id, expression] = splitFirst(line.slice(2), "~");
-      next.functions.push({ id, expression: convertDivisionsToFrac(expression) });
+      next.functions.push({ id, kind: "variable", expression: convertDivisionsToFrac(expression) });
     } else if (line.startsWith("C:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [red = "0", green = "0", blue = "0"] = rest.split("~");
@@ -4737,9 +5058,27 @@ function importScene(raw) {
     } else if (/^set\s+/i.test(line)) {
       const assignment = line.match(/^set\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) setSceneSetting(next, assignment[1], assignment[2]);
+    } else if (/^variable\s+/i.test(line)) {
+      const assignment = line.match(/^variable\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      if (assignment) next.functions.push({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) });
+    } else if (/^(slider|time)\s+/i.test(line)) {
+      const assignment = line.match(/^(slider|time)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      if (assignment) {
+        next.functions.push({ id: assignment[2], kind: "slider", expression: convertDivisionsToFrac(assignment[3].trim()), sliderMin: "0", sliderMax: "1", time: assignment[1].toLowerCase() === "time" });
+      }
     } else if (/^function\s+/i.test(line)) {
-      const assignment = line.match(/^function\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
-      if (assignment) next.functions.push({ id: assignment[1], expression: convertDivisionsToFrac(assignment[2].trim()) });
+      const callAssignment = line.match(/^function\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=\s*(.+)$/i);
+      if (callAssignment) {
+        next.functions.push({
+          id: callAssignment[1],
+          kind: "function",
+          params: parseFunctionParams(callAssignment[2]),
+          expression: convertDivisionsToFrac(callAssignment[3].trim())
+        });
+      } else {
+        const assignment = line.match(/^function\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+        if (assignment) next.functions.push({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) });
+      }
     } else if (/^(colour|color)\s+/i.test(line)) {
       const assignment = line.match(/^(?:colour|color)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {
@@ -4775,7 +5114,7 @@ function normalizeSceneReferences(next) {
       id = `${preferredId}${suffix}`;
       suffix += 1;
     }
-    next.functions.push({ id, expression: trimmed || "0" });
+    next.functions.push({ id, kind: "variable", expression: trimmed || "0" });
     return id;
   };
 

@@ -38,7 +38,7 @@ export const defaultSettings = (): GridSettings => ({
 });
 
 export const createDefaultScene = (): SceneState => ({
-  functions: [{ id: "eq", expression: "sin(x)+cos(y)" }],
+  functions: [{ id: "eq", kind: "variable", expression: "sin(x)+cos(y)" }],
   colors: [{ id: "rgb", red: "128+127*sin(x)", green: "128+127*cos(x)", blue: "180" }],
   restrictions: [{ id: "rest", expression: "1", checkSmaller: false }],
   draws: [{ equationId: "eq", colorId: "rgb", restrictionId: "rest" }],
@@ -66,7 +66,38 @@ export function importScene(rawText: string): SceneState {
 
     if (line.startsWith("F:")) {
       const [id, expression] = splitFirst(line.slice(2), "~");
-      scene.functions.push({ id, expression });
+      scene.functions.push({ id, kind: "variable", expression });
+      continue;
+    }
+
+    const variableMatch = line.match(/^variable\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
+    if (variableMatch) {
+      scene.functions.push({ id: variableMatch[1], kind: "variable", expression: variableMatch[2] });
+      continue;
+    }
+
+    const sliderMatch = line.match(/^(slider|time)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
+    if (sliderMatch) {
+      scene.functions.push({
+        id: sliderMatch[2],
+        kind: "slider",
+        expression: sliderMatch[3],
+        sliderMin: "0",
+        sliderMax: "1",
+        time: sliderMatch[1].toLowerCase() === "time"
+      });
+      continue;
+    }
+
+    const functionMatch = line.match(/^function\s+([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?\s*=\s*(.*)$/i);
+    if (functionMatch) {
+      const params = (functionMatch[2] ?? "").split(",").map((param) => param.trim()).filter(Boolean);
+      scene.functions.push({
+        id: functionMatch[1],
+        kind: params.length ? "function" : "variable",
+        expression: functionMatch[3],
+        params
+      });
       continue;
     }
 
@@ -77,10 +108,28 @@ export function importScene(rawText: string): SceneState {
       continue;
     }
 
+    const colorMatch = line.match(/^(?:colour|color)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
+    if (colorMatch) {
+      const [red, green, blue] = colorMatch[2].split("~");
+      scene.colors.push({ id: colorMatch[1], red: red ?? "0", green: green ?? "0", blue: blue ?? "0" });
+      continue;
+    }
+
     if (line.startsWith("R:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [expression, flag] = rest.split("~");
       scene.restrictions.push({ id, expression: expression ?? "1", checkSmaller: flag === "1" });
+      continue;
+    }
+
+    const restrictionMatch = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
+    if (restrictionMatch) {
+      const [expression, flag] = restrictionMatch[2].split("~");
+      scene.restrictions.push({
+        id: restrictionMatch[1],
+        expression: expression ?? "1",
+        checkSmaller: /^(?:1|true)$/i.test(flag ?? "")
+      });
       continue;
     }
 
@@ -90,8 +139,21 @@ export function importScene(rawText: string): SceneState {
       continue;
     }
 
+    const drawMatch = line.match(/^draw\((.*)\)$/i);
+    if (drawMatch) {
+      const [equationId, colorId, restrictionId] = drawMatch[1].split(",").map((part) => part.trim());
+      scene.draws.push({ equationId: equationId ?? "", colorId: colorId ?? "", restrictionId: restrictionId ?? "" });
+      continue;
+    }
+
     if (line.startsWith("S:")) {
       applySetting(scene.settings, line.slice(2));
+      continue;
+    }
+
+    const settingMatch = line.match(/^set\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
+    if (settingMatch) {
+      applySetting(scene.settings, `${settingMatch[1]}~${settingMatch[2]}`);
     }
   }
 
@@ -100,27 +162,31 @@ export function importScene(rawText: string): SceneState {
 
 export function exportScene(scene: SceneState): string {
   return [
-    ...scene.functions.map((entry) => `F:${entry.id}~${entry.expression}`),
-    "~~~~~",
-    ...scene.colors.map((entry) => `C:${entry.id}~${entry.red}~${entry.green}~${entry.blue}`),
-    "~~~~~",
-    ...scene.restrictions.map((entry) => `R:${entry.id}~${entry.expression}~${entry.checkSmaller ? 1 : 0}`),
-    "~~~~~",
-    ...scene.draws.map((entry) => `D~${entry.equationId}~${entry.colorId}~${entry.restrictionId}`),
-    "~~~~~",
-    `S:x_min~${scene.settings.xMin}`,
-    `S:x_points~${scene.settings.xPoints}`,
-    `S:x_max~${scene.settings.xMax}`,
-    `S:y_min~${scene.settings.yMin}`,
-    `S:y_points~${scene.settings.yPoints}`,
-    `S:y_max~${scene.settings.yMax}`,
-    `S:max_recursion~${scene.settings.maxRecursion}`,
-    `S:angle_mode~${scene.settings.angleMode}`,
-    `S:background_color~${scene.settings.backgroundColor}`,
-    `S:ensure_square_grid~${scene.settings.ensureSquareGrid ? 1 : 0}`,
-    `S:aspect_ratio~${scene.settings.aspectRatio}`,
-    `S:draw_only_inside_boundary~${scene.settings.drawOnlyInsideBoundary ? 1 : 0}`
+    `set x_min = ${scene.settings.xMin}`,
+    `set x_max = ${scene.settings.xMax}`,
+    `set y_min = ${scene.settings.yMin}`,
+    `set y_max = ${scene.settings.yMax}`,
+    `set max_recursion = ${scene.settings.maxRecursion}`,
+    `set angle_mode = ${scene.settings.angleMode}`,
+    `set background_color = ${scene.settings.backgroundColor}`,
+    `set ensure_square_grid = ${scene.settings.ensureSquareGrid ? "True" : "False"}`,
+    `set aspect_ratio = ${scene.settings.aspectRatio}`,
+    `set draw_only_inside_boundary = ${scene.settings.drawOnlyInsideBoundary ? "True" : "False"}`,
+    ...scene.functions.map(exportRegistryEntry),
+    ...scene.colors.map((entry) => `colour ${entry.id} = ${entry.red}~${entry.green}~${entry.blue}`),
+    ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${entry.expression}~${entry.checkSmaller ? "True" : "False"}`),
+    ...scene.draws.map((entry) => `draw(${entry.equationId},${entry.colorId},${entry.restrictionId},False)`)
   ].join("\n");
+}
+
+function exportRegistryEntry(entry: RegistryEntry): string {
+  if (entry.kind === "slider") {
+    return `${entry.time ? "time" : "slider"} ${entry.id} = ${entry.expression}`;
+  }
+  if (entry.kind === "function") {
+    return `function ${entry.id}(${(entry.params ?? []).join(",")}) = ${entry.expression}`;
+  }
+  return `variable ${entry.id} = ${entry.expression}`;
 }
 
 function splitFirst(text: string, delimiter: string): [string, string] {

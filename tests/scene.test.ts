@@ -21,7 +21,7 @@ S:angle_mode~degrees`;
 describe("scene import/export", () => {
   test("imports functions, colors, restrictions, draw rows, and settings", () => {
     const scene = importScene(sample);
-    expect(scene.functions).toEqual([{ id: "eq", expression: "x+y" }]);
+    expect(scene.functions).toEqual([{ id: "eq", kind: "variable", expression: "x+y" }]);
     expect(scene.colors).toEqual([{ id: "rgb", red: "255", green: "0", blue: "128" }]);
     expect(scene.restrictions).toEqual([{ id: "rest", expression: "x^2+y^2-4", checkSmaller: false }]);
     expect(scene.draws).toEqual([{ equationId: "eq", colorId: "rgb", restrictionId: "rest" }]);
@@ -29,11 +29,29 @@ describe("scene import/export", () => {
     expect(scene.settings.maxRecursion).toBe(12);
   });
 
-  test("exports a scene using the legacy text sections", () => {
+  test("exports a scene using the new typed text language", () => {
     const scene = importScene(sample);
-    expect(exportScene(scene)).toContain("F:eq~x+y");
-    expect(exportScene(scene)).toContain("D~eq~rgb~rest");
-    expect(exportScene(scene)).toContain("S:angle_mode~degrees");
+    expect(exportScene(scene)).toContain("variable eq = x+y");
+    expect(exportScene(scene)).toContain("draw(eq,rgb,rest,False)");
+    expect(exportScene(scene)).toContain("set angle_mode = degrees");
+  });
+
+  test("round-trips variables, sliders, time variables, and functions", () => {
+    const scene = importScene(`variable a = x
+slider speed = 5
+time t = 0
+function f(x,banana) = x+banana`);
+    expect(scene.functions).toEqual([
+      { id: "a", kind: "variable", expression: "x" },
+      { id: "speed", kind: "slider", expression: "5", sliderMin: "0", sliderMax: "1", time: false },
+      { id: "t", kind: "slider", expression: "0", sliderMin: "0", sliderMax: "1", time: true },
+      { id: "f", kind: "function", expression: "x+banana", params: ["x", "banana"] }
+    ]);
+    const exported = exportScene(scene);
+    expect(exported).toContain("variable a = x");
+    expect(exported).toContain("slider speed = 5");
+    expect(exported).toContain("time t = 0");
+    expect(exported).toContain("function f(x,banana) = x+banana");
   });
 
   test("creates a default scene with one drawable equation", () => {

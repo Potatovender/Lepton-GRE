@@ -1048,6 +1048,95 @@ select {
   white-space: nowrap;
 }
 
+.function-row-head {
+  display: grid;
+  grid-template-columns: minmax(54px, 72px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.function-kind-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+}
+
+.function-kind-button {
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid #d3d9e3;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #596273;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.function-kind-button[aria-pressed="true"] {
+  border-color: #6f94db;
+  background: #e8f0ff;
+  color: #244f99;
+}
+
+.function-params-row,
+.slider-range-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.function-params-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  color: #687386;
+  font-size: 12px;
+}
+
+.slider-controls {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.slider-step {
+  border: 1px solid #d3d9e3;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #4c5668;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.slider-step:hover,
+.function-kind-button:hover {
+  background: #eef4ff;
+}
+
+.slider-range-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  color: #687386;
+  font-size: 12px;
+}
+
+.slider-range-row label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.slider-range-row .inline-check {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+}
+
 .row-action {
   width: 28px;
   height: 28px;
