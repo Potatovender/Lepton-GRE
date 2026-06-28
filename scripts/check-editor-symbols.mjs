@@ -68,7 +68,7 @@ check("multiplication round-trips as cdot in LaTeX and star in compiler text", (
   assert(sandbox.normalizeExpressionText("\\sin(x)\\cdot\\cos(y)") === "sin(x)*cos(y)", "\\cdot should normalize to *");
   assert(sandbox.normalizeExpressionText("\\sin(x)\\times\\cos(y)") === "sin(x)*cos(y)", "\\times should normalize to *");
   const latex = sandbox.latexSourceFromExpression("sin(x)*cos(y)");
-  assert(latex === "\\sin\\left(x\\right)\\cdot \\cos\\left(y\\right)", latex);
+  assert(latex === "\\sin(x)\\cdot \\cos(y)", latex);
   assert(sandbox.expressionToGlsl("\\sin(x)\\cdot\\cos(y)", {}) === "sin(x)*cos(y)", "\\cdot should convert to GLSL *");
 });
 
@@ -310,7 +310,7 @@ draw(f1,c1,r1,true)`);
 check("typed function entries export and evaluate with local parameters", () => {
   const imported = sandbox.importScene(`variable y = 100
 slider speed = 5
-time t = 0
+time unbounded t = 0
 function f(x,y) = x+y
 colour c1 = f~f~f
 boundary r1 = f~False
@@ -319,7 +319,7 @@ draw(f,c1,r1,False)`);
   const exported = sandbox.exportScene();
   assert(exported.includes("\nvariable y = 100"), exported);
   assert(exported.includes("\nslider speed = 5"), exported);
-  assert(exported.includes("\ntime t = 0"), exported);
+  assert(exported.includes("\ntime unbounded t = 0"), exported);
   assert(exported.includes("\nfunction f(x,y) = x+y"), exported);
 
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
@@ -329,6 +329,17 @@ draw(f,c1,r1,False)`);
   assert(validation.status === "valid", JSON.stringify(validation));
   const glsl = sandbox.expressionToGlsl("f(2,3)", sandbox.sceneFunctionEnv(true));
   assert(glsl.includes("2.0") && glsl.includes("3.0") && !glsl.includes("x") && !glsl.includes("y"), glsl);
+});
+
+check("Lepton text strips stretchy parentheses from function calls", () => {
+  const imported = sandbox.importScene(`function f1(x,y) = x^2+y^2
+variable f2 = 2*x+y
+variable f3 = f1\\left(f2,3\\right)`);
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("\nfunction f1(x,y) = x^2+y^2"), exported);
+  assert(exported.includes("\nvariable f3 = f1(f2,3)"), exported);
+  assert(!exported.includes("\\left") && !exported.includes("\\right"), exported);
 });
 
 check("function parameters shadow outer variables with a warning", () => {

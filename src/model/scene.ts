@@ -83,8 +83,22 @@ export function importScene(rawText: string): SceneState {
         kind: "slider",
         expression: sliderMatch[3],
         sliderMin: "0",
-        sliderMax: "1",
+        sliderMax: "10",
         time: sliderMatch[1].toLowerCase() === "time"
+      });
+      continue;
+    }
+
+    const timedSliderMatch = line.match(/^time\s+(bounded_looped|bounded looped|bounded|unbounded)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
+    if (timedSliderMatch) {
+      scene.functions.push({
+        id: timedSliderMatch[2],
+        kind: "slider",
+        expression: timedSliderMatch[3],
+        sliderMin: "0",
+        sliderMax: "10",
+        time: true,
+        timeMode: normalizeTimeMode(timedSliderMatch[1])
       });
       continue;
     }
@@ -181,12 +195,18 @@ export function exportScene(scene: SceneState): string {
 
 function exportRegistryEntry(entry: RegistryEntry): string {
   if (entry.kind === "slider") {
-    return `${entry.time ? "time" : "slider"} ${entry.id} = ${entry.expression}`;
+    return entry.time ? `time ${entry.timeMode ?? "bounded"} ${entry.id} = ${entry.expression}` : `slider ${entry.id} = ${entry.expression}`;
   }
   if (entry.kind === "function") {
     return `function ${entry.id}(${(entry.params ?? []).join(",")}) = ${entry.expression}`;
   }
   return `variable ${entry.id} = ${entry.expression}`;
+}
+
+function normalizeTimeMode(value: string): "bounded" | "unbounded" | "bounded_looped" {
+  const mode = value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (mode === "unbounded" || mode === "bounded_looped") return mode;
+  return "bounded";
 }
 
 function splitFirst(text: string, delimiter: string): [string, string] {

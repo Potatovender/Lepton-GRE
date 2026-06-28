@@ -1097,24 +1097,25 @@ select {
 
 .slider-controls {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(76px, 0.55fr) minmax(110px, 1fr);
   gap: 6px;
-  align-items: stretch;
+  align-items: center;
   min-width: 0;
 }
 
-.slider-step {
-  border: 1px solid #d3d9e3;
-  border-radius: 5px;
-  background: #f8fafc;
-  color: #4c5668;
-  font-size: 17px;
-  cursor: pointer;
-}
-
-.slider-step:hover,
 .function-kind-button:hover {
   background: #eef4ff;
+}
+
+.slider-range {
+  width: 100%;
+  min-width: 0;
+  accent-color: #4f7dd9;
+}
+
+.slider-range:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .slider-range-row {
@@ -1135,6 +1136,10 @@ select {
   flex-direction: row;
   gap: 6px;
   align-items: center;
+}
+
+.time-mode-row {
+  grid-column: 1 / -1;
 }
 
 .row-action {

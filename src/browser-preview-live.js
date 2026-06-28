@@ -19,7 +19,7 @@ const DEFAULT_SCENE = {
   }
 };
 
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260627-function-types1";
+const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260627-slider-time1";
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -159,15 +159,16 @@ const DEFAULT_DRAW_BOUNDARY = { id: "default", label: "default", expression: "1"
 const LEGACY_DEFAULT_COLOR_IDS = new Set(["c1"]);
 const LEGACY_DEFAULT_BOUNDARY_IDS = new Set(["rest"]);
 const FUNCTION_ENTRY_KINDS = new Set(["variable", "slider", "function"]);
+const TIME_VARIABLE_MODES = new Set(["bounded", "unbounded", "bounded_looped"]);
 const HELP_TEXT = {
   standard: "Standard mode is the visual editor. Use tabs for functions, colors, bounds, draw layers, and settings.",
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
-  functions: "Functions are named formulas. Declare an ID, write the math, then reuse that ID in colors, bounds, draw layers, or other functions.",
+  functions: "Functions tab entries can be variables, sliders, or parameterized functions. Variables are named formulas, sliders are adjustable numeric values, and functions accept inputs like f(x,y).",
   colors: "Colors map red, green, and blue channels to function IDs. For example colour rgb = r~g~b uses functions named r, g, and b.",
   restrictions: "Bounds draw only where their function is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
   draws: "Draw layers connect a function, color, and bound. Layers are drawn in order and can be hidden or dragged.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
-  textLanguage: "Lepton text is the same graph in one copyable script. Use set, function, colour/color, boundary/restriction, and draw(...).",
+  textLanguage: "Lepton text is the same graph in one copyable script. Use set, variable, slider, time, function, colour/color, boundary/restriction, and draw(...).",
   applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
   refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
   backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
@@ -187,32 +188,38 @@ const TUTORIAL_STEPS = [
   {
     mode: "standard",
     tab: "functions",
-    title: "Step 1: Make a function",
-    body: "Functions are reusable formulas. Press Add function, name it eq or f1, then type something like sin(x)+cos(y). The graph can reuse that ID anywhere."
+    title: "Step 1: Choose an entry type",
+    body: "The Functions tab now starts each row as a variable. Keep variable for ordinary formulas like eq = sin(x)+cos(y), switch to slider for a draggable value, or switch to function when you want inputs like f(x,y)."
+  },
+  {
+    mode: "standard",
+    tab: "functions",
+    title: "Step 2: Use variables, sliders, and functions",
+    body: "Variables can reference other IDs. Sliders expose a value between editable min and max endpoints. Functions add an inputs box; inside function f(x,banana), those input names override any outer variables with the same names."
   },
   {
     mode: "standard",
     tab: "colors",
-    title: "Step 2: Make a colour",
+    title: "Step 3: Make a colour",
     body: "Colours point their red, green, and blue channels at function IDs. A simple colour can use the same function three times; richer graphs use separate r, g, and b functions."
   },
   {
     mode: "standard",
     tab: "restrictions",
-    title: "Step 3: Add a boundary",
+    title: "Step 4: Add a boundary",
     body: "Boundaries decide where a layer draws. Unchecked draws when the boundary function is >= 0. Checked draws when it is <= 0. Use the default boundary for no restriction."
   },
   {
     mode: "standard",
     tab: "draws",
-    title: "Step 4: Connect a draw layer",
+    title: "Step 5: Connect a draw layer",
     body: "Draw chooses the function, colour, and boundary to render. Blank graphs offer f1, default colour, and default boundary so there is always a valid starting layer."
   },
   {
     mode: "text",
     tab: "draws",
-    title: "Step 5: Share or bulk edit",
-    body: "Text mode is the same graph as script. Settings appear first, followed by function, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
+    title: "Step 6: Share or bulk edit",
+    body: "Text mode is the same graph as script. Settings appear first, followed by variable, slider, time, function, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
   }
 ];
 const listControls = {
@@ -306,8 +313,9 @@ function normalizeFunctionEntry(entry) {
     expression: String(entry?.expression ?? ""),
     params: Array.isArray(entry?.params) ? entry.params.map((param) => String(param).trim()).filter(Boolean) : [],
     sliderMin: String(entry?.sliderMin ?? "0"),
-    sliderMax: String(entry?.sliderMax ?? "1"),
-    time: Boolean(entry?.time)
+    sliderMax: String(entry?.sliderMax ?? "10"),
+    time: Boolean(entry?.time),
+    timeMode: TIME_VARIABLE_MODES.has(entry?.timeMode) ? entry.timeMode : "bounded"
   };
 }
 
@@ -909,16 +917,40 @@ function functionSignatureContent(entry, index) {
 }
 
 function sliderRowContent(entry, index) {
+  const min = evaluateScalarSetting(entry.sliderMin);
+  const max = evaluateScalarSetting(entry.sliderMax);
+  const value = evaluateScalarSetting(entry.expression);
+  const rangeUsable = Number.isFinite(min) && Number.isFinite(max) && max > min;
+  const clamped = rangeUsable && Number.isFinite(value) ? clampNumber(value, min, max) : min;
   return `
     <div class="slider-controls">
-      <button class="slider-step" type="button" data-slider-step="${index}.-1" aria-label="Decrease slider value">−</button>
       ${mathEditor(`functions.${index}.expression`, entry.expression, "Slider value", true, "value")}
-      <button class="slider-step" type="button" data-slider-step="${index}.1" aria-label="Increase slider value">+</button>
+      <input
+        class="slider-range"
+        type="range"
+        data-slider-value="${index}"
+        min="${escapeHtml(String(rangeUsable ? min : 0))}"
+        max="${escapeHtml(String(rangeUsable ? max : 1))}"
+        step="any"
+        value="${escapeHtml(String(rangeUsable ? clamped : 0))}"
+        ${rangeUsable ? "" : "disabled"}
+        aria-label="Slider value"
+      />
     </div>
     <div class="slider-range-row">
-      <label><span>min</span>${mathEditor(`functions.${index}.sliderMin`, entry.sliderMin, "Slider minimum", true, "min")}</label>
-      <label><span>max</span>${mathEditor(`functions.${index}.sliderMax`, entry.sliderMax, "Slider maximum", true, "max")}</label>
+      <label><span>minimum</span>${mathEditor(`functions.${index}.sliderMin`, entry.sliderMin, "Slider minimum", true, "min")}</label>
+      <label><span>maximum</span>${mathEditor(`functions.${index}.sliderMax`, entry.sliderMax, "Slider maximum", true, "max")}</label>
       <label class="inline-check"><input type="checkbox" data-field="functions.${index}.time" ${entry.time ? "checked" : ""} /> time variable</label>
+      ${entry.time ? `
+        <label class="time-mode-row">
+          <span>time mode</span>
+          <select class="compact-field" data-field="functions.${index}.timeMode" aria-label="Time variable mode">
+            <option value="bounded" ${entry.timeMode === "bounded" ? "selected" : ""}>bounded</option>
+            <option value="unbounded" ${entry.timeMode === "unbounded" ? "selected" : ""}>unbounded</option>
+            <option value="bounded_looped" ${entry.timeMode === "bounded_looped" ? "selected" : ""}>bounded looped</option>
+          </select>
+        </label>
+      ` : ""}
     </div>
   `;
 }
@@ -1145,17 +1177,13 @@ function bindEvents() {
       renderApp();
     });
   });
-  root.querySelectorAll("[data-slider-step]").forEach((button) => {
-    button.addEventListener("click", () => {
-      syncFields();
-      const [rawIndex, rawDirection] = button.dataset.sliderStep.split(".");
-      const index = Number(rawIndex);
-      const direction = Number(rawDirection);
-      const entry = normalizeFunctionEntry(scene.functions[index]);
-      const current = evaluateScalarSetting(entry.expression);
-      const next = Number.isFinite(current) ? current + direction : direction;
+  root.querySelectorAll("[data-slider-value]").forEach((slider) => {
+    slider.addEventListener("input", () => {
+      const index = Number(slider.dataset.sliderValue);
+      if (!scene.functions[index]) return;
       const before = sceneSnapshot();
-      entry.expression = String(next);
+      const entry = normalizeFunctionEntry(scene.functions[index]);
+      entry.expression = String(Number(slider.value));
       scene.functions[index] = entry;
       recordSceneHistory(before);
       renderApp();
@@ -4191,10 +4219,10 @@ function astToLatex(node) {
     let left = astToLatex(node.left);
     let right = astToLatex(node.right);
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
-      left = `\\left(${left}\\right)`;
+      left = `(${left})`;
     }
     if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
-      right = `\\left(${right}\\right)`;
+      right = `(${right})`;
     }
     return op === "*" ? `${left}\\cdot ${right}` : `${left}${op}${right}`;
   }
@@ -4214,7 +4242,7 @@ function astToLatex(node) {
       return `\\sqrt{${args[0]}}`;
     }
     const cmd = STANDARD_LATEX_COMMANDS[name] || `\\operatorname{${name}}`;
-    return `${cmd}\\left(${args.join(",")}\\right)`;
+    return `${cmd}(${args.join(",")})`;
   }
   return "";
 }
@@ -4894,6 +4922,11 @@ function parseLeptonBoolean(value) {
   return /^(true|1|yes)$/i.test(String(value ?? "").trim());
 }
 
+function normalizeTimeMode(value) {
+  const mode = String(value ?? "").trim().toLowerCase().replaceAll(/\s+/g, "_");
+  return TIME_VARIABLE_MODES.has(mode) ? mode : "bounded";
+}
+
 function normalizeAngleMode(value) {
   const mode = String(value ?? "").trim().toLowerCase();
   if (mode.startsWith("degree")) return "degrees";
@@ -4955,7 +4988,7 @@ function exportFunctionEntry(rawEntry) {
   const entry = normalizeFunctionEntry(rawEntry);
   const expression = textModeExpression(entry.expression);
   if (entry.kind === "slider") {
-    return `${entry.time ? "time" : "slider"} ${entry.id} = ${expression}`;
+    return entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}` : `slider ${entry.id} = ${expression}`;
   }
   if (entry.kind === "function") {
     return `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
@@ -5025,7 +5058,7 @@ function convertFracToDivisions(source) {
 }
 
 function textModeExpression(source) {
-  const normalized = normalizeExpressionDisplayText(source);
+  const normalized = normalizeExpressionText(source);
   return convertFracToDivisions(normalized);
 }
 
@@ -5062,9 +5095,11 @@ function importScene(raw) {
       const assignment = line.match(/^variable\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) next.functions.push({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) });
     } else if (/^(slider|time)\s+/i.test(line)) {
-      const assignment = line.match(/^(slider|time)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      const assignment = line.match(/^(slider|time)(?:\s+(bounded_looped|bounded looped|bounded|unbounded))?\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {
-        next.functions.push({ id: assignment[2], kind: "slider", expression: convertDivisionsToFrac(assignment[3].trim()), sliderMin: "0", sliderMax: "1", time: assignment[1].toLowerCase() === "time" });
+        const time = assignment[1].toLowerCase() === "time";
+        const timeMode = normalizeTimeMode(assignment[2]);
+        next.functions.push({ id: assignment[3], kind: "slider", expression: convertDivisionsToFrac(assignment[4].trim()), sliderMin: "0", sliderMax: "10", time, timeMode });
       }
     } else if (/^function\s+/i.test(line)) {
       const callAssignment = line.match(/^function\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=\s*(.+)$/i);
@@ -5142,9 +5177,17 @@ function normalizeExpressionText(value) {
 }
 
 function normalizeExpressionDisplayText(value) {
-  const stripped = stripChannelPrefix(value);
+  const stripped = stripChannelPrefix(stripLatexStretchParens(value));
   const assignment = parseAssignment(stripped);
   return assignment ? assignment.expression : stripped;
+}
+
+function stripLatexStretchParens(value) {
+  return String(value ?? "")
+    .replaceAll(/\\left\s*\(/g, "(")
+    .replaceAll(/\\right\s*\)/g, ")")
+    .replaceAll(/\\left\s*\[/g, "[")
+    .replaceAll(/\\right\s*\]/g, "]");
 }
 
 function normalizeBareAbsoluteBars(value) {

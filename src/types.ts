@@ -25,6 +25,7 @@ export interface RegistryEntry {
   sliderMin?: string;
   sliderMax?: string;
   time?: boolean;
+  timeMode?: "bounded" | "unbounded" | "bounded_looped";
 }
 
 export interface DrawEntry {
