@@ -2,10 +2,15 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
+const storage = new Map();
 const sandbox = {
   console,
   structuredClone: globalThis.structuredClone,
-  localStorage: { getItem: () => null, setItem: () => {} },
+  localStorage: {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, String(value)),
+    removeItem: (key) => storage.delete(key)
+  },
   document: {
     querySelector: () => ({
       innerHTML: "",
@@ -319,7 +324,8 @@ draw(f,c1,r1,False)`);
   const exported = sandbox.exportScene();
   assert(exported.includes("\nvariable y = 100"), exported);
   assert(exported.includes("\nslider speed = 5 range -2~8"), exported);
-  assert(exported.includes("\ntime unbounded t = 0 range 0~12"), exported);
+  assert(exported.includes("\ntime unbounded t = 0"), exported);
+  assert(!exported.includes("\ntime unbounded t = 0 range"), exported);
   assert(exported.includes("\nfunction f(x,y) = x+y"), exported);
 
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
@@ -551,6 +557,23 @@ S:background_color~bg`);
 check("missing background color falls back to default", () => {
   const imported = sandbox.importScene(`S:background_color~missing`);
   assert(imported.settings.backgroundColor === "0", JSON.stringify(imported.settings));
+});
+
+check("saved graphs persist locally with names scenes and thumbnails", () => {
+  storage.clear();
+  sandbox.__debugSetScene(sandbox.importScene(`variable eq = x
+colour rgb = eq~eq~eq
+boundary rest = 1~False
+draw(eq,rgb,rest,False)`));
+  const saved = sandbox.saveCurrentGraph("Local sample");
+  assert(saved.name === "Local sample", JSON.stringify(saved));
+  assert(saved.scene.includes("variable eq = x"), saved.scene);
+  assert(saved.thumbnail.startsWith("data:image/"), saved.thumbnail);
+  const graphs = sandbox.loadSavedGraphs();
+  assert(graphs.length === 1, JSON.stringify(graphs));
+  assert(graphs[0].name === "Local sample", JSON.stringify(graphs));
+  sandbox.deleteSavedGraph(graphs[0].id);
+  assert(sandbox.loadSavedGraphs().length === 0, JSON.stringify(sandbox.loadSavedGraphs()));
 });
 
 function check(name, fn) {

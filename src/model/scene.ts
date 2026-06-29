@@ -197,7 +197,7 @@ export function exportScene(scene: SceneState): string {
 
 function exportRegistryEntry(entry: RegistryEntry): string {
   if (entry.kind === "slider") {
-    const range = ` range ${entry.sliderMin ?? "0"}~${entry.sliderMax ?? "10"}`;
+    const range = entry.time && (entry.timeMode ?? "bounded") === "unbounded" ? "" : ` range ${entry.sliderMin ?? "0"}~${entry.sliderMax ?? "10"}`;
     return entry.time ? `time ${entry.timeMode ?? "bounded"} ${entry.id} = ${entry.expression}${range}` : `slider ${entry.id} = ${entry.expression}${range}`;
   }
   if (entry.kind === "function") {

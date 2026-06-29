@@ -863,9 +863,9 @@ select {
 
 .brand-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-height: 34px;
 }
 
@@ -897,7 +897,7 @@ select {
 }
 
 .brand-row .toolbar-button {
-  width: 76px;
+  min-width: 64px;
   justify-self: end;
 }
 
@@ -1172,6 +1172,118 @@ select {
   background: #f8fafc;
   color: #687386;
   font-size: 12px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  max-height: min(620px, calc(100vh - 36px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #dce1ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 54px rgba(15, 23, 42, 0.22);
+}
+
+.save-graph-card {
+  grid-template-rows: auto auto auto;
+}
+
+.modal-header,
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #182033;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.modal-close {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  background: #eef1f5;
+  color: #596273;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.save-name-row {
+  display: grid;
+  gap: 6px;
+  color: #687386;
+  font-size: 12px;
+}
+
+.saved-graph-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.saved-graph-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #e3e7ee;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.saved-graph-thumb {
+  width: 112px;
+  height: 70px;
+  border-radius: 5px;
+  background: #111827;
+  object-fit: cover;
+}
+
+.saved-graph-meta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.saved-graph-meta strong {
+  overflow: hidden;
+  color: #182033;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-graph-meta span,
+.saved-empty {
+  color: #687386;
+  font-size: 12px;
+}
+
+.saved-graph-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .row-action {

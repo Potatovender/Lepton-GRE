@@ -19,6 +19,7 @@ const DEFAULT_SCENE = {
   }
 };
 
+const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
 const LEPTON_ICON_PATH = "./src/assets/lepton-favicon.png?v=20260629-slider-mq-favicon2";
 
 function ensureLeptonFavicon() {
@@ -245,6 +246,9 @@ let aspectRatioCustomOpen = false;
 let animationFrameId = 0;
 let animationLastTimestamp = 0;
 const TIME_VARIABLE_RATE = 1;
+let saveDialogOpen = false;
+let libraryDialogOpen = false;
+let saveNameDraft = "";
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -265,6 +269,8 @@ function renderApp() {
               <strong>Lepton GRE</strong>
             </a>
             <button class="tutorial-button" data-action="tutorial" type="button">What do I do?</button>
+            <button class="toolbar-button" data-action="open-save-dialog" type="button">Save</button>
+            <button class="toolbar-button" data-action="open-library" type="button">Saved</button>
             <button class="toolbar-button primary" data-action="render">Refresh</button>
           </div>
           <div class="display-row" aria-label="Display mode">
@@ -290,6 +296,7 @@ function renderApp() {
         <div class="grid-boundary-overlay" aria-hidden="true"></div>
         <div class="render-overlay">${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
       </section>
+      ${renderSavedGraphsDialog()}
     </main>
   `;
   if (root.dataset) root.dataset.panelKey = scrollKey;
@@ -882,6 +889,72 @@ function timePlaybackControls() {
   `;
 }
 
+function renderSavedGraphsDialog() {
+  if (saveDialogOpen) return renderSaveGraphDialog();
+  if (libraryDialogOpen) return renderSavedGraphLibrary();
+  return "";
+}
+
+function renderSaveGraphDialog() {
+  return `
+    <div class="modal-backdrop" data-action="close-save-dialog">
+      <section class="modal-card save-graph-card" role="dialog" aria-modal="true" aria-label="Save graph">
+        <header class="modal-header">
+          <h2>Save graph</h2>
+          <button class="modal-close" data-action="close-save-dialog" type="button" aria-label="Close save dialog">×</button>
+        </header>
+        <label class="save-name-row">
+          <span>Name</span>
+          <input class="compact-field" data-save-name value="${escapeHtml(saveNameDraft)}" placeholder="Graph name" />
+        </label>
+        <div class="modal-actions">
+          <button class="toolbar-button" data-action="close-save-dialog" type="button">Cancel</button>
+          <button class="toolbar-button primary" data-action="confirm-save-graph" type="button">Save graph</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderSavedGraphLibrary() {
+  const graphs = loadSavedGraphs();
+  return `
+    <div class="modal-backdrop" data-action="close-save-dialog">
+      <section class="modal-card saved-library-card" role="dialog" aria-modal="true" aria-label="Saved graphs">
+        <header class="modal-header">
+          <h2>Saved graphs</h2>
+          <button class="modal-close" data-action="close-save-dialog" type="button" aria-label="Close saved graphs">×</button>
+        </header>
+        <div class="saved-graph-list">
+          ${graphs.length ? graphs.map(savedGraphRow).join("") : `<p class="saved-empty">No saved graphs yet.</p>`}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function savedGraphRow(graph) {
+  return `
+    <article class="saved-graph-row">
+      <img class="saved-graph-thumb" src="${escapeHtml(graph.thumbnail)}" alt="" />
+      <div class="saved-graph-meta">
+        <strong>${escapeHtml(graph.name)}</strong>
+        <span>${escapeHtml(formatSavedGraphDate(graph.createdAt))}</span>
+      </div>
+      <div class="saved-graph-actions">
+        <button class="toolbar-button primary" data-load-saved-graph="${escapeHtml(graph.id)}" type="button">Load</button>
+        <button class="toolbar-button" data-delete-saved-graph="${escapeHtml(graph.id)}" type="button">Delete</button>
+      </div>
+    </article>
+  `;
+}
+
+function formatSavedGraphDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Saved locally";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function listControlBar(kind, label) {
   const state = listControls[kind];
   const placeholder = `search for ${label} by ID`;
@@ -950,13 +1023,14 @@ function sliderRowContent(entry, index) {
   const rangeUsable = Number.isFinite(min) && Number.isFinite(max) && max > min;
   const clamped = rangeUsable && Number.isFinite(value) ? clampNumber(value, min, max) : min;
   const isPlaying = entry.time && playingTimeIds.has(entry.id);
+  const isUnboundedTime = entry.time && normalizeTimeMode(entry.timeMode) === "unbounded";
   return `
     <div class="slider-controls">
       <label class="slider-value-row">
         <span>value</span>
         ${mathEditor(`functions.${index}.expression`, entry.expression, "Slider value", true, "value")}
       </label>
-      <div class="slider-track-row">
+      ${isUnboundedTime ? "" : `<div class="slider-track-row">
         <label><span>minimum</span>${mathEditor(`functions.${index}.sliderMin`, entry.sliderMin, "Slider minimum", true, "min")}</label>
         <input
           class="slider-range"
@@ -970,7 +1044,7 @@ function sliderRowContent(entry, index) {
           aria-label="Slider value"
         />
         <label><span>maximum</span>${mathEditor(`functions.${index}.sliderMax`, entry.sliderMax, "Slider maximum", true, "max")}</label>
-      </div>
+      </div>`}
       <div class="slider-time-row">
         <label class="inline-check"><input type="checkbox" data-field="functions.${index}.time" ${entry.time ? "checked" : ""} /> time variable</label>
         ${entry.time ? `
@@ -1125,6 +1199,59 @@ function bindEvents() {
   root.onclick = (event) => {
     if (event.target?.closest?.("[data-field]")) activateKeyboardTarget(event.target);
   };
+
+  root.querySelector('[data-action="open-save-dialog"]')?.addEventListener("click", () => {
+    syncFields();
+    saveNameDraft = defaultSavedGraphName();
+    saveDialogOpen = true;
+    libraryDialogOpen = false;
+    renderApp();
+  });
+  root.querySelector('[data-action="open-library"]')?.addEventListener("click", () => {
+    syncFields();
+    libraryDialogOpen = true;
+    saveDialogOpen = false;
+    renderApp();
+  });
+  root.querySelectorAll('[data-action="close-save-dialog"]').forEach((target) => {
+    target.addEventListener("click", (event) => {
+      if (target.classList?.contains("modal-backdrop") && event.target !== target) return;
+      saveDialogOpen = false;
+      libraryDialogOpen = false;
+      renderApp();
+    });
+  });
+  root.querySelector('[data-action="confirm-save-graph"]')?.addEventListener("click", () => {
+    syncFields();
+    const name = root.querySelector("[data-save-name]")?.value?.trim() || defaultSavedGraphName();
+    saveCurrentGraph(name);
+    saveDialogOpen = false;
+    libraryDialogOpen = true;
+    renderApp();
+  });
+  root.querySelectorAll("[data-load-saved-graph]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const saved = loadSavedGraphs().find((graph) => graph.id === button.dataset.loadSavedGraph);
+      if (!saved) return;
+      const before = sceneSnapshot();
+      scene = importScene(saved.scene);
+      viewport = sceneViewport();
+      if (isValidViewport(viewport)) saveViewport();
+      sceneHistory.undo = [];
+      sceneHistory.redo = [];
+      sceneHistory.last = sceneSnapshot();
+      recordSceneHistory(before);
+      saveDialogOpen = false;
+      libraryDialogOpen = false;
+      renderApp();
+    });
+  });
+  root.querySelectorAll("[data-delete-saved-graph]").forEach((button) => {
+    button.addEventListener("click", () => {
+      deleteSavedGraph(button.dataset.deleteSavedGraph);
+      renderApp();
+    });
+  });
 
   root.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -5199,7 +5326,7 @@ function exportFunctionEntry(rawEntry) {
   const entry = normalizeFunctionEntry(rawEntry);
   const expression = textModeExpression(entry.expression);
   if (entry.kind === "slider") {
-    const range = ` range ${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`;
+    const range = entry.time && normalizeTimeMode(entry.timeMode) === "unbounded" ? "" : ` range ${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`;
     return entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${range}` : `slider ${entry.id} = ${expression}${range}`;
   }
   if (entry.kind === "function") {
@@ -5698,6 +5825,79 @@ function unescapeHtml(value) {
     .replaceAll("&gt;", ">")
     .replaceAll("&lt;", "<")
     .replaceAll("&amp;", "&");
+}
+
+function loadSavedGraphs() {
+  try {
+    const raw = localStorage.getItem(SAVED_GRAPHS_KEY);
+    const parsed = JSON.parse(raw ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(normalizeSavedGraph)
+      .filter(Boolean)
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+  } catch {
+    return [];
+  }
+}
+
+function normalizeSavedGraph(graph) {
+  if (!graph || typeof graph !== "object") return null;
+  const id = String(graph.id ?? "");
+  const name = String(graph.name ?? "").trim();
+  const savedScene = String(graph.scene ?? "").trim();
+  if (!id || !name || !savedScene) return null;
+  return {
+    id,
+    name,
+    scene: savedScene,
+    thumbnail: String(graph.thumbnail ?? "") || fallbackSavedGraphThumbnail(),
+    createdAt: String(graph.createdAt ?? new Date().toISOString())
+  };
+}
+
+function writeSavedGraphs(graphs) {
+  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(graphs.slice(0, 60)));
+}
+
+function saveCurrentGraph(name) {
+  const graph = {
+    id: createSavedGraphId(),
+    name,
+    scene: exportScene(),
+    thumbnail: captureGraphThumbnail(),
+    createdAt: new Date().toISOString()
+  };
+  writeSavedGraphs([graph, ...loadSavedGraphs()]);
+  return graph;
+}
+
+function deleteSavedGraph(id) {
+  writeSavedGraphs(loadSavedGraphs().filter((graph) => graph.id !== id));
+}
+
+function defaultSavedGraphName() {
+  return `Graph ${loadSavedGraphs().length + 1}`;
+}
+
+function createSavedGraphId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `graph-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function captureGraphThumbnail() {
+  try {
+    const canvas = root.querySelector(".grid-canvas");
+    if (!canvas || !canvas.width || !canvas.height) return fallbackSavedGraphThumbnail();
+    return canvas.toDataURL("image/png");
+  } catch {
+    return fallbackSavedGraphThumbnail();
+  }
+}
+
+function fallbackSavedGraphThumbnail() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100"><rect width="160" height="100" fill="#111827"/><path d="M0 70 C30 20 52 88 78 45 S125 62 160 24" fill="none" stroke="#8ec5ff" stroke-width="5"/><path d="M0 86 C36 42 58 98 94 58 S128 76 160 48" fill="none" stroke="#f6b35e" stroke-width="3"/></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 window.__leptonDebug = {
