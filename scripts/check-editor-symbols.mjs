@@ -68,7 +68,7 @@ check("multiplication round-trips as cdot in LaTeX and star in compiler text", (
   assert(sandbox.normalizeExpressionText("\\sin(x)\\cdot\\cos(y)") === "sin(x)*cos(y)", "\\cdot should normalize to *");
   assert(sandbox.normalizeExpressionText("\\sin(x)\\times\\cos(y)") === "sin(x)*cos(y)", "\\times should normalize to *");
   const latex = sandbox.latexSourceFromExpression("sin(x)*cos(y)");
-  assert(latex === "\\sin(x)\\cdot \\cos(y)", latex);
+  assert(latex === "\\sin\\left(x\\right)\\cdot \\cos\\left(y\\right)", latex);
   assert(sandbox.expressionToGlsl("\\sin(x)\\cdot\\cos(y)", {}) === "sin(x)*cos(y)", "\\cdot should convert to GLSL *");
 });
 

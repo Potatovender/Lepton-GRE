@@ -19,7 +19,7 @@ const DEFAULT_SCENE = {
   }
 };
 
-const LEPTON_ICON_PATH = "./src/assets/lepton-logo-transparent.png?v=20260627-slider-time1";
+const LEPTON_ICON_PATH = "./src/assets/lepton-favicon.png?v=20260629-slider-mq-favicon2";
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -317,6 +317,13 @@ function normalizeFunctionEntry(entry) {
     time: Boolean(entry?.time),
     timeMode: TIME_VARIABLE_MODES.has(entry?.timeMode) ? entry.timeMode : "bounded"
   };
+}
+
+function formatSliderValue(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0";
+  if (Math.abs(number) < 1e-12) return "0";
+  return Number(number.toPrecision(7)).toString();
 }
 
 function functionEntryExpression(entry) {
@@ -1180,13 +1187,15 @@ function bindEvents() {
   root.querySelectorAll("[data-slider-value]").forEach((slider) => {
     slider.addEventListener("input", () => {
       const index = Number(slider.dataset.sliderValue);
-      if (!scene.functions[index]) return;
-      const before = sceneSnapshot();
-      const entry = normalizeFunctionEntry(scene.functions[index]);
-      entry.expression = String(Number(slider.value));
-      scene.functions[index] = entry;
-      recordSceneHistory(before);
-      renderApp();
+      updateSliderValue(index, slider.value);
+    });
+    slider.addEventListener("pointerdown", (event) => {
+      slider.setPointerCapture?.(event.pointerId);
+      updateSliderFromPointer(slider, event);
+    });
+    slider.addEventListener("pointermove", (event) => {
+      if (event.buttons !== 1) return;
+      updateSliderFromPointer(slider, event);
     });
   });
   root.querySelectorAll("[data-keyboard-tab]").forEach((button) => {
@@ -1321,6 +1330,7 @@ function bindEvents() {
       }
     });
 
+    el.mathquillInstance = mathField;
     mathField.latex(initialValue);
     el.__mathField = mathField;
   });
@@ -1836,6 +1846,35 @@ function parseFunctionParams(value) {
     .split(",")
     .map((param) => param.trim())
     .filter(Boolean);
+}
+
+function updateSliderFromPointer(slider, event) {
+  const rect = slider.getBoundingClientRect();
+  const min = Number(slider.min);
+  const max = Number(slider.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min || rect.width <= 0) return;
+  const ratio = clampNumber((event.clientX - rect.left) / rect.width, 0, 1);
+  const value = min + ratio * (max - min);
+  slider.value = String(value);
+  updateSliderValue(Number(slider.dataset.sliderValue), slider.value);
+}
+
+function updateSliderValue(index, value) {
+  if (!scene.functions[index]) return;
+  const before = sceneSnapshot();
+  const entry = normalizeFunctionEntry(scene.functions[index]);
+  entry.expression = formatSliderValue(value);
+  scene.functions[index] = entry;
+  recordSceneHistory(before);
+  const valueField = root.querySelector(`[data-field="functions.${index}.expression"]`);
+  if (valueField) {
+    valueField.dataset.value = latexSourceFromExpression(entry.expression);
+    const mathField = valueField.mathquillInstance;
+    if (mathField) mathField.latex(valueField.dataset.value);
+  }
+  const diagnostics = validateScene();
+  updateStatusLights(diagnostics);
+  renderScene(diagnostics);
 }
 
 function readFieldValue(field) {
@@ -4219,10 +4258,10 @@ function astToLatex(node) {
     let left = astToLatex(node.left);
     let right = astToLatex(node.right);
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
-      left = `(${left})`;
+      left = `\\left(${left}\\right)`;
     }
     if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
-      right = `(${right})`;
+      right = `\\left(${right}\\right)`;
     }
     return op === "*" ? `${left}\\cdot ${right}` : `${left}${op}${right}`;
   }
@@ -4242,7 +4281,7 @@ function astToLatex(node) {
       return `\\sqrt{${args[0]}}`;
     }
     const cmd = STANDARD_LATEX_COMMANDS[name] || `\\operatorname{${name}}`;
-    return `${cmd}(${args.join(",")})`;
+    return `${cmd}\\left(${args.join(",")}\\right)`;
   }
   return "";
 }
