@@ -309,8 +309,8 @@ draw(f1,c1,r1,true)`);
 
 check("typed function entries export and evaluate with local parameters", () => {
   const imported = sandbox.importScene(`variable y = 100
-slider speed = 5
-time unbounded t = 0
+slider speed = 5 range -2~8
+time unbounded t = 0 range 0~12
 function f(x,y) = x+y
 colour c1 = f~f~f
 boundary r1 = f~False
@@ -318,8 +318,8 @@ draw(f,c1,r1,False)`);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
   assert(exported.includes("\nvariable y = 100"), exported);
-  assert(exported.includes("\nslider speed = 5"), exported);
-  assert(exported.includes("\ntime unbounded t = 0"), exported);
+  assert(exported.includes("\nslider speed = 5 range -2~8"), exported);
+  assert(exported.includes("\ntime unbounded t = 0 range 0~12"), exported);
   assert(exported.includes("\nfunction f(x,y) = x+y"), exported);
 
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
@@ -329,6 +329,22 @@ draw(f,c1,r1,False)`);
   assert(validation.status === "valid", JSON.stringify(validation));
   const glsl = sandbox.expressionToGlsl("f(2,3)", sandbox.sceneFunctionEnv(true));
   assert(glsl.includes("2.0") && glsl.includes("3.0") && !glsl.includes("x") && !glsl.includes("y"), glsl);
+});
+
+check("sliders warn for coordinate-dependent values and multiple time declarations", () => {
+  const imported = sandbox.importScene(`variable source = 3
+slider safe = source range 0~10
+slider moving = x range 0~10
+time bounded t = 0 range 0~5
+time bounded_looped u = 1 range 0~5`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.functions[1].status === "valid", JSON.stringify(diagnostics.functions));
+  assert(diagnostics.functions[2].status === "warning", JSON.stringify(diagnostics.functions));
+  assert(diagnostics.functions[2].message.includes("uses coordinate"), diagnostics.functions[2].message);
+  assert(diagnostics.functions[3].status === "warning", JSON.stringify(diagnostics.functions));
+  assert(diagnostics.functions[3].message.includes("Multiple time variables"), diagnostics.functions[3].message);
+  assert(diagnostics.functions[4].status === "warning", JSON.stringify(diagnostics.functions));
 });
 
 check("Lepton text strips stretchy parentheses from function calls", () => {

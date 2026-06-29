@@ -229,6 +229,7 @@ const listControls = {
 };
 const editorHistory = new Map();
 const sceneHistory = { undo: [], redo: [], last: "" };
+const playingTimeIds = new Set();
 const entryScrollTops = new Map();
 let pendingScrollTarget = null;
 let keyboardOpen = false;
@@ -241,6 +242,9 @@ let lastPointerClientX = null;
 let boundaryPulseUntil = 0;
 let boundaryPulseTimer = 0;
 let aspectRatioCustomOpen = false;
+let animationFrameId = 0;
+let animationLastTimestamp = 0;
+const TIME_VARIABLE_RATE = 1;
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -248,6 +252,7 @@ window.__leptonForceGradient = false;
 function renderApp() {
   rememberEntryScroll();
   hideHelpTooltip();
+  prunePlayingTimeIds();
   const diagnostics = validateScene();
   const scrollKey = panelScrollKey();
   root.innerHTML = `
@@ -323,7 +328,7 @@ function formatSliderValue(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "0";
   if (Math.abs(number) < 1e-12) return "0";
-  return Number(number.toPrecision(7)).toString();
+  return Number(number.toPrecision(6)).toString();
 }
 
 function functionEntryExpression(entry) {
@@ -790,6 +795,7 @@ function renderPanel() {
   if (activeTab === "draws") {
     return [
       tutorialCoachmark(),
+      timePlaybackControls(),
       ...scene.draws.map(
         (entry, index) => expressionRow(diagnostics.draws[index]?.status ?? "invalid", diagnostics.draws[index]?.message ?? "", `
           <div class="draw-layer-toolbar">
@@ -862,6 +868,20 @@ function renderPanel() {
   `;
 }
 
+function timePlaybackControls() {
+  const timeVariables = scene.functions.map(normalizeFunctionEntry).filter((entry) => entry.kind === "slider" && entry.time && entry.id);
+  const hasTimeVariables = timeVariables.length > 0;
+  const anyPlaying = timeVariables.some((entry) => playingTimeIds.has(entry.id));
+  return `
+    <div class="draw-playbar">
+      <button class="toolbar-button" data-action="toggle-global-time" type="button" ${hasTimeVariables ? "" : "disabled"}>
+        ${anyPlaying ? "Stop time" : "Play time"}
+      </button>
+      <span>${hasTimeVariables ? `${playingTimeIds.size} playing` : "No time variables"}</span>
+    </div>
+  `;
+}
+
 function listControlBar(kind, label) {
   const state = listControls[kind];
   const placeholder = `search for ${label} by ID`;
@@ -929,35 +949,39 @@ function sliderRowContent(entry, index) {
   const value = evaluateScalarSetting(entry.expression);
   const rangeUsable = Number.isFinite(min) && Number.isFinite(max) && max > min;
   const clamped = rangeUsable && Number.isFinite(value) ? clampNumber(value, min, max) : min;
+  const isPlaying = entry.time && playingTimeIds.has(entry.id);
   return `
     <div class="slider-controls">
-      ${mathEditor(`functions.${index}.expression`, entry.expression, "Slider value", true, "value")}
-      <input
-        class="slider-range"
-        type="range"
-        data-slider-value="${index}"
-        min="${escapeHtml(String(rangeUsable ? min : 0))}"
-        max="${escapeHtml(String(rangeUsable ? max : 1))}"
-        step="any"
-        value="${escapeHtml(String(rangeUsable ? clamped : 0))}"
-        ${rangeUsable ? "" : "disabled"}
-        aria-label="Slider value"
-      />
-    </div>
-    <div class="slider-range-row">
-      <label><span>minimum</span>${mathEditor(`functions.${index}.sliderMin`, entry.sliderMin, "Slider minimum", true, "min")}</label>
-      <label><span>maximum</span>${mathEditor(`functions.${index}.sliderMax`, entry.sliderMax, "Slider maximum", true, "max")}</label>
-      <label class="inline-check"><input type="checkbox" data-field="functions.${index}.time" ${entry.time ? "checked" : ""} /> time variable</label>
-      ${entry.time ? `
-        <label class="time-mode-row">
-          <span>time mode</span>
+      <label class="slider-value-row">
+        <span>value</span>
+        ${mathEditor(`functions.${index}.expression`, entry.expression, "Slider value", true, "value")}
+      </label>
+      <div class="slider-track-row">
+        <label><span>minimum</span>${mathEditor(`functions.${index}.sliderMin`, entry.sliderMin, "Slider minimum", true, "min")}</label>
+        <input
+          class="slider-range"
+          type="range"
+          data-slider-value="${index}"
+          min="${escapeHtml(String(rangeUsable ? min : 0))}"
+          max="${escapeHtml(String(rangeUsable ? max : 1))}"
+          step="any"
+          value="${escapeHtml(String(rangeUsable ? clamped : 0))}"
+          ${rangeUsable ? "" : "disabled"}
+          aria-label="Slider value"
+        />
+        <label><span>maximum</span>${mathEditor(`functions.${index}.sliderMax`, entry.sliderMax, "Slider maximum", true, "max")}</label>
+      </div>
+      <div class="slider-time-row">
+        <label class="inline-check"><input type="checkbox" data-field="functions.${index}.time" ${entry.time ? "checked" : ""} /> time variable</label>
+        ${entry.time ? `
           <select class="compact-field" data-field="functions.${index}.timeMode" aria-label="Time variable mode">
             <option value="bounded" ${entry.timeMode === "bounded" ? "selected" : ""}>bounded</option>
             <option value="unbounded" ${entry.timeMode === "unbounded" ? "selected" : ""}>unbounded</option>
             <option value="bounded_looped" ${entry.timeMode === "bounded_looped" ? "selected" : ""}>bounded looped</option>
           </select>
-        </label>
-      ` : ""}
+          <button class="toolbar-button slider-play-button" data-time-play="${escapeHtml(entry.id)}" type="button">${isPlaying ? "Stop" : "Play"}</button>
+        ` : ""}
+      </div>
     </div>
   `;
 }
@@ -1196,6 +1220,14 @@ function bindEvents() {
     slider.addEventListener("pointermove", (event) => {
       if (event.buttons !== 1) return;
       updateSliderFromPointer(slider, event);
+    });
+  });
+  root.querySelector('[data-action="toggle-global-time"]')?.addEventListener("click", () => {
+    toggleGlobalTimePlayback();
+  });
+  root.querySelectorAll("[data-time-play]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleTimePlayback(button.dataset.timePlay);
     });
   });
   root.querySelectorAll("[data-keyboard-tab]").forEach((button) => {
@@ -1860,21 +1892,129 @@ function updateSliderFromPointer(slider, event) {
 }
 
 function updateSliderValue(index, value) {
+  setSliderExpression(index, value, true);
+  refreshAfterSliderChange();
+}
+
+function setSliderExpression(index, value, syncField = false) {
   if (!scene.functions[index]) return;
-  const before = sceneSnapshot();
   const entry = normalizeFunctionEntry(scene.functions[index]);
   entry.expression = formatSliderValue(value);
   scene.functions[index] = entry;
-  recordSceneHistory(before);
+  if (!syncField) return;
   const valueField = root.querySelector(`[data-field="functions.${index}.expression"]`);
   if (valueField) {
     valueField.dataset.value = latexSourceFromExpression(entry.expression);
     const mathField = valueField.mathquillInstance;
     if (mathField) mathField.latex(valueField.dataset.value);
   }
+  const rangeField = root.querySelector(`[data-slider-value="${index}"]`);
+  if (rangeField) rangeField.value = String(value);
+}
+
+function refreshAfterSliderChange() {
   const diagnostics = validateScene();
   updateStatusLights(diagnostics);
   renderScene(diagnostics);
+}
+
+function timeVariableEntries() {
+  return scene.functions
+    .map((entry, index) => ({ entry: normalizeFunctionEntry(entry), index }))
+    .filter(({ entry }) => entry.kind === "slider" && entry.time && entry.id);
+}
+
+function prunePlayingTimeIds() {
+  const ids = new Set(timeVariableEntries().map(({ entry }) => entry.id));
+  for (const id of [...playingTimeIds]) {
+    if (!ids.has(id)) playingTimeIds.delete(id);
+  }
+  if (!playingTimeIds.size) stopAnimationLoop();
+}
+
+function toggleGlobalTimePlayback() {
+  syncFields();
+  const entries = timeVariableEntries();
+  if (!entries.length) return;
+  const allPlaying = entries.every(({ entry }) => playingTimeIds.has(entry.id));
+  if (allPlaying || playingTimeIds.size) {
+    playingTimeIds.clear();
+    stopAnimationLoop();
+  } else {
+    entries.forEach(({ entry }) => playingTimeIds.add(entry.id));
+    startAnimationLoop();
+  }
+  renderApp();
+}
+
+function toggleTimePlayback(id) {
+  syncFields();
+  const cleanId = String(id ?? "");
+  if (!cleanId) return;
+  if (playingTimeIds.has(cleanId)) {
+    playingTimeIds.delete(cleanId);
+  } else {
+    const exists = timeVariableEntries().some(({ entry }) => entry.id === cleanId);
+    if (exists) playingTimeIds.add(cleanId);
+  }
+  if (playingTimeIds.size) startAnimationLoop();
+  else stopAnimationLoop();
+  renderApp();
+}
+
+function startAnimationLoop() {
+  if (animationFrameId) return;
+  animationLastTimestamp = 0;
+  animationFrameId = requestAnimationFrame(stepTimeAnimation);
+}
+
+function stopAnimationLoop() {
+  if (!animationFrameId) return;
+  cancelAnimationFrame(animationFrameId);
+  animationFrameId = 0;
+  animationLastTimestamp = 0;
+}
+
+function stepTimeAnimation(timestamp) {
+  animationFrameId = 0;
+  if (!playingTimeIds.size) {
+    animationLastTimestamp = 0;
+    return;
+  }
+  const deltaSeconds = animationLastTimestamp ? Math.min(0.1, (timestamp - animationLastTimestamp) / 1000) : 0;
+  animationLastTimestamp = timestamp;
+  if (deltaSeconds > 0) {
+    advanceTimeVariables(deltaSeconds);
+    refreshAfterSliderChange();
+  }
+  animationFrameId = requestAnimationFrame(stepTimeAnimation);
+}
+
+function advanceTimeVariables(deltaSeconds) {
+  const entries = timeVariableEntries();
+  for (const { entry, index } of entries) {
+    if (!playingTimeIds.has(entry.id)) continue;
+    const current = evaluateScalarSetting(entry.expression);
+    const min = evaluateScalarSetting(entry.sliderMin);
+    const max = evaluateScalarSetting(entry.sliderMax);
+    const mode = normalizeTimeMode(entry.timeMode);
+    const base = Number.isFinite(current) ? current : Number.isFinite(min) ? min : 0;
+    let next = base + deltaSeconds * TIME_VARIABLE_RATE;
+    if (mode !== "unbounded" && Number.isFinite(min) && Number.isFinite(max) && max > min) {
+      if (next > max) {
+        if (mode === "bounded_looped") {
+          const span = max - min;
+          next = min + ((next - min) % span);
+        } else {
+          next = max;
+          playingTimeIds.delete(entry.id);
+        }
+      }
+      if (next < min) next = min;
+    }
+    setSliderExpression(index, next, activeTab === "functions" && displayMode === "standard");
+  }
+  prunePlayingTimeIds();
 }
 
 function readFieldValue(field) {
@@ -2865,6 +3005,9 @@ function validateScene() {
     summary: "GLSL ready"
   };
   diagnostics.settings = [viewportDiagnostic()];
+  const timeVariableCount = scene.functions
+    .map(normalizeFunctionEntry)
+    .filter((entry) => entry.kind === "slider" && entry.time).length;
 
   diagnostics.functions = scene.functions.map((rawEntry) => {
     const entry = normalizeFunctionEntry(rawEntry);
@@ -2876,6 +3019,8 @@ function validateScene() {
       return combineDiagnostics([
         duplicateDiagnostic,
         idResult,
+        sliderCoordinateDiagnostic(entry),
+        timeVariableDiagnostic(entry, timeVariableCount),
         validateExpression(entry.expression, env, [entry.id]),
         validateExpression(entry.sliderMin, env),
         validateExpression(entry.sliderMax, env)
@@ -2943,6 +3088,33 @@ function validateScene() {
   diagnostics.hasErrors = Boolean(firstError);
   diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
+}
+
+function sliderCoordinateDiagnostic(entry) {
+  const identifiers = expressionIdentifiers(entry.expression);
+  const coordinate = identifiers.find((name) => name === "x" || name === "y");
+  if (coordinate) {
+    return {
+      status: "warning",
+      message: `Slider "${entry.id}" uses coordinate "${coordinate}"; sliders are usually numeric values or references to variables`
+    };
+  }
+  return { status: "valid", message: "Slider value is numeric" };
+}
+
+function timeVariableDiagnostic(entry, timeVariableCount) {
+  if (entry.kind === "slider" && entry.time && timeVariableCount > 1) {
+    return {
+      status: "warning",
+      message: "Multiple time variables are declared; this can make animation behavior harder to predict"
+    };
+  }
+  return { status: "valid", message: "Time variable setup is valid" };
+}
+
+function expressionIdentifiers(source) {
+  const normalized = normalizeExpressionText(source);
+  return [...normalized.matchAll(/\b[A-Za-z_]\w*\b/g)].map((match) => match[0]);
 }
 
 function viewportDiagnostic() {
@@ -5027,12 +5199,22 @@ function exportFunctionEntry(rawEntry) {
   const entry = normalizeFunctionEntry(rawEntry);
   const expression = textModeExpression(entry.expression);
   if (entry.kind === "slider") {
-    return entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}` : `slider ${entry.id} = ${expression}`;
+    const range = ` range ${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`;
+    return entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${range}` : `slider ${entry.id} = ${expression}${range}`;
   }
   if (entry.kind === "function") {
     return `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
   }
   return `variable ${entry.id} = ${expression}`;
+}
+
+function splitSliderRange(source) {
+  const match = String(source ?? "").match(/^(.*?)(?:\s+range\s+(.+?)\s*~\s*(.+))?$/i);
+  return {
+    expression: (match?.[1] ?? source ?? "").trim(),
+    sliderMin: (match?.[2] ?? "0").trim(),
+    sliderMax: (match?.[3] ?? "10").trim()
+  };
 }
 
 function wrapIfNeeded(expr) {
@@ -5138,7 +5320,16 @@ function importScene(raw) {
       if (assignment) {
         const time = assignment[1].toLowerCase() === "time";
         const timeMode = normalizeTimeMode(assignment[2]);
-        next.functions.push({ id: assignment[3], kind: "slider", expression: convertDivisionsToFrac(assignment[4].trim()), sliderMin: "0", sliderMax: "10", time, timeMode });
+        const range = splitSliderRange(assignment[4]);
+        next.functions.push({
+          id: assignment[3],
+          kind: "slider",
+          expression: convertDivisionsToFrac(range.expression),
+          sliderMin: convertDivisionsToFrac(range.sliderMin),
+          sliderMax: convertDivisionsToFrac(range.sliderMax),
+          time,
+          timeMode
+        });
       }
     } else if (/^function\s+/i.test(line)) {
       const callAssignment = line.match(/^function\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=\s*(.+)$/i);

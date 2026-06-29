@@ -1081,8 +1081,7 @@ select {
   color: #244f99;
 }
 
-.function-params-row,
-.slider-range-row {
+.function-params-row {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -1097,10 +1096,42 @@ select {
 
 .slider-controls {
   display: grid;
-  grid-template-columns: minmax(76px, 0.55fr) minmax(110px, 1fr);
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.slider-value-row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #687386;
+  font-size: 12px;
+}
+
+.slider-track-row {
+  display: grid;
+  grid-template-columns: minmax(58px, 0.42fr) minmax(110px, 1fr) minmax(58px, 0.42fr);
+  gap: 8px;
+  align-items: end;
+  min-width: 0;
+  color: #687386;
+  font-size: 12px;
+}
+
+.slider-track-row label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.slider-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
   min-width: 0;
+  color: #687386;
+  font-size: 12px;
 }
 
 .function-kind-button:hover {
@@ -1118,28 +1149,29 @@ select {
   cursor: not-allowed;
 }
 
-.slider-range-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  color: #687386;
-  font-size: 12px;
-}
-
-.slider-range-row label {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.slider-range-row .inline-check {
-  grid-column: 1 / -1;
+.slider-time-row .inline-check {
   display: flex;
   flex-direction: row;
   gap: 6px;
   align-items: center;
 }
 
-.time-mode-row {
-  grid-column: 1 / -1;
+.slider-play-button {
+  min-height: 28px;
+}
+
+.draw-playbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #dce1ea;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #687386;
+  font-size: 12px;
 }
 
 .row-action {

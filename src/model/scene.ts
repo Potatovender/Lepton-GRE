@@ -78,12 +78,13 @@ export function importScene(rawText: string): SceneState {
 
     const sliderMatch = line.match(/^(slider|time)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
     if (sliderMatch) {
+      const range = splitSliderRange(sliderMatch[3]);
       scene.functions.push({
         id: sliderMatch[2],
         kind: "slider",
-        expression: sliderMatch[3],
-        sliderMin: "0",
-        sliderMax: "10",
+        expression: range.expression,
+        sliderMin: range.sliderMin,
+        sliderMax: range.sliderMax,
         time: sliderMatch[1].toLowerCase() === "time"
       });
       continue;
@@ -91,12 +92,13 @@ export function importScene(rawText: string): SceneState {
 
     const timedSliderMatch = line.match(/^time\s+(bounded_looped|bounded looped|bounded|unbounded)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
     if (timedSliderMatch) {
+      const range = splitSliderRange(timedSliderMatch[3]);
       scene.functions.push({
         id: timedSliderMatch[2],
         kind: "slider",
-        expression: timedSliderMatch[3],
-        sliderMin: "0",
-        sliderMax: "10",
+        expression: range.expression,
+        sliderMin: range.sliderMin,
+        sliderMax: range.sliderMax,
         time: true,
         timeMode: normalizeTimeMode(timedSliderMatch[1])
       });
@@ -195,12 +197,22 @@ export function exportScene(scene: SceneState): string {
 
 function exportRegistryEntry(entry: RegistryEntry): string {
   if (entry.kind === "slider") {
-    return entry.time ? `time ${entry.timeMode ?? "bounded"} ${entry.id} = ${entry.expression}` : `slider ${entry.id} = ${entry.expression}`;
+    const range = ` range ${entry.sliderMin ?? "0"}~${entry.sliderMax ?? "10"}`;
+    return entry.time ? `time ${entry.timeMode ?? "bounded"} ${entry.id} = ${entry.expression}${range}` : `slider ${entry.id} = ${entry.expression}${range}`;
   }
   if (entry.kind === "function") {
     return `function ${entry.id}(${(entry.params ?? []).join(",")}) = ${entry.expression}`;
   }
   return `variable ${entry.id} = ${entry.expression}`;
+}
+
+function splitSliderRange(source: string): { expression: string; sliderMin: string; sliderMax: string } {
+  const match = source.match(/^(.*?)(?:\s+range\s+(.+?)\s*~\s*(.+))?$/i);
+  return {
+    expression: (match?.[1] ?? source).trim(),
+    sliderMin: (match?.[2] ?? "0").trim(),
+    sliderMax: (match?.[3] ?? "10").trim()
+  };
 }
 
 function normalizeTimeMode(value: string): "bounded" | "unbounded" | "bounded_looped" {

@@ -38,19 +38,19 @@ describe("scene import/export", () => {
 
   test("round-trips variables, sliders, time variables, and functions", () => {
     const scene = importScene(`variable a = x
-slider speed = 5
-time bounded_looped t = 0
+slider speed = 5 range -2~8
+time bounded_looped t = 0 range 0~12
 function f(x,banana) = x+banana`);
     expect(scene.functions).toEqual([
       { id: "a", kind: "variable", expression: "x" },
-      { id: "speed", kind: "slider", expression: "5", sliderMin: "0", sliderMax: "10", time: false },
-      { id: "t", kind: "slider", expression: "0", sliderMin: "0", sliderMax: "10", time: true, timeMode: "bounded_looped" },
+      { id: "speed", kind: "slider", expression: "5", sliderMin: "-2", sliderMax: "8", time: false },
+      { id: "t", kind: "slider", expression: "0", sliderMin: "0", sliderMax: "12", time: true, timeMode: "bounded_looped" },
       { id: "f", kind: "function", expression: "x+banana", params: ["x", "banana"] }
     ]);
     const exported = exportScene(scene);
     expect(exported).toContain("variable a = x");
-    expect(exported).toContain("slider speed = 5");
-    expect(exported).toContain("time bounded_looped t = 0");
+    expect(exported).toContain("slider speed = 5 range -2~8");
+    expect(exported).toContain("time bounded_looped t = 0 range 0~12");
     expect(exported).toContain("function f(x,banana) = x+banana");
   });
 
