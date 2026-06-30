@@ -34,7 +34,9 @@ export const defaultSettings = (): GridSettings => ({
   backgroundColor: "0",
   ensureSquareGrid: true,
   aspectRatio: "1:1",
-  drawOnlyInsideBoundary: false
+  drawOnlyInsideBoundary: false,
+  unboundedDecimalPlaces: 3,
+  unboundedIntegerDigits: 1
 });
 
 export const createDefaultScene = (): SceneState => ({
@@ -188,6 +190,8 @@ export function exportScene(scene: SceneState): string {
     `set ensure_square_grid = ${scene.settings.ensureSquareGrid ? "True" : "False"}`,
     `set aspect_ratio = ${scene.settings.aspectRatio}`,
     `set draw_only_inside_boundary = ${scene.settings.drawOnlyInsideBoundary ? "True" : "False"}`,
+    `set unbounded_decimal_places = ${scene.settings.unboundedDecimalPlaces}`,
+    `set unbounded_integer_digits = ${scene.settings.unboundedIntegerDigits}`,
     ...scene.functions.map(exportRegistryEntry),
     ...scene.colors.map((entry) => `colour ${entry.id} = ${entry.red}~${entry.green}~${entry.blue}`),
     ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${entry.expression}~${entry.checkSmaller ? "True" : "False"}`),
@@ -270,7 +274,9 @@ function applySetting(settings: GridSettings, raw: string): void {
     y_min: "yMin",
     y_points: "yPoints",
     y_max: "yMax",
-    max_recursion: "maxRecursion"
+    max_recursion: "maxRecursion",
+    unbounded_decimal_places: "unboundedDecimalPlaces",
+    unbounded_integer_digits: "unboundedIntegerDigits"
   };
 
   const mapped = map[key];

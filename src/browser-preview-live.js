@@ -15,7 +15,9 @@ const DEFAULT_SCENE = {
     backgroundColor: "0",
     ensureSquareGrid: true,
     aspectRatio: "1:1",
-    drawOnlyInsideBoundary: false
+    drawOnlyInsideBoundary: false,
+    unboundedDecimalPlaces: 3,
+    unboundedIntegerDigits: 1
   }
 };
 
@@ -249,6 +251,7 @@ const TIME_VARIABLE_RATE = 1;
 let saveDialogOpen = false;
 let libraryDialogOpen = false;
 let saveNameDraft = "";
+let hasUnsavedChanges = false;
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -269,9 +272,9 @@ function renderApp() {
               <strong>Lepton GRE</strong>
             </a>
             <button class="tutorial-button" data-action="tutorial" type="button">What do I do?</button>
-            <button class="toolbar-button" data-action="open-save-dialog" type="button">Save</button>
-            <button class="toolbar-button" data-action="open-library" type="button">Saved</button>
-            <button class="toolbar-button primary" data-action="render">Refresh</button>
+            <button class="toolbar-button" data-action="new-graph" type="button">New</button>
+            <button class="toolbar-button ${hasUnsavedChanges ? "primary" : ""}" data-action="open-save-dialog" type="button">Save</button>
+            <button class="toolbar-button" data-action="open-library" type="button">Load</button>
           </div>
           <div class="display-row" aria-label="Display mode">
             <button class="display-button" data-display-mode="standard" aria-selected="${displayMode === "standard"}">${helpDash("Standard", "standard")}</button>
@@ -331,11 +334,30 @@ function normalizeFunctionEntry(entry) {
   };
 }
 
-function formatSliderValue(value) {
+function formatSliderValue(value, entry = null) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "0";
   if (Math.abs(number) < 1e-12) return "0";
+  if (entry?.time && normalizeTimeMode(entry.timeMode) === "unbounded") {
+    return formatUnboundedTimeValue(number);
+  }
   return Number(number.toPrecision(6)).toString();
+}
+
+function formatUnboundedTimeValue(value) {
+  const decimals = clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12);
+  const integerDigits = clampInteger(scene.settings.unboundedIntegerDigits ?? 1, 1, 24);
+  const sign = value < 0 ? "-" : "";
+  const fixed = Math.abs(value).toFixed(decimals);
+  const [integer, fraction] = fixed.split(".");
+  const padded = integer.padStart(integerDigits, "0");
+  return decimals > 0 ? `${sign}${padded}.${fraction}` : `${sign}${padded}`;
+}
+
+function clampInteger(value, min, max) {
+  const number = Math.trunc(Number(value));
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, number));
 }
 
 function functionEntryExpression(entry) {
@@ -494,6 +516,7 @@ function sceneSnapshot() {
 function recordSceneHistory(previous = sceneSnapshot()) {
   const current = sceneSnapshot();
   if (previous === current) return;
+  markUnsavedChange();
   const lastUndo = sceneHistory.undo[sceneHistory.undo.length - 1];
   if (lastUndo !== previous) {
     sceneHistory.undo.push(previous);
@@ -501,6 +524,22 @@ function recordSceneHistory(previous = sceneSnapshot()) {
   }
   sceneHistory.redo = [];
   sceneHistory.last = current;
+}
+
+function markUnsavedChange() {
+  hasUnsavedChanges = true;
+  updateSaveButtonState();
+}
+
+function markSaved() {
+  hasUnsavedChanges = false;
+  updateSaveButtonState();
+}
+
+function updateSaveButtonState() {
+  const button = root?.querySelector?.('[data-action="open-save-dialog"]');
+  if (!button) return;
+  button.classList.toggle("primary", hasUnsavedChanges);
 }
 
 function restoreSceneHistory(direction) {
@@ -514,6 +553,7 @@ function restoreSceneHistory(direction) {
   sceneHistory.last = source;
   viewport = sceneViewport();
   saveViewport();
+  markUnsavedChange();
   renderApp();
   return true;
 }
@@ -748,7 +788,10 @@ function renderPanel() {
         <div class="text-language-help">
           <span>${helpDash("Lepton language", "textLanguage")}</span>
         </div>
-        <textarea class="scene-textarea" data-scene-text spellcheck="false">${escapeHtml(exportScene())}</textarea>
+        <div class="scene-text-editor">
+          <pre class="scene-text-highlight" data-scene-highlight aria-hidden="true">${highlightLeptonText(exportScene())}</pre>
+          <textarea class="scene-textarea" data-scene-text spellcheck="false">${escapeHtml(exportScene())}</textarea>
+        </div>
         <div class="text-mode-actions">
           <span class="text-action-wrap"><button class="toolbar-button primary" data-action="apply-text">Apply</button>${helpMark("applyText")}</span>
           <span class="text-action-wrap"><button class="toolbar-button" data-action="refresh-text">Refresh text</button>${helpMark("refreshText")}</span>
@@ -850,6 +893,11 @@ function renderPanel() {
       <section class="settings-section">
         <h3>Calculation</h3>
         ${settingsField("maxRecursion", "max recursion depth")}
+      </section>
+      <section class="settings-section">
+        <h3>Numerical settings</h3>
+        ${settingsField("unboundedDecimalPlaces", "unbounded time decimal places")}
+        ${settingsField("unboundedIntegerDigits", "minimum integer digits")}
       </section>
       <label class="settings-row">
         <span>Angle mode</span>
@@ -1207,6 +1255,18 @@ function bindEvents() {
     libraryDialogOpen = false;
     renderApp();
   });
+  root.querySelector('[data-action="new-graph"]')?.addEventListener("click", () => {
+    syncFields();
+    const before = sceneSnapshot();
+    scene = structuredClone(DEFAULT_SCENE);
+    viewport = sceneViewport();
+    if (isValidViewport(viewport)) saveViewport();
+    recordSceneHistory(before);
+    markUnsavedChange();
+    activeTab = "functions";
+    displayMode = "standard";
+    renderApp();
+  });
   root.querySelector('[data-action="open-library"]')?.addEventListener("click", () => {
     syncFields();
     libraryDialogOpen = true;
@@ -1240,7 +1300,8 @@ function bindEvents() {
       sceneHistory.undo = [];
       sceneHistory.redo = [];
       sceneHistory.last = sceneSnapshot();
-      recordSceneHistory(before);
+      if (before !== sceneSnapshot()) sceneHistory.undo.push(before);
+      markSaved();
       saveDialogOpen = false;
       libraryDialogOpen = false;
       renderApp();
@@ -1397,8 +1458,14 @@ function bindEvents() {
     if (!confirmTextRefresh()) return;
     const field = root.querySelector("[data-scene-text]");
     if (field) field.value = exportScene();
+    updateTextHighlight();
     triggerBoundaryOverlay();
   });
+  root.querySelector("[data-scene-text]")?.addEventListener("input", () => {
+    markUnsavedChange();
+    updateTextHighlight();
+  });
+  root.querySelector("[data-scene-text]")?.addEventListener("scroll", () => syncTextHighlightScroll());
   root.querySelector("[data-aspect-ratio-preset]")?.addEventListener("change", (event) => {
     const before = sceneSnapshot();
     aspectRatioCustomOpen = event.target.value === "custom";
@@ -1445,6 +1512,7 @@ function bindEvents() {
       autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan",
       handlers: {
         edit: () => {
+          if (el.dataset.initializing === "true") return;
           const latex = mathField.latex();
           el.dataset.value = latex;
 
@@ -1490,7 +1558,9 @@ function bindEvents() {
     });
 
     el.mathquillInstance = mathField;
+    el.dataset.initializing = "true";
     mathField.latex(initialValue);
+    delete el.dataset.initializing;
     el.__mathField = mathField;
   });
 
@@ -1663,6 +1733,22 @@ function bindEvents() {
       renderApp();
     });
   });
+}
+
+function updateTextHighlight() {
+  const field = root.querySelector("[data-scene-text]");
+  const highlight = root.querySelector("[data-scene-highlight]");
+  if (!field || !highlight) return;
+  highlight.innerHTML = highlightLeptonText(field.value);
+  syncTextHighlightScroll();
+}
+
+function syncTextHighlightScroll() {
+  const field = root.querySelector("[data-scene-text]");
+  const highlight = root.querySelector("[data-scene-highlight]");
+  if (!field || !highlight) return;
+  highlight.scrollTop = field.scrollTop;
+  highlight.scrollLeft = field.scrollLeft;
 }
 
 function bindHelpTooltips() {
@@ -1954,9 +2040,9 @@ function updateSettingValue(key, value) {
     aspectRatioCustomOpen = true;
     return;
   }
-  if (key === "maxRecursion") {
+  if (["maxRecursion", "unboundedDecimalPlaces", "unboundedIntegerDigits"].includes(key)) {
     const number = Number(value);
-    scene.settings.maxRecursion = Number.isFinite(number) ? number : scene.settings.maxRecursion;
+    if (Number.isFinite(number)) scene.settings[key] = number;
     return;
   }
   scene.settings[key] = String(value ?? "").trim();
@@ -2026,8 +2112,9 @@ function updateSliderValue(index, value) {
 function setSliderExpression(index, value, syncField = false) {
   if (!scene.functions[index]) return;
   const entry = normalizeFunctionEntry(scene.functions[index]);
-  entry.expression = formatSliderValue(value);
+  entry.expression = formatSliderValue(value, entry);
   scene.functions[index] = entry;
+  markUnsavedChange();
   if (!syncField) return;
   const valueField = root.querySelector(`[data-field="functions.${index}.expression"]`);
   if (valueField) {
@@ -3148,6 +3235,7 @@ function validateScene() {
         idResult,
         sliderCoordinateDiagnostic(entry),
         timeVariableDiagnostic(entry, timeVariableCount),
+        sliderRangeDiagnostic(entry),
         validateExpression(entry.expression, env, [entry.id]),
         validateExpression(entry.sliderMin, env),
         validateExpression(entry.sliderMax, env)
@@ -3215,6 +3303,18 @@ function validateScene() {
   diagnostics.hasErrors = Boolean(firstError);
   diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
+}
+
+function sliderRangeDiagnostic(entry) {
+  if (entry.time && normalizeTimeMode(entry.timeMode) === "unbounded") {
+    return { status: "valid", message: "Unbounded time has no slider range" };
+  }
+  const min = evaluateScalarSetting(entry.sliderMin);
+  const max = evaluateScalarSetting(entry.sliderMax);
+  if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
+    return { status: "invalid", message: `Slider "${entry.id}" minimum is greater than maximum` };
+  }
+  return { status: "valid", message: "Slider range is valid" };
 }
 
 function sliderCoordinateDiagnostic(entry) {
@@ -5283,7 +5383,9 @@ function setSceneSetting(target, key, value) {
     background_color: "backgroundColor",
     ensure_square_grid: "ensureSquareGrid",
     aspect_ratio: "aspectRatio",
-    draw_only_inside_boundary: "drawOnlyInsideBoundary"
+    draw_only_inside_boundary: "drawOnlyInsideBoundary",
+    unbounded_decimal_places: "unboundedDecimalPlaces",
+    unbounded_integer_digits: "unboundedIntegerDigits"
   };
   const mapped = settingMap[String(key ?? "").trim()];
   if (!mapped) return;
@@ -5295,7 +5397,7 @@ function setSceneSetting(target, key, value) {
     target.settings[mapped] = parseLeptonBoolean(value);
   } else if (mapped === "aspectRatio") {
     target.settings[mapped] = String(value ?? "").trim() || "1:1";
-  } else if (mapped === "maxRecursion") {
+  } else if (["maxRecursion", "unboundedDecimalPlaces", "unboundedIntegerDigits"].includes(mapped)) {
     const number = Number(value);
     if (Number.isFinite(number)) target.settings[mapped] = number;
   } else {
@@ -5315,6 +5417,8 @@ function exportScene() {
     `set ensure_square_grid = ${formatLeptonBoolean(scene.settings.ensureSquareGrid !== false)}`,
     `set aspect_ratio = ${scene.settings.aspectRatio ?? "1:1"}`,
     `set draw_only_inside_boundary = ${formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))}`,
+    `set unbounded_decimal_places = ${clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)}`,
+    `set unbounded_integer_digits = ${clampInteger(scene.settings.unboundedIntegerDigits ?? 1, 1, 24)}`,
     ...scene.functions.map(exportFunctionEntry),
     ...scene.colors.map((entry) => `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
     ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`),
@@ -5819,6 +5923,62 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function highlightLeptonText(source) {
+  const text = String(source ?? "");
+  return text.split("\n").map(highlightLeptonLine).join("\n");
+}
+
+function highlightLeptonLine(line) {
+  const commentIndex = line.indexOf("#");
+  const code = commentIndex === -1 ? line : line.slice(0, commentIndex);
+  const comment = commentIndex === -1 ? "" : line.slice(commentIndex);
+  return highlightLeptonCode(code) + (comment ? `<span class="syntax-comment">${escapeHtml(comment)}</span>` : "");
+}
+
+function highlightLeptonCode(line) {
+  const declaration = line.match(/^(\s*)(set|variable|slider|time|function|colour|color|boundary|restriction)(\b)/i);
+  if (declaration) {
+    const prefix = escapeHtml(declaration[1]);
+    const keyword = declaration[2];
+    const rest = line.slice(declaration[1].length + keyword.length);
+    return `${prefix}<span class="syntax-keyword">${keyword}</span>${highlightLeptonTokens(rest)}`;
+  }
+  const draw = line.match(/^(\s*)(draw)(\s*\()(.*)$/i);
+  if (draw) {
+    return `${escapeHtml(draw[1])}<span class="syntax-keyword">${draw[2]}</span><span class="syntax-operator">${escapeHtml(draw[3])}</span>${highlightLeptonTokens(draw[4])}`;
+  }
+  return highlightLeptonTokens(line);
+}
+
+function highlightLeptonTokens(source) {
+  let output = "";
+  let index = 0;
+  while (index < source.length) {
+    const rest = source.slice(index);
+    const number = rest.match(/^\d+(?:\.\d+)?/);
+    if (number) {
+      output += `<span class="syntax-number">${escapeHtml(number[0])}</span>`;
+      index += number[0].length;
+      continue;
+    }
+    const name = rest.match(/^[A-Za-z_]\w*/);
+    if (name) {
+      const cls = /^(True|False|true|false|bounded|unbounded|bounded_looped|radians|degrees|default)$/.test(name[0]) ? "syntax-boolean" : "syntax-name";
+      output += `<span class="${cls}">${escapeHtml(name[0])}</span>`;
+      index += name[0].length;
+      continue;
+    }
+    const char = source[index];
+    if ("=~,+-*/^():".includes(char)) {
+      output += `<span class="syntax-operator">${escapeHtml(char)}</span>`;
+    } else {
+      output += escapeHtml(char);
+    }
+    index += 1;
+  }
+  return output;
+}
+
 function unescapeHtml(value) {
   return String(value)
     .replaceAll("&quot;", '"')
@@ -5869,6 +6029,7 @@ function saveCurrentGraph(name) {
     createdAt: new Date().toISOString()
   };
   writeSavedGraphs([graph, ...loadSavedGraphs()]);
+  markSaved();
   return graph;
 }
 

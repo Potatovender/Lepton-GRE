@@ -353,6 +353,23 @@ time bounded_looped u = 1 range 0~5`);
   assert(diagnostics.functions[4].status === "warning", JSON.stringify(diagnostics.functions));
 });
 
+check("unbounded time values keep fixed decimal precision past large values", () => {
+  const imported = sandbox.importScene(`set unbounded_decimal_places = 3
+set unbounded_integer_digits = 1
+time unbounded t = 10000`);
+  sandbox.__debugSetScene(imported);
+  const entry = sandbox.__debugScene.functions[0];
+  assert(sandbox.formatSliderValue(10000.016, entry) === "10000.016", sandbox.formatSliderValue(10000.016, entry));
+});
+
+check("bounded sliders red-flag inverted min max ranges", () => {
+  const imported = sandbox.importScene(`slider bad = 5 range 10~0`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.functions[0].status === "invalid", JSON.stringify(diagnostics.functions[0]));
+  assert(diagnostics.functions[0].message.includes("minimum is greater than maximum"), diagnostics.functions[0].message);
+});
+
 check("Lepton text strips stretchy parentheses from function calls", () => {
   const imported = sandbox.importScene(`function f1(x,y) = x^2+y^2
 variable f2 = 2*x+y
@@ -442,6 +459,16 @@ check("refresh text requires confirmation", () => {
   assert(sandbox.confirmTextRefresh() === false, "confirmation should cancel");
   assert(message.includes("lose unsaved text edits"), message);
   sandbox.window.confirm = previousConfirm;
+});
+
+check("Lepton text highlighting emits syntax spans without corrupting markup", () => {
+  const html = sandbox.highlightLeptonText(`set angle_mode = radians
+variable eq = sin(x)+cos(y)
+draw(eq,rgb,rest,False)`);
+  assert(html.includes('class="syntax-keyword">set</span>'), html);
+  assert(html.includes('class="syntax-boolean">radians</span>'), html);
+  assert(html.includes('class="syntax-name">eq</span>'), html);
+  assert(!html.includes('class="syntax-name">syntax'), html);
 });
 
 check("hidden draw layers do not invalidate the scene", () => {

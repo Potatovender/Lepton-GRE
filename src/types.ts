@@ -15,6 +15,8 @@ export interface GridSettings {
   ensureSquareGrid: boolean;
   aspectRatio: string;
   drawOnlyInsideBoundary: boolean;
+  unboundedDecimalPlaces: number;
+  unboundedIntegerDigits: number;
 }
 
 export interface RegistryEntry {
