@@ -30,7 +30,7 @@ vm.createContext(sandbox);
 vm.runInContext(
   source.replace(
     /loadSceneFromUrl\(\);\s*sceneHistory\.last = sceneSnapshot\(\);\s*renderApp\(\);/,
-    "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; };"
+    "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; }; globalThis.__debugPlayTime = (id) => { playingTimeIds.add(id); timeVariableDirections.set(id, 1); };"
   ),
   sandbox
 );
@@ -255,6 +255,23 @@ check("recursive node estimator keeps equations above 2^16 nodes blue flagged", 
   assert(!result.message.includes("refusing"), result.message);
 });
 
+check("Mandelbrot-style recursive sample is not red-flagged by node count", () => {
+  const imported = sandbox.importScene(`set max_recursion = 20
+variable real = real^2-imaginary^2+x
+variable imaginary = 2*real*imaginary+y
+variable c = x
+variable bounds = 1
+variable comb = real+imaginary
+colour rgb = c~c~c
+boundary rest = bounds~False
+draw(comb,rgb,rest,False)`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
+  assert(diagnostics.functions.some((item) => item.status === "info"), JSON.stringify(diagnostics.functions));
+  assert(diagnostics.summary.includes("graph may not render"), diagnostics.summary);
+});
+
 check("draw layers can be hidden and round-trip through text mode", () => {
   const imported = sandbox.importScene(`F:eq~x
 ~~~~~
@@ -363,6 +380,18 @@ time unbounded t = 10000`);
   assert(sandbox.formatSliderValue(10000.016, entry) === "10000.016", sandbox.formatSliderValue(10000.016, entry));
 });
 
+check("unbounded time export omits redundant integer digit setting", () => {
+  const imported = sandbox.importScene(`set unbounded_decimal_places = 3
+set unbounded_integer_digits = 8
+time unbounded t = 10000`);
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("set unbounded_decimal_places = 3"), exported);
+  assert(!exported.includes("unbounded_integer_digits"), exported);
+  const entry = sandbox.__debugScene.functions[0];
+  assert(sandbox.formatSliderValue(10000.016, entry) === "10000.016", sandbox.formatSliderValue(10000.016, entry));
+});
+
 check("bounded sliders red-flag inverted min max ranges", () => {
   const imported = sandbox.importScene(`slider bad = 5 range 10~0`);
   sandbox.__debugSetScene(imported);
@@ -380,6 +409,17 @@ check("bounded time values bounce instead of stopping at max", () => {
   assert(down.direction === 1, JSON.stringify(down));
 });
 
+check("playing bounded time clamps to edited slider bounds", () => {
+  const imported = sandbox.importScene(`time bounded t = 9 range 0~10`);
+  sandbox.__debugSetScene(imported);
+  sandbox.__debugPlayTime("t");
+  sandbox.__debugScene.functions[0].sliderMin = "0";
+  sandbox.__debugScene.functions[0].sliderMax = "1";
+  sandbox.advanceTimeVariables(1);
+  const value = Number(sandbox.__debugScene.functions[0].expression);
+  assert(value >= 0 && value <= 1, `expected edited range to clamp playback inside 0..1, got ${value}`);
+});
+
 check("Lepton text strips stretchy parentheses from function calls", () => {
   const imported = sandbox.importScene(`function f1(x,y) = x^2+y^2
 variable f2 = 2*x+y
@@ -389,6 +429,13 @@ variable f3 = f1\\left(f2,3\\right)`);
   assert(exported.includes("\nfunction f1(x,y) = x^2+y^2"), exported);
   assert(exported.includes("\nvariable f3 = f1(f2,3)"), exported);
   assert(!exported.includes("\\left") && !exported.includes("\\right"), exported);
+});
+
+check("text mode refresh preserves frac brace syntax", () => {
+  const imported = sandbox.importScene(`variable eq = x/y+frac{y}{2}`);
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("variable eq = frac{x}{y}+frac{y}{2}"), exported);
 });
 
 check("function parameters shadow outer variables with a warning", () => {

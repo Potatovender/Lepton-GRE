@@ -1,4 +1,4 @@
-const APP_VERSION = "20260630-recursion-links";
+const APP_VERSION = "20260630-loader-slider-frac";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

@@ -16,13 +16,12 @@ const DEFAULT_SCENE = {
     ensureSquareGrid: true,
     aspectRatio: "1:1",
     drawOnlyInsideBoundary: false,
-    unboundedDecimalPlaces: 3,
-    unboundedIntegerDigits: 1
+    unboundedDecimalPlaces: 3
   }
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260630-recursion-links";
+const APP_VERSION = "20260630-loader-slider-frac";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -160,8 +159,7 @@ const SETTING_TEXT_KEYS = new Set([
   "ensure_square_grid",
   "aspect_ratio",
   "draw_only_inside_boundary",
-  "unbounded_decimal_places",
-  "unbounded_integer_digits"
+  "unbounded_decimal_places"
 ]);
 const COMMON_ASPECT_RATIOS = [
   { value: "1:1", label: "1:1" },
@@ -201,7 +199,6 @@ const HELP_TEXT = {
   settingDrawOnlyInsideBoundary: "When enabled, pixels outside the active draw boundary are not drawn at all instead of showing the background.",
   settingMaxRecursion: "The maximum depth used when a variable refers back to itself or through a loop of other variables.",
   settingUnboundedDecimals: "How many digits to keep after the decimal point for unbounded time variables while they animate.",
-  settingUnboundedIntegerDigits: "The minimum number of digits shown before the decimal for unbounded time variables. Larger values still expand naturally.",
   settingAngleMode: "Chooses whether trig functions read angles as radians or degrees.",
   settingBackgroundColorId: "Choose the color ID used as the solid background when Background color is set to Custom.",
   boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
@@ -377,12 +374,10 @@ function formatSliderValue(value, entry = null) {
 
 function formatUnboundedTimeValue(value) {
   const decimals = clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12);
-  const integerDigits = clampInteger(scene.settings.unboundedIntegerDigits ?? 1, 1, 24);
   const sign = value < 0 ? "-" : "";
   const fixed = Math.abs(value).toFixed(decimals);
   const [integer, fraction] = fixed.split(".");
-  const padded = integer.padStart(integerDigits, "0");
-  return decimals > 0 ? `${sign}${padded}.${fraction}` : `${sign}${padded}`;
+  return decimals > 0 ? `${sign}${integer}.${fraction}` : `${sign}${integer}`;
 }
 
 function clampInteger(value, min, max) {
@@ -928,7 +923,6 @@ function renderPanel() {
       <section class="settings-section">
         <h3>Numerical settings</h3>
         ${settingsField("unboundedDecimalPlaces", "unbounded time decimal places", "number", "settingUnboundedDecimals")}
-        ${settingsField("unboundedIntegerDigits", "minimum integer digits", "number", "settingUnboundedIntegerDigits")}
       </section>
       <label class="settings-row">
         <span>Angle mode ${helpMark("settingAngleMode")}</span>
@@ -1582,6 +1576,9 @@ function bindEvents() {
             const entry = normalizeFunctionEntry(scene.functions[index]);
             entry[property] = cleanExpr;
             scene.functions[index] = entry;
+            if (["expression", "sliderMin", "sliderMax"].includes(property)) {
+              syncSliderRangeControl(index, entry);
+            }
           } else {
             scene[collection][index][property] = cleanExpr;
           }
@@ -2077,7 +2074,7 @@ function updateSettingValue(key, value) {
     aspectRatioCustomOpen = true;
     return;
   }
-  if (["maxRecursion", "unboundedDecimalPlaces", "unboundedIntegerDigits"].includes(key)) {
+  if (["maxRecursion", "unboundedDecimalPlaces"].includes(key)) {
     const number = Number(value);
     if (Number.isFinite(number)) scene.settings[key] = number;
     return;
@@ -2115,6 +2112,9 @@ function updateField(field) {
     const entry = normalizeFunctionEntry(scene.functions[Number(rawIndex)]);
     entry[property] = property === "params" ? parseFunctionParams(value) : value;
     scene.functions[Number(rawIndex)] = entry;
+    if (["expression", "sliderMin", "sliderMax"].includes(property)) {
+      syncSliderRangeControl(Number(rawIndex), entry);
+    }
   } else {
     scene[collection][Number(rawIndex)][property] = value;
   }
@@ -2152,6 +2152,7 @@ function setSliderExpression(index, value, syncField = false) {
   entry.expression = formatSliderValue(value, entry);
   scene.functions[index] = entry;
   markUnsavedChange();
+  syncSliderRangeControl(index, entry);
   if (!syncField) return;
   const valueField = root.querySelector(`[data-field="functions.${index}.expression"]`);
   if (valueField) {
@@ -2159,8 +2160,21 @@ function setSliderExpression(index, value, syncField = false) {
     const mathField = valueField.mathquillInstance;
     if (mathField) mathField.latex(valueField.dataset.value);
   }
+  syncSliderRangeControl(index, entry);
+}
+
+function syncSliderRangeControl(index, rawEntry = scene.functions[index]) {
   const rangeField = root.querySelector(`[data-slider-value="${index}"]`);
-  if (rangeField) rangeField.value = String(value);
+  if (!rangeField) return;
+  const entry = normalizeFunctionEntry(rawEntry);
+  const min = evaluateScalarSetting(entry.sliderMin);
+  const max = evaluateScalarSetting(entry.sliderMax);
+  const value = evaluateScalarSetting(entry.expression);
+  const rangeUsable = Number.isFinite(min) && Number.isFinite(max) && max > min;
+  rangeField.disabled = !rangeUsable;
+  rangeField.min = String(rangeUsable ? min : 0);
+  rangeField.max = String(rangeUsable ? max : 1);
+  rangeField.value = String(rangeUsable && Number.isFinite(value) ? clampNumber(value, min, max) : 0);
 }
 
 function refreshAfterSliderChange() {
@@ -2268,7 +2282,8 @@ function advanceTimeVariables(deltaSeconds) {
         next = min + positiveModulo(next - min, span);
       } else {
         const direction = timeVariableDirections.get(entry.id) ?? 1;
-        const reflected = reflectBoundedTimeValue(base + direction * deltaSeconds * TIME_VARIABLE_RATE, min, max, direction);
+        const boundedBase = clampNumber(base, min, max);
+        const reflected = reflectBoundedTimeValue(boundedBase + direction * deltaSeconds * TIME_VARIABLE_RATE, min, max, direction);
         next = reflected.value;
         timeVariableDirections.set(entry.id, reflected.direction);
       }
@@ -4766,7 +4781,7 @@ function astToLeptonText(node) {
     return node.name;
   }
   if (node.type === "fraction") {
-    return `{${astToLeptonText(node.num)}}/{${astToLeptonText(node.den)}}`;
+    return `frac{${astToLeptonText(node.num)}}{${astToLeptonText(node.den)}}`;
   }
   if (node.type === "unary") {
     return `${node.op}${astToLeptonText(node.value)}`;
@@ -4794,6 +4809,9 @@ function astToLeptonText(node) {
   if (node.type === "call") {
     const name = node.name;
     const args = node.args.map(astToLeptonText);
+    if (name === "frac" && args.length === 2) {
+      return `frac{${args[0]}}{${args[1]}}`;
+    }
     return `${name}(${args.join(",")})`;
   }
   return "";
@@ -5458,7 +5476,7 @@ function setSceneSetting(target, key, value) {
     aspect_ratio: "aspectRatio",
     draw_only_inside_boundary: "drawOnlyInsideBoundary",
     unbounded_decimal_places: "unboundedDecimalPlaces",
-    unbounded_integer_digits: "unboundedIntegerDigits"
+    unbounded_integer_digits: null
   };
   const mapped = settingMap[String(key ?? "").trim()];
   if (!mapped) return;
@@ -5470,7 +5488,7 @@ function setSceneSetting(target, key, value) {
     target.settings[mapped] = parseLeptonBoolean(value);
   } else if (mapped === "aspectRatio") {
     target.settings[mapped] = String(value ?? "").trim() || "1:1";
-  } else if (["maxRecursion", "unboundedDecimalPlaces", "unboundedIntegerDigits"].includes(mapped)) {
+  } else if (["maxRecursion", "unboundedDecimalPlaces"].includes(mapped)) {
     const number = Number(value);
     if (Number.isFinite(number)) target.settings[mapped] = number;
   } else {
@@ -5491,7 +5509,6 @@ function exportScene() {
     `set aspect_ratio = ${scene.settings.aspectRatio ?? "1:1"}`,
     `set draw_only_inside_boundary = ${formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))}`,
     `set unbounded_decimal_places = ${clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)}`,
-    `set unbounded_integer_digits = ${clampInteger(scene.settings.unboundedIntegerDigits ?? 1, 1, 24)}`,
     ...scene.functions.map(exportFunctionEntry),
     ...scene.colors.map((entry) => `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
     ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`),
@@ -5556,7 +5573,7 @@ function convertFracToDivisions(source) {
         if (endBrace2 !== -1) {
           const num = convertFracToDivisions(source.slice(startBrace + 1, endBrace1));
           const den = convertFracToDivisions(source.slice(startBrace2 + 1, endBrace2));
-          output += `{${num}}/{${den}}`;
+          output += `frac{${num}}{${den}}`;
           i = endBrace2 + 1;
           continue;
         }
@@ -5570,8 +5587,17 @@ function convertFracToDivisions(source) {
         if (endParen2 !== -1) {
           const num = convertFracToDivisions(source.slice(startParen + 1, endParen1));
           const den = convertFracToDivisions(source.slice(startParen2 + 1, endParen2));
-          output += `{${num}}/{${den}}`;
+          output += `frac{${num}}{${den}}`;
           i = endParen2 + 1;
+          continue;
+        }
+      } else if (endParen1 !== -1) {
+        const args = splitFunctionArgs(source.slice(startParen + 1, endParen1));
+        if (args.length === 2) {
+          const num = convertFracToDivisions(args[0]);
+          const den = convertFracToDivisions(args[1]);
+          output += `frac{${num}}{${den}}`;
+          i = endParen1 + 1;
           continue;
         }
       }
@@ -6165,6 +6191,7 @@ function fallbackSavedGraphThumbnail() {
 }
 
 window.__leptonDebug = {
+  version: APP_VERSION,
   latexToExpression,
   renderEditableLatex,
   serializeMathField,
