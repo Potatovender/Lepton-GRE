@@ -568,9 +568,20 @@ draw(eq,rgb,rest,False)`);
   assert(html.includes('class="syntax-setting">angle_mode</span>'), html);
   assert(html.includes('class="syntax-boolean">radians</span>'), html);
   assert(html.includes('class="syntax-name">eq</span>'), html);
-  assert(html.includes('class="syntax-function">sin</span>'), html);
-  assert(html.includes('class="syntax-function">cos</span>'), html);
+  assert(html.includes('class="syntax-number">sin</span>'), html);
+  assert(html.includes('class="syntax-number">cos</span>'), html);
+  assert(html.includes('class="syntax-name">x</span>'), html);
+  assert(html.includes('class="syntax-name">y</span>'), html);
   assert(!html.includes('class="syntax-name">syntax'), html);
+});
+
+check("Lepton text highlighting distinguishes function local variables", () => {
+  const html = sandbox.highlightLeptonText(`variable outside = 2
+function f(x,banana) = sqrt(2)+x+banana+outside`);
+  assert(html.includes('class="syntax-number">sqrt</span>'), html);
+  assert(html.includes('class="syntax-name">x</span>'), html);
+  assert(html.includes('class="syntax-name">banana</span>'), html);
+  assert(html.includes('class="syntax-name">outside</span>'), html);
 });
 
 check("hidden draw layers do not invalidate the scene", () => {

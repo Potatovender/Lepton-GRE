@@ -21,7 +21,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260630-ui-samples";
+const APP_VERSION = "20260630-load-picker";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -340,6 +340,7 @@ function renderApp() {
   restoreEntryScroll();
   renderScene(diagnostics);
   queueMathLayoutReflow();
+  requestAnimationFrame(() => forceMathFieldsReflow());
 }
 
 function panelScrollKey() {
@@ -1264,14 +1265,35 @@ function tutorialCoachmark() {
 }
 
 function searchableReference(field, entries, selected, label) {
+  const selectedEntry = entries.find((entry) => entry.id === selected);
+  const selectedLabel = selectedEntry?.label ?? (selected || "default");
   return `
-    <div class="reference-picker">
-      <input class="compact-field reference-filter" data-reference-filter="${escapeHtml(field)}" value="" placeholder="Search ${escapeHtml(label.toLowerCase())}" aria-label="Search ${escapeHtml(label)}" />
-      <select class="compact-field reference-field" data-field="${escapeHtml(field)}" aria-label="${escapeHtml(label)}">
-        ${options(entries, selected)}
-      </select>
-    </div>
+    <details class="reference-picker" data-reference-picker="${escapeHtml(field)}">
+      <summary class="reference-summary" aria-label="${escapeHtml(label)}">
+        <span>${escapeHtml(selectedLabel)}</span>
+      </summary>
+      <div class="reference-menu">
+        <input class="compact-field reference-filter" data-reference-filter="${escapeHtml(field)}" value="" placeholder="Search ${escapeHtml(label.toLowerCase())}" aria-label="Search ${escapeHtml(label)}" />
+        <div class="reference-options" role="listbox">
+          ${referenceMenuOptions(entries, selected, field)}
+        </div>
+      </div>
+    </details>
   `;
+}
+
+function referenceMenuOptions(entries, selected, field) {
+  const hasSelected = entries.some((entry) => entry.id === selected);
+  const missing = hasSelected || !selected ? [] : [{ id: selected, label: `${selected} (missing)` }];
+  return [...missing, ...entries].map((entry) => `
+    <button
+      class="reference-option"
+      type="button"
+      data-reference-option="${escapeHtml(field)}"
+      data-value="${escapeHtml(entry.id)}"
+      aria-selected="${entry.id === selected}"
+    >${escapeHtml(entry.label ?? entry.id)}</button>
+  `).join("");
 }
 
 function bindEvents() {
@@ -1474,6 +1496,19 @@ function bindEvents() {
       filterReferencePicker(field);
     });
   });
+  root.querySelectorAll("[data-reference-picker]").forEach((picker) => {
+    picker.addEventListener("toggle", () => {
+      if (picker.open) requestAnimationFrame(() => picker.querySelector("[data-reference-filter]")?.focus());
+    });
+  });
+  root.querySelectorAll("[data-reference-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const before = sceneSnapshot();
+      updateReferenceField(button.dataset.referenceOption, button.dataset.value);
+      recordSceneHistory(before);
+      renderApp();
+    });
+  });
 
   root.querySelector('[data-action="render"]')?.addEventListener("click", () => {
     syncFields();
@@ -1605,6 +1640,14 @@ function bindEvents() {
     el.mathquillInstance = mathField;
     el.dataset.initializing = "true";
     mathField.latex(initialValue);
+    mathField.reflow?.();
+    requestAnimationFrame(() => {
+      el.dataset.initializing = "true";
+      mathField.latex(initialValue);
+      mathField.reflow?.();
+      keepHorizontalCaretVisible(el);
+      delete el.dataset.initializing;
+    });
     delete el.dataset.initializing;
     el.__mathField = mathField;
   });
@@ -1890,28 +1933,33 @@ function clampNumber(value, min, max) {
 
 function filterReferencePicker(field) {
   const picker = field.closest(".reference-picker");
-  const select = picker?.querySelector("select[data-field]");
-  if (!select) return;
   const query = field.value.trim().toLowerCase();
-  let firstVisible = null;
-  for (const option of select.options) {
-    const visible = !query || option.value.toLowerCase().includes(query);
-    option.hidden = !visible;
-    option.disabled = !visible;
-    if (visible && !firstVisible) firstVisible = option;
-  }
-  if (query) {
-    const exact = Array.from(select.options).find((option) => option.value.toLowerCase() === query);
-    if (exact) {
-      select.value = exact.value;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  } else {
-    for (const option of select.options) {
-      option.hidden = false;
-      option.disabled = false;
-    }
-  }
+  picker?.querySelectorAll("[data-reference-option]").forEach((option) => {
+    const haystack = `${option.dataset.value ?? ""} ${option.textContent ?? ""}`.toLowerCase();
+    option.hidden = Boolean(query && !haystack.includes(query));
+  });
+}
+
+function updateReferenceField(field, value) {
+  const [collection, rawIndex, property] = String(field ?? "").split(".");
+  if (!collection || rawIndex == null || !property) return;
+  const index = Number(rawIndex);
+  if (!Number.isInteger(index) || !scene[collection]?.[index]) return;
+  scene[collection][index][property] = String(value ?? "");
+}
+
+function forceMathFieldsReflow() {
+  root.querySelectorAll(".mathquill-field[data-field]").forEach((field) => {
+    const mathField = field.mathquillInstance;
+    if (!mathField) return;
+    const latex = field.dataset.value ?? mathField.latex();
+    field.dataset.initializing = "true";
+    mathField.latex(latex);
+    mathField.reflow?.();
+    delete field.dataset.initializing;
+    keepHorizontalCaretVisible(field);
+  });
+  queueMathLayoutReflow();
 }
 
 function handleFieldHistoryKeydown(event) {
@@ -6066,9 +6114,12 @@ function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
     const prefix = escapeHtml(declaration[1]);
     const keyword = declaration[2].toLowerCase();
     const rest = line.slice(declaration[1].length + keyword.length);
+    const functionParams = keyword === "function" ? parseFunctionParams(line.match(/^\s*function\s+[A-Za-z_]\w*\s*\(([^)]*)\)/i)?.[1] ?? "") : [];
     return `${prefix}<span class="syntax-keyword">${declaration[2]}</span>${highlightLeptonTokens(rest, {
       ...context,
-      markFirstNameAsSetting: keyword === "set"
+      markFirstNameAsSetting: keyword === "set",
+      mathDefinition: ["variable", "slider", "time", "function"].includes(keyword),
+      localIds: new Set(functionParams)
     })}`;
   }
   const draw = line.match(/^(\s*)(draw)(\s*\()(.*)$/i);
@@ -6082,6 +6133,7 @@ function highlightLeptonTokens(source, context = { declaredIds: new Set() }) {
   let output = "";
   let index = 0;
   let firstName = true;
+  let afterDefinitionEquals = false;
   while (index < source.length) {
     const rest = source.slice(index);
     const number = rest.match(/^\d+(?:\.\d+)?/);
@@ -6094,7 +6146,13 @@ function highlightLeptonTokens(source, context = { declaredIds: new Set() }) {
     if (name) {
       const token = name[0];
       let cls = "syntax-name";
-      if (context.markFirstNameAsSetting && firstName) {
+      const inMathDefinition = Boolean(context.mathDefinition && afterDefinitionEquals);
+      if (inMathDefinition) {
+        cls = "syntax-number";
+        if (token === "x" || token === "y" || context.declaredIds?.has(token) || context.localIds?.has(token)) {
+          cls = "syntax-name";
+        }
+      } else if (context.markFirstNameAsSetting && firstName) {
         cls = "syntax-setting";
       } else if (/^(True|False|true|false|bounded|unbounded|bounded_looped|radians|degrees|default)$/.test(token)) {
         cls = "syntax-boolean";
@@ -6109,6 +6167,7 @@ function highlightLeptonTokens(source, context = { declaredIds: new Set() }) {
       continue;
     }
     const char = source[index];
+    if (char === "=" && context.mathDefinition) afterDefinitionEquals = true;
     if ("=~,+-*/^():".includes(char)) {
       output += `<span class="syntax-operator">${escapeHtml(char)}</span>`;
     } else {

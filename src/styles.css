@@ -446,7 +446,7 @@ select {
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 118px;
+  grid-template-columns: minmax(0, 1fr) 108px;
   gap: 8px;
   padding: 10px;
   border-bottom: 1px solid #eceff4;
@@ -1357,18 +1357,115 @@ textarea.compact-field,
   white-space: nowrap;
 }
 
+.list-search {
+  min-height: 32px;
+  border-color: #dfe4ec;
+  background: #f8fafc;
+  color: #4d5768;
+  font-size: 12px;
+}
+
+.list-search::placeholder {
+  color: #9aa3b2;
+}
+
+.list-sort {
+  min-height: 32px;
+  padding-block: 6px;
+  font-size: 12px;
+}
+
 .reference-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.reference-picker[open] {
+  z-index: 12;
+}
+
+.reference-summary {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #cfd5df;
+  border-radius: 5px;
+  padding: 8px 9px;
+  background: #ffffff;
+  color: #202938;
+  cursor: pointer;
+  list-style: none;
+}
+
+.reference-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reference-summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1.5px solid #647083;
+  border-bottom: 1.5px solid #647083;
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.reference-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
   display: grid;
   gap: 6px;
+  max-height: 260px;
+  overflow: hidden;
+  border: 1px solid #cfd7e4;
+  border-radius: 7px;
+  padding: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(24, 32, 51, 0.18);
 }
 
 .reference-filter {
+  min-height: 30px;
   font-size: 12px;
   padding-block: 6px;
+  background: #f8fafc;
 }
 
-.reference-picker select {
-  min-height: 38px;
+.reference-options {
+  display: grid;
+  gap: 3px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.reference-option {
+  min-width: 0;
+  border: 0;
+  border-radius: 5px;
+  padding: 7px 8px;
+  background: transparent;
+  color: #26364f;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reference-option:hover,
+.reference-option:focus-visible,
+.reference-option[aria-selected="true"] {
+  background: #eef4ff;
+  outline: none;
 }
 
 .settings-grid {

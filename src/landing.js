@@ -1,4 +1,4 @@
-const APP_VERSION = "20260630-ui-samples";
+const APP_VERSION = "20260630-load-picker";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
