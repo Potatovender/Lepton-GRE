@@ -347,7 +347,7 @@ select {
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-columns: minmax(220px, var(--sidebar-width, 380px)) 10px 1fr;
+  grid-template-columns: minmax(var(--sidebar-min-width, 340px), var(--sidebar-width, 380px)) 10px minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -862,20 +862,29 @@ select {
 }
 
 .brand-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-height: 34px;
 }
 
 .brand-link {
-  min-width: 0;
+  min-width: 120px;
+  flex: 1 1 132px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  overflow: hidden;
   color: #182033;
   text-decoration: none;
+}
+
+.brand-link strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .brand-link img {
@@ -897,12 +906,14 @@ select {
 }
 
 .brand-row .toolbar-button {
-  min-width: 64px;
-  justify-self: end;
+  min-width: 54px;
+  flex: 0 0 auto;
+  padding-inline: 8px;
 }
 
 .tutorial-button {
   min-height: 30px;
+  flex: 0 1 auto;
   border: 1px solid #bfd0ee;
   border-radius: 5px;
   padding: 5px 9px;
@@ -1073,6 +1084,13 @@ select {
   font-weight: 650;
   text-transform: capitalize;
   cursor: pointer;
+}
+
+.function-kind-button[data-help] {
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 .function-kind-button[aria-pressed="true"] {
@@ -1767,7 +1785,7 @@ textarea.compact-field,
   right: 14px;
   bottom: 60px;
   z-index: 8;
-  width: min(360px, calc(100% - 28px));
+  width: min(420px, calc(100% - 28px));
   max-height: min(460px, calc(100vh - 92px));
   display: grid;
   gap: 10px;

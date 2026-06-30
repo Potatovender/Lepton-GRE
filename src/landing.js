@@ -1,4 +1,4 @@
-const APP_VERSION = "20260630-loader-slider-frac";
+const APP_VERSION = "20260630-ui-samples";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -65,10 +65,11 @@ set background_color = 0
 set ensure_square_grid = True
 set aspect_ratio = 1:1
 set draw_only_inside_boundary = False
-variable eq = sin(sqrt(x^2+y^2)*4)+cos(x*2-y*1.5)
-variable r = 120+80*sin(eq)
-variable g = 150+90*cos(x/2)
-variable b = 210+40*sin(y/2)
+time unbounded t = 0
+variable eq = sin(sqrt(x^2+y^2)*4-t*2)+0.7*cos(x*2-y*1.5+t)+0.35*sin(y*3+t*1.2)
+variable r = 105+65*sin(eq+t*0.2)
+variable g = 145+85*cos(x/2+t*0.35)
+variable b = 215+35*sin(y/2+t*0.45)
 variable rest = 1
 colour rgb = r~g~b
 boundary rest = rest~False
@@ -84,15 +85,15 @@ set ensure_square_grid = True
 set aspect_ratio = 1:1
 set draw_only_inside_boundary = False
 variable rad = sqrt(x^2+y^2)
-variable fade = e^(0-rad^2/18)
-variable theta = arctan(y/(x+0.02))
-variable swirl = 0.5+0.5*sin(3*theta+2.8*rad)
-variable core = e^(0-rad^2/3.5)
-variable spark = e^(0-(abs(sin(12.7*x+2.1*sin(y)))+abs(cos(13.3*y+1.9*sin(x))))/0.045)*fade
-variable eq = fade*swirl+core+0.35*spark
-variable r = 5+95*fade*swirl+235*core+175*spark
-variable g = 8+65*fade*swirl+145*core+165*spark
-variable b = 28+175*fade*swirl+225*core+225*spark
+variable galaxy = 1/(1+0.08*x^2+0.42*y^2)
+variable theta = arctan(y/(x+0.08))
+variable arm = 0.5+0.5*sin(3*theta+2.4*rad)
+variable core = 1/(1+0.45*rad^2)
+variable dust = 1/(1+24*(abs(sin(12.7*x+2.1*sin(y)))+abs(cos(13.3*y+1.9*sin(x)))))
+variable eq = galaxy*(0.35+0.65*arm)+core+0.45*dust*galaxy
+variable r = 6+95*galaxy*arm+235*core+155*dust*galaxy
+variable g = 10+70*galaxy*arm+145*core+145*dust*galaxy
+variable b = 32+180*galaxy*arm+225*core+220*dust*galaxy
 variable rest = 1
 colour rgb = r~g~b
 boundary rest = rest~False

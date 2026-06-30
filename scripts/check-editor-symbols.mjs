@@ -438,6 +438,48 @@ check("text mode refresh preserves frac brace syntax", () => {
   assert(exported.includes("variable eq = frac{x}{y}+frac{y}{2}"), exported);
 });
 
+check("updated water sample imports an unbounded time variable", () => {
+  const imported = sandbox.importScene(`set max_recursion = 40
+time unbounded t = 0
+variable eq = sin(sqrt(x^2+y^2)*4-t*2)+0.7*cos(x*2-y*1.5+t)+0.35*sin(y*3+t*1.2)
+variable r = 105+65*sin(eq+t*0.2)
+variable g = 145+85*cos(x/2+t*0.35)
+variable b = 215+35*sin(y/2+t*0.45)
+variable rest = 1
+colour rgb = r~g~b
+boundary rest = rest~False
+draw(eq,rgb,rest,False)`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
+  const timeEntry = sandbox.__debugScene.functions.find((entry) => entry.id === "t");
+  assert(timeEntry?.time === true && timeEntry.timeMode === "unbounded", JSON.stringify(timeEntry));
+});
+
+check("updated star sample compiles without Math.pow runtime errors", () => {
+  const imported = sandbox.importScene(`set max_recursion = 40
+variable rad = sqrt(x^2+y^2)
+variable galaxy = 1/(1+0.08*x^2+0.42*y^2)
+variable theta = arctan(y/(x+0.08))
+variable arm = 0.5+0.5*sin(3*theta+2.4*rad)
+variable core = 1/(1+0.45*rad^2)
+variable dust = 1/(1+24*(abs(sin(12.7*x+2.1*sin(y)))+abs(cos(13.3*y+1.9*sin(x)))))
+variable eq = galaxy*(0.35+0.65*arm)+core+0.45*dust*galaxy
+variable r = 6+95*galaxy*arm+235*core+155*dust*galaxy
+variable g = 10+70*galaxy*arm+145*core+145*dust*galaxy
+variable b = 32+180*galaxy*arm+225*core+220*dust*galaxy
+variable rest = 1
+colour rgb = r~g~b
+boundary rest = rest~False
+draw(eq,rgb,rest,False)`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  const value = sandbox.compileExpression("eq")(0.25, 0.5, env);
+  assert(Number.isFinite(value), String(value));
+});
+
 check("function parameters shadow outer variables with a warning", () => {
   const imported = sandbox.importScene(`variable banana = 10
 function f(banana) = banana+1`);

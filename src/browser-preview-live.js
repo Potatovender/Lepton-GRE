@@ -21,7 +21,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260630-loader-slider-frac";
+const APP_VERSION = "20260630-ui-samples";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -202,13 +202,17 @@ const HELP_TEXT = {
   settingAngleMode: "Chooses whether trig functions read angles as radians or degrees.",
   settingBackgroundColorId: "Choose the color ID used as the solid background when Background color is set to Custom.",
   boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
+  variableType: "Variable entries are named formulas. Use them for constants, equations, color channels, and helper expressions that other entries can reference.",
+  sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
+  functionType: "Function entries accept named inputs such as f(x,y). Inside the function body, input names take priority over outer variables with the same name.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
 };
 
 let scene = structuredClone(DEFAULT_SCENE);
 let displayMode = "standard";
 let activeTab = "functions";
-let sidebarWidth = Number(localStorage.getItem("lepton-sidebar-width") ?? "380");
+const SIDEBAR_MIN_WIDTH = 340;
+let sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, Number(localStorage.getItem("lepton-sidebar-width") ?? "380"));
 let sidebarCollapsed = localStorage.getItem("lepton-sidebar-collapsed") === "true";
 let viewport = loadViewport();
 let panRenderFrame = 0;
@@ -290,7 +294,7 @@ function renderApp() {
   const diagnostics = validateScene();
   const scrollKey = panelScrollKey();
   root.innerHTML = `
-    <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px">
+    <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px; --sidebar-min-width: ${SIDEBAR_MIN_WIDTH}px">
       <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
         <header class="panel-header">
           <div class="brand-row">
@@ -298,7 +302,7 @@ function renderApp() {
               <img src="./src/assets/lepton-logo-transparent.png" alt="" />
               <strong>Lepton GRE</strong>
             </a>
-            <button class="tutorial-button" data-action="tutorial" type="button">What do I do?</button>
+            <button class="tutorial-button" data-action="tutorial" type="button" aria-pressed="${tutorialStep !== null}">${tutorialStep === null ? "What do I do?" : "Hide tutorial"}</button>
             <button class="toolbar-button" data-action="new-graph" type="button">New</button>
             <button class="toolbar-button ${hasUnsavedChanges ? "primary" : ""}" data-action="open-save-dialog" type="button">Save</button>
             <button class="toolbar-button" data-action="open-library" type="button">Load</button>
@@ -315,13 +319,13 @@ function renderApp() {
         </nav>
         <div class="entry-list ${displayMode === "text" ? "entry-list-text" : ""}">${renderPanel()}</div>
         <button class="keyboard-toggle" data-action="toggle-keyboard" type="button" aria-pressed="${keyboardOpen}" aria-label="${keyboardOpen ? "Hide keyboard" : "Show keyboard"}">⌨</button>
-        ${keyboardOpen ? renderKeyboardPanel() : ""}
       </section>
       <div class="sidebar-resizer" role="separator" aria-label="Resize expression panel" tabindex="0"></div>
       <section class="renderer-pane" aria-label="Grid renderer">
         <button class="sidebar-toggle" data-action="toggle-sidebar" aria-label="${sidebarCollapsed ? "Show expression panel" : "Hide expression panel"}" aria-pressed="${sidebarCollapsed}">
           <span aria-hidden="true"></span>
         </button>
+        ${keyboardOpen ? renderKeyboardPanel() : ""}
         <canvas class="grid-canvas"></canvas>
         <div class="grid-boundary-overlay" aria-hidden="true"></div>
         <div class="render-overlay">${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
@@ -1069,10 +1073,15 @@ function functionRowContent(entry, index) {
 }
 
 function functionKindSelector(kind, index) {
+  const helpKeys = {
+    variable: "variableType",
+    slider: "sliderType",
+    function: "functionType"
+  };
   return `
     <div class="function-kind-selector" aria-label="Function entry type">
       ${["variable", "slider", "function"].map((entryKind) => `
-        <button class="function-kind-button" type="button" data-function-kind="${index}.${entryKind}" aria-pressed="${kind === entryKind}">
+        <button class="function-kind-button" type="button" data-function-kind="${index}.${entryKind}" data-help="${escapeHtml(HELP_TEXT[helpKeys[entryKind]])}" title="${escapeHtml(HELP_TEXT[helpKeys[entryKind]])}" aria-pressed="${kind === entryKind}">
           ${entryKind}
         </button>
       `).join("")}
@@ -1358,9 +1367,13 @@ function bindEvents() {
 
   root.querySelector('[data-action="tutorial"]')?.addEventListener("click", () => {
     syncFields();
-    tutorialStep = 0;
-    displayMode = TUTORIAL_STEPS[0].mode;
-    activeTab = TUTORIAL_STEPS[0].tab;
+    if (tutorialStep !== null) {
+      tutorialStep = null;
+    } else {
+      tutorialStep = 0;
+      displayMode = TUTORIAL_STEPS[0].mode;
+      activeTab = TUTORIAL_STEPS[0].tab;
+    }
     renderApp();
   });
 
@@ -1478,8 +1491,6 @@ function bindEvents() {
     scene = importScene(text);
     viewport = sceneViewport();
     saveViewport();
-    displayMode = "standard";
-    activeTab = "functions";
     recordSceneHistory(before);
     renderApp();
   });
@@ -1952,7 +1963,7 @@ function bindSidebarResize() {
   if (!resizer) return;
 
   const onMove = (event) => {
-    sidebarWidth = Math.max(220, Math.min(Math.max(360, window.innerWidth - 260), event.clientX));
+    sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(Math.max(SIDEBAR_MIN_WIDTH, window.innerWidth - 260), event.clientX));
     localStorage.setItem("lepton-sidebar-width", String(sidebarWidth));
     root.querySelector(".app-shell")?.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
     renderScene(validateScene());
