@@ -370,6 +370,15 @@ check("bounded sliders red-flag inverted min max ranges", () => {
   assert(diagnostics.functions[0].message.includes("minimum is greater than maximum"), diagnostics.functions[0].message);
 });
 
+check("bounded time values bounce instead of stopping at max", () => {
+  const up = sandbox.reflectBoundedTimeValue(1.25, 0, 1, 1);
+  assert(up.value === 0.75, JSON.stringify(up));
+  assert(up.direction === -1, JSON.stringify(up));
+  const down = sandbox.reflectBoundedTimeValue(-0.25, 0, 1, -1);
+  assert(down.value === 0.25, JSON.stringify(down));
+  assert(down.direction === 1, JSON.stringify(down));
+});
+
 check("Lepton text strips stretchy parentheses from function calls", () => {
   const imported = sandbox.importScene(`function f1(x,y) = x^2+y^2
 variable f2 = 2*x+y
@@ -466,8 +475,11 @@ check("Lepton text highlighting emits syntax spans without corrupting markup", (
 variable eq = sin(x)+cos(y)
 draw(eq,rgb,rest,False)`);
   assert(html.includes('class="syntax-keyword">set</span>'), html);
+  assert(html.includes('class="syntax-setting">angle_mode</span>'), html);
   assert(html.includes('class="syntax-boolean">radians</span>'), html);
   assert(html.includes('class="syntax-name">eq</span>'), html);
+  assert(html.includes('class="syntax-function">sin</span>'), html);
+  assert(html.includes('class="syntax-function">cos</span>'), html);
   assert(!html.includes('class="syntax-name">syntax'), html);
 });
 

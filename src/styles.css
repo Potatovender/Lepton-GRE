@@ -1455,8 +1455,14 @@ textarea.compact-field,
   color: #1d4ed8;
 }
 
-.syntax-number {
+.syntax-number,
+.syntax-function {
   color: #b45309;
+}
+
+.syntax-setting {
+  color: #9333ea;
+  font-weight: 650;
 }
 
 .syntax-boolean {

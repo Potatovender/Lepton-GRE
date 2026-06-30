@@ -147,6 +147,21 @@ const LATEX_FUNCTIONS = {
   frac: { internal: "frac", args: 2, display: "frac" }
 };
 const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
+const FUNCTION_TEXT_NAMES = new Set(Object.values(LATEX_FUNCTIONS).map((config) => config.internal));
+const SETTING_TEXT_KEYS = new Set([
+  "x_min",
+  "x_max",
+  "y_min",
+  "y_max",
+  "max_recursion",
+  "angle_mode",
+  "background_color",
+  "ensure_square_grid",
+  "aspect_ratio",
+  "draw_only_inside_boundary",
+  "unbounded_decimal_places",
+  "unbounded_integer_digits"
+]);
 const COMMON_ASPECT_RATIOS = [
   { value: "1:1", label: "1:1" },
   { value: "4:3", label: "4:3" },
@@ -175,6 +190,19 @@ const HELP_TEXT = {
   applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
   refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
   backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
+  settingXMin: "The left edge of the coordinate window. You can enter numbers or expressions such as -pi.",
+  settingXMax: "The right edge of the coordinate window. It must be greater than x minimum when square grid is off.",
+  settingYMin: "The bottom edge of the coordinate window. You can use the same math syntax as function fields.",
+  settingYMax: "The top edge of the coordinate window. It must be greater than y minimum when square grid is off.",
+  settingEnsureSquareGrid: "Keeps graph units visually square. If the requested bounds do not match the aspect ratio, Lepton expands the window to fit.",
+  settingAspectRatio: "Controls the shape Lepton fits the square grid into. Use a preset or Custom for your own width:height ratio.",
+  settingCustomAspectRatio: "Custom ratios use two math fields: the left number is width and the right number is height.",
+  settingDrawOnlyInsideBoundary: "When enabled, pixels outside the active draw boundary are not drawn at all instead of showing the background.",
+  settingMaxRecursion: "The maximum depth used when a variable refers back to itself or through a loop of other variables.",
+  settingUnboundedDecimals: "How many digits to keep after the decimal point for unbounded time variables while they animate.",
+  settingUnboundedIntegerDigits: "The minimum number of digits shown before the decimal for unbounded time variables. Larger values still expand naturally.",
+  settingAngleMode: "Chooses whether trig functions read angles as radians or degrees.",
+  settingBackgroundColorId: "Choose the color ID used as the solid background when Background color is set to Custom.",
   boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
 };
@@ -233,6 +261,7 @@ const listControls = {
 const editorHistory = new Map();
 const sceneHistory = { undo: [], redo: [], last: "" };
 const playingTimeIds = new Set();
+const timeVariableDirections = new Map();
 const entryScrollTops = new Map();
 let pendingScrollTarget = null;
 let keyboardOpen = false;
@@ -308,6 +337,7 @@ function renderApp() {
   bindCanvasPan();
   restoreEntryScroll();
   renderScene(diagnostics);
+  queueMathLayoutReflow();
 }
 
 function panelScrollKey() {
@@ -870,16 +900,16 @@ function renderPanel() {
           <span class="entry-status ${gridStatus.status}" title="${escapeHtml(gridStatus.message)}" aria-label="${escapeHtml(gridStatus.message)}"></span>
           Grid rendering
         </h3>
-        ${settingsMathField("xMin", "x minimum")}
-        ${settingsMathField("xMax", "x maximum")}
-        ${settingsMathField("yMin", "y minimum")}
-        ${settingsMathField("yMax", "y maximum")}
+        ${settingsMathField("xMin", "x minimum", "settingXMin")}
+        ${settingsMathField("xMax", "x maximum", "settingXMax")}
+        ${settingsMathField("yMin", "y minimum", "settingYMin")}
+        ${settingsMathField("yMax", "y maximum", "settingYMax")}
         <label class="inline-check">
           <input type="checkbox" data-field="settings.ensureSquareGrid" ${scene.settings.ensureSquareGrid !== false ? "checked" : ""} />
-          ensure square grid
+          ensure square grid ${helpMark("settingEnsureSquareGrid")}
         </label>
         <label class="settings-row">
-          <span>Aspect ratio</span>
+          <span>Aspect ratio ${helpMark("settingAspectRatio")}</span>
           <select class="compact-field" data-aspect-ratio-preset>
             ${aspectRatioOptions()}
           </select>
@@ -887,20 +917,20 @@ function renderPanel() {
         ${isCustomAspectRatio() ? aspectRatioFields() : ""}
         <label class="inline-check">
           <input type="checkbox" data-field="settings.drawOnlyInsideBoundary" ${scene.settings.drawOnlyInsideBoundary ? "checked" : ""} />
-          draw only inside boundary
+          draw only inside boundary ${helpMark("settingDrawOnlyInsideBoundary")}
         </label>
       </section>
       <section class="settings-section">
         <h3>Calculation</h3>
-        ${settingsField("maxRecursion", "max recursion depth")}
+        ${settingsField("maxRecursion", "max recursion depth", "number", "settingMaxRecursion")}
       </section>
       <section class="settings-section">
         <h3>Numerical settings</h3>
-        ${settingsField("unboundedDecimalPlaces", "unbounded time decimal places")}
-        ${settingsField("unboundedIntegerDigits", "minimum integer digits")}
+        ${settingsField("unboundedDecimalPlaces", "unbounded time decimal places", "number", "settingUnboundedDecimals")}
+        ${settingsField("unboundedIntegerDigits", "minimum integer digits", "number", "settingUnboundedIntegerDigits")}
       </section>
       <label class="settings-row">
-        <span>Angle mode</span>
+        <span>Angle mode ${helpMark("settingAngleMode")}</span>
         <select class="compact-field" data-field="settings.angleMode">
           <option value="radians" ${scene.settings.angleMode === "radians" ? "selected" : ""}>radians</option>
           <option value="degrees" ${scene.settings.angleMode === "degrees" ? "selected" : ""}>degrees</option>
@@ -915,7 +945,7 @@ function renderPanel() {
       </label>
       ${scene.settings.backgroundColor !== "0" ? `
         <label class="settings-row">
-          <span>Background color ID</span>
+          <span>Background color ID ${helpMark("settingBackgroundColorId")}</span>
           ${searchableReference("settings.backgroundColor", scene.colors, scene.settings.backgroundColor, "Background color")}
         </label>
       ` : ""}
@@ -1140,19 +1170,19 @@ function addRow(label, kind) {
   `;
 }
 
-function settingsField(key, label, type = "number") {
+function settingsField(key, label, type = "number", helpKey = "") {
   return `
     <label class="settings-row">
-      <span>${label}</span>
+      <span>${label}${helpKey ? ` ${helpMark(helpKey)}` : ""}</span>
       <input class="compact-field" type="${type}" data-field="settings.${key}" value="${escapeHtml(scene.settings[key])}" />
     </label>
   `;
 }
 
-function settingsMathField(key, label) {
+function settingsMathField(key, label, helpKey = "") {
   return `
     <div class="settings-row settings-row-math">
-      <span>${label}</span>
+      <span>${label}${helpKey ? ` ${helpMark(helpKey)}` : ""}</span>
       ${mathEditor(`settings.${key}`, String(scene.settings[key] ?? ""), label, true, "enter function here")}
     </div>
   `;
@@ -1169,7 +1199,7 @@ function aspectRatioFields() {
   const [left, right] = aspectRatioParts();
   return `
     <div class="settings-row settings-row-ratio">
-      <span>custom ratio</span>
+      <span>custom ratio ${helpMark("settingCustomAspectRatio")}</span>
       <div class="ratio-fields">
         ${mathEditor("settings.aspectRatioLeft", left, "Aspect ratio left side", true, "enter function here")}
         <span class="ratio-separator">:</span>
@@ -2143,6 +2173,9 @@ function prunePlayingTimeIds() {
   for (const id of [...playingTimeIds]) {
     if (!ids.has(id)) playingTimeIds.delete(id);
   }
+  for (const id of [...timeVariableDirections.keys()]) {
+    if (!ids.has(id)) timeVariableDirections.delete(id);
+  }
   if (!playingTimeIds.size) stopAnimationLoop();
 }
 
@@ -2153,9 +2186,13 @@ function toggleGlobalTimePlayback() {
   const allPlaying = entries.every(({ entry }) => playingTimeIds.has(entry.id));
   if (allPlaying || playingTimeIds.size) {
     playingTimeIds.clear();
+    timeVariableDirections.clear();
     stopAnimationLoop();
   } else {
-    entries.forEach(({ entry }) => playingTimeIds.add(entry.id));
+    entries.forEach(({ entry }) => {
+      playingTimeIds.add(entry.id);
+      if (!timeVariableDirections.has(entry.id)) timeVariableDirections.set(entry.id, 1);
+    });
     startAnimationLoop();
   }
   renderApp();
@@ -2167,9 +2204,13 @@ function toggleTimePlayback(id) {
   if (!cleanId) return;
   if (playingTimeIds.has(cleanId)) {
     playingTimeIds.delete(cleanId);
+    timeVariableDirections.delete(cleanId);
   } else {
     const exists = timeVariableEntries().some(({ entry }) => entry.id === cleanId);
-    if (exists) playingTimeIds.add(cleanId);
+    if (exists) {
+      playingTimeIds.add(cleanId);
+      if (!timeVariableDirections.has(cleanId)) timeVariableDirections.set(cleanId, 1);
+    }
   }
   if (playingTimeIds.size) startAnimationLoop();
   else stopAnimationLoop();
@@ -2215,20 +2256,40 @@ function advanceTimeVariables(deltaSeconds) {
     const base = Number.isFinite(current) ? current : Number.isFinite(min) ? min : 0;
     let next = base + deltaSeconds * TIME_VARIABLE_RATE;
     if (mode !== "unbounded" && Number.isFinite(min) && Number.isFinite(max) && max > min) {
-      if (next > max) {
-        if (mode === "bounded_looped") {
-          const span = max - min;
-          next = min + ((next - min) % span);
-        } else {
-          next = max;
-          playingTimeIds.delete(entry.id);
-        }
+      if (mode === "bounded_looped") {
+        const span = max - min;
+        next = min + positiveModulo(next - min, span);
+      } else {
+        const direction = timeVariableDirections.get(entry.id) ?? 1;
+        const reflected = reflectBoundedTimeValue(base + direction * deltaSeconds * TIME_VARIABLE_RATE, min, max, direction);
+        next = reflected.value;
+        timeVariableDirections.set(entry.id, reflected.direction);
       }
-      if (next < min) next = min;
     }
     setSliderExpression(index, next, activeTab === "functions" && displayMode === "standard");
   }
   prunePlayingTimeIds();
+}
+
+function reflectBoundedTimeValue(value, min, max, direction = 1) {
+  const span = max - min;
+  if (!Number.isFinite(span) || span <= 0) return { value: min, direction: 1 };
+  const currentDirection = direction < 0 ? -1 : 1;
+  if (value >= min && value <= max) return { value, direction: currentDirection };
+  const cycle = span * 2;
+  const distance = currentDirection > 0 ? value - min : max - value;
+  const offset = positiveModulo(distance, cycle);
+  if (currentDirection > 0) {
+    if (offset <= span) return { value: min + offset, direction: 1 };
+    return { value: max - (offset - span), direction: -1 };
+  }
+  if (offset <= span) return { value: max - offset, direction: -1 };
+  return { value: min + (offset - span), direction: 1 };
+}
+
+function positiveModulo(value, modulus) {
+  if (!Number.isFinite(value) || !Number.isFinite(modulus) || modulus <= 0) return 0;
+  return ((value % modulus) + modulus) % modulus;
 }
 
 function readFieldValue(field) {
@@ -3758,6 +3819,14 @@ function renderMathFieldDisplay(field) {
   reflowMathLayout(field);
   requestAnimationFrame(() => reflowMathLayout(field));
   placeCaretAtEnd(field);
+}
+
+function queueMathLayoutReflow() {
+  reflowMathLayout(root);
+  requestAnimationFrame(() => {
+    reflowMathLayout(root);
+    requestAnimationFrame(() => reflowMathLayout(root));
+  });
 }
 
 function reflowMathLayout(container = root) {
@@ -5925,34 +5994,53 @@ function escapeHtml(value) {
 
 function highlightLeptonText(source) {
   const text = String(source ?? "");
-  return text.split("\n").map(highlightLeptonLine).join("\n");
+  const context = {
+    declaredIds: collectTextDeclaredIdentifiers(text)
+  };
+  return text.split("\n").map((line) => highlightLeptonLine(line, context)).join("\n");
 }
 
-function highlightLeptonLine(line) {
+function collectTextDeclaredIdentifiers(source) {
+  const ids = new Set();
+  String(source ?? "").split("\n").forEach((line) => {
+    const code = line.split("#")[0] ?? "";
+    const declaration = code.match(/^\s*(?:variable|slider|function|colour|color|boundary|restriction)\s+([A-Za-z_]\w*)/i);
+    if (declaration) ids.add(declaration[1]);
+    const time = code.match(/^\s*time\s+(?:bounded|unbounded|bounded_looped)\s+([A-Za-z_]\w*)/i);
+    if (time) ids.add(time[1]);
+  });
+  return ids;
+}
+
+function highlightLeptonLine(line, context = { declaredIds: new Set() }) {
   const commentIndex = line.indexOf("#");
   const code = commentIndex === -1 ? line : line.slice(0, commentIndex);
   const comment = commentIndex === -1 ? "" : line.slice(commentIndex);
-  return highlightLeptonCode(code) + (comment ? `<span class="syntax-comment">${escapeHtml(comment)}</span>` : "");
+  return highlightLeptonCode(code, context) + (comment ? `<span class="syntax-comment">${escapeHtml(comment)}</span>` : "");
 }
 
-function highlightLeptonCode(line) {
+function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
   const declaration = line.match(/^(\s*)(set|variable|slider|time|function|colour|color|boundary|restriction)(\b)/i);
   if (declaration) {
     const prefix = escapeHtml(declaration[1]);
-    const keyword = declaration[2];
+    const keyword = declaration[2].toLowerCase();
     const rest = line.slice(declaration[1].length + keyword.length);
-    return `${prefix}<span class="syntax-keyword">${keyword}</span>${highlightLeptonTokens(rest)}`;
+    return `${prefix}<span class="syntax-keyword">${declaration[2]}</span>${highlightLeptonTokens(rest, {
+      ...context,
+      markFirstNameAsSetting: keyword === "set"
+    })}`;
   }
   const draw = line.match(/^(\s*)(draw)(\s*\()(.*)$/i);
   if (draw) {
-    return `${escapeHtml(draw[1])}<span class="syntax-keyword">${draw[2]}</span><span class="syntax-operator">${escapeHtml(draw[3])}</span>${highlightLeptonTokens(draw[4])}`;
+    return `${escapeHtml(draw[1])}<span class="syntax-keyword">${draw[2]}</span><span class="syntax-operator">${escapeHtml(draw[3])}</span>${highlightLeptonTokens(draw[4], context)}`;
   }
-  return highlightLeptonTokens(line);
+  return highlightLeptonTokens(line, context);
 }
 
-function highlightLeptonTokens(source) {
+function highlightLeptonTokens(source, context = { declaredIds: new Set() }) {
   let output = "";
   let index = 0;
+  let firstName = true;
   while (index < source.length) {
     const rest = source.slice(index);
     const number = rest.match(/^\d+(?:\.\d+)?/);
@@ -5963,9 +6051,20 @@ function highlightLeptonTokens(source) {
     }
     const name = rest.match(/^[A-Za-z_]\w*/);
     if (name) {
-      const cls = /^(True|False|true|false|bounded|unbounded|bounded_looped|radians|degrees|default)$/.test(name[0]) ? "syntax-boolean" : "syntax-name";
-      output += `<span class="${cls}">${escapeHtml(name[0])}</span>`;
-      index += name[0].length;
+      const token = name[0];
+      let cls = "syntax-name";
+      if (context.markFirstNameAsSetting && firstName) {
+        cls = "syntax-setting";
+      } else if (/^(True|False|true|false|bounded|unbounded|bounded_looped|radians|degrees|default)$/.test(token)) {
+        cls = "syntax-boolean";
+      } else if (FUNCTION_TEXT_NAMES.has(token)) {
+        cls = "syntax-function";
+      } else if (!context.declaredIds?.has(token) && (token === "pi" || token === "e")) {
+        cls = "syntax-number";
+      }
+      output += `<span class="${cls}">${escapeHtml(token)}</span>`;
+      firstName = false;
+      index += token.length;
       continue;
     }
     const char = source[index];
