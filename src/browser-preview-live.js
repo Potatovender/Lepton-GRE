@@ -22,7 +22,8 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const LEPTON_ICON_PATH = "./src/assets/lepton-favicon.png?v=20260629-slider-mq-favicon2";
+const APP_VERSION = "20260630-recursion-links";
+const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -170,7 +171,7 @@ const COMMON_ASPECT_RATIOS = [
   { value: "2:1", label: "2:1" }
 ];
 const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
-const NODE_RED_FLAG_THRESHOLD = 2 ** 16;
+const NODE_COUNT_DISPLAY_CAP = 2 ** 16;
 const DEFAULT_DRAW_FUNCTION = { id: "f1", kind: "variable", expression: "x" };
 const DEFAULT_DRAW_COLOR = { id: "default", label: "default", red: "x", green: "x", blue: "x" };
 const DEFAULT_DRAW_BOUNDARY = { id: "default", label: "default", expression: "1", checkSmaller: false };
@@ -1332,6 +1333,8 @@ function bindEvents() {
       sceneHistory.last = sceneSnapshot();
       if (before !== sceneSnapshot()) sceneHistory.undo.push(before);
       markSaved();
+      displayMode = "standard";
+      activeTab = "functions";
       saveDialogOpen = false;
       libraryDialogOpen = false;
       renderApp();
@@ -1481,6 +1484,8 @@ function bindEvents() {
     scene = importScene(text);
     viewport = sceneViewport();
     saveViewport();
+    displayMode = "standard";
+    activeTab = "functions";
     recordSceneHistory(before);
     renderApp();
   });
@@ -1527,6 +1532,8 @@ function bindEvents() {
     if (raw) {
       const before = sceneSnapshot();
       scene = importScene(raw);
+      displayMode = "standard";
+      activeTab = "functions";
       recordSceneHistory(before);
       renderApp();
     }
@@ -3493,11 +3500,8 @@ function validateExpression(source, env, stack = [], localNames = new Set()) {
       throw new Error("Empty function argument");
     }
     const nodeCount = estimateExpandedNodeCount(source, env, stack, new Map(), localNames);
-    if (nodeCount > NODE_RED_FLAG_THRESHOLD) {
-      throw new Error(`Equation is too large (${formatNodeCount(nodeCount)} nodes); refusing to generate`);
-    }
     if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) {
-      return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes); rendering may be slower` };
+      return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes); graph may not render` };
     }
     expressionToGlsl(source, env, null, stack, scene.settings.angleMode, Object.fromEntries([...localNames].map((name) => [name, name === "x" ? "x" : name === "y" ? "y" : "0.0"])));
     const runtimeEnv = buildRuntimeEnv(env);
@@ -3545,11 +3549,11 @@ function countLocalExpressionNodes(source) {
 
 function cappedNodeAdd(left, right) {
   const total = left + right;
-  return total > NODE_RED_FLAG_THRESHOLD + 1 ? NODE_RED_FLAG_THRESHOLD + 1 : total;
+  return total > NODE_COUNT_DISPLAY_CAP + 1 ? NODE_COUNT_DISPLAY_CAP + 1 : total;
 }
 
 function formatNodeCount(value) {
-  if (value > NODE_RED_FLAG_THRESHOLD) return `>${NODE_RED_FLAG_THRESHOLD.toLocaleString()}`;
+  if (value > NODE_COUNT_DISPLAY_CAP) return `>${NODE_COUNT_DISPLAY_CAP.toLocaleString()}`;
   return value.toLocaleString();
 }
 

@@ -235,11 +235,11 @@ check("recursive node estimator blue-flags equations above 2^12 nodes", () => {
   const result = sandbox.validateExpression("a+b", env, ["a"]);
   assert(result.status === "info", JSON.stringify(result));
   assert(result.message.includes("large"), result.message);
-  assert(result.message.includes("rendering may be slower"), result.message);
+  assert(result.message.includes("graph may not render"), result.message);
   assert(!result.message.includes("still attempting"), result.message);
 });
 
-check("recursive node estimator red-flags equations above 2^16 nodes", () => {
+check("recursive node estimator keeps equations above 2^16 nodes blue flagged", () => {
   sandbox.__debugScene.settings.maxRecursion = 20;
   const env = {
     real: "real^2-imaginary^2+x",
@@ -249,9 +249,10 @@ check("recursive node estimator red-flags equations above 2^16 nodes", () => {
     comb: "real+imaginary"
   };
   const result = sandbox.validateExpression("real+imaginary", env, ["comb"]);
-  assert(result.status === "invalid", JSON.stringify(result));
-  assert(result.message.includes("too large"), result.message);
-  assert(result.message.includes("refusing"), result.message);
+  assert(result.status === "info", JSON.stringify(result));
+  assert(result.message.includes("large"), result.message);
+  assert(result.message.includes("graph may not render"), result.message);
+  assert(!result.message.includes("refusing"), result.message);
 });
 
 check("draw layers can be hidden and round-trip through text mode", () => {

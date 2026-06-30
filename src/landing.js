@@ -1,4 +1,5 @@
-const LEPTON_ICON_PATH = "./src/assets/lepton-favicon.png?v=20260629-slider-mq-favicon2";
+const APP_VERSION = "20260630-recursion-links";
+const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -101,5 +102,9 @@ draw(eq,rgb,rest,False)`
 for (const link of document.querySelectorAll("[data-sample]")) {
   const scene = sampleScenes[link.dataset.sample];
   if (!scene) continue;
-  link.href = `./app.html?scene=${encodeURIComponent(scene)}`;
+  link.href = `./app.html?scene=${encodeURIComponent(scene)}&v=${APP_VERSION}`;
+}
+
+for (const link of document.querySelectorAll('[data-launch-blank]')) {
+  link.href = `./app.html?v=${APP_VERSION}`;
 }
