@@ -21,21 +21,20 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260630-load-picker";
+const APP_VERSION = "20260702-export-menu";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
   const iconHref =
     typeof URL !== "undefined" && typeof document !== "undefined" ? new URL(LEPTON_ICON_PATH, document.baseURI).href : LEPTON_ICON_PATH;
+  document.querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]').forEach((link) => link.remove());
   for (const rel of ["icon", "shortcut icon", "apple-touch-icon"]) {
-    let link = document.querySelector(`link[rel="${rel}"]`);
-    if (!link) {
-      link = document.createElement("link");
-      link.rel = rel;
-      document.head.append(link);
-    }
+    const link = document.createElement("link");
+    link.rel = rel;
     link.href = iconHref;
     if (rel !== "apple-touch-icon") link.type = "image/png";
+    if (rel === "icon") link.setAttribute("sizes", "any");
+    document.head.append(link);
   }
 }
 
@@ -303,9 +302,7 @@ function renderApp() {
               <strong>Lepton GRE</strong>
             </a>
             <button class="tutorial-button" data-action="tutorial" type="button" aria-pressed="${tutorialStep !== null}">${tutorialStep === null ? "What do I do?" : "Hide tutorial"}</button>
-            <button class="toolbar-button" data-action="new-graph" type="button">New</button>
-            <button class="toolbar-button ${hasUnsavedChanges ? "primary" : ""}" data-action="open-save-dialog" type="button">Save</button>
-            <button class="toolbar-button" data-action="open-library" type="button">Load</button>
+            ${renderGraphActionsMenu()}
           </div>
           <div class="display-row" aria-label="Display mode">
             <button class="display-button" data-display-mode="standard" aria-selected="${displayMode === "standard"}">${helpDash("Standard", "standard")}</button>
@@ -341,6 +338,22 @@ function renderApp() {
   renderScene(diagnostics);
   queueMathLayoutReflow();
   requestAnimationFrame(() => forceMathFieldsReflow());
+}
+
+function renderGraphActionsMenu() {
+  return `
+    <div class="graph-actions-menu">
+      <button class="toolbar-button graph-actions-trigger ${hasUnsavedChanges ? "primary" : ""}" type="button" aria-haspopup="true">
+        Graph
+      </button>
+      <div class="graph-actions-popover" role="menu" aria-label="Graph actions">
+        <button class="toolbar-button" data-action="new-graph" type="button" role="menuitem">New</button>
+        <button class="toolbar-button ${hasUnsavedChanges ? "primary" : ""}" data-action="open-save-dialog" type="button" role="menuitem">Save</button>
+        <button class="toolbar-button" data-action="open-library" type="button" role="menuitem">Load</button>
+        <button class="toolbar-button" data-action="export-graph" type="button" role="menuitem">Export</button>
+      </div>
+    </div>
+  `;
 }
 
 function panelScrollKey() {
@@ -568,9 +581,9 @@ function markSaved() {
 }
 
 function updateSaveButtonState() {
-  const button = root?.querySelector?.('[data-action="open-save-dialog"]');
-  if (!button) return;
-  button.classList.toggle("primary", hasUnsavedChanges);
+  root?.querySelectorAll?.('[data-action="open-save-dialog"], .graph-actions-trigger').forEach((button) => {
+    button.classList.toggle("primary", hasUnsavedChanges);
+  });
 }
 
 function restoreSceneHistory(direction) {
@@ -1328,6 +1341,9 @@ function bindEvents() {
     libraryDialogOpen = true;
     saveDialogOpen = false;
     renderApp();
+  });
+  root.querySelector('[data-action="export-graph"]')?.addEventListener("click", () => {
+    exportCurrentGraphImage();
   });
   root.querySelectorAll('[data-action="close-save-dialog"]').forEach((target) => {
     target.addEventListener("click", (event) => {
@@ -2525,7 +2541,7 @@ function renderScene(diagnostics = validateScene()) {
 }
 
 function drawErrorState(canvas, message) {
-  const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+  const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true }) ?? canvas.getContext("webgl", { preserveDrawingBuffer: true });
   if (gl) {
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -2616,7 +2632,7 @@ function renderSceneCpu(canvas) {
 }
 
 function renderSceneWebGl(canvas) {
-  const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+  const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true }) ?? canvas.getContext("webgl", { preserveDrawingBuffer: true });
   if (!gl) return false;
 
   const rect = canvas.getBoundingClientRect();
@@ -6230,6 +6246,47 @@ function saveCurrentGraph(name) {
   writeSavedGraphs([graph, ...loadSavedGraphs()]);
   markSaved();
   return graph;
+}
+
+function exportCurrentGraphImage() {
+  syncFields();
+  renderScene(validateScene());
+  requestAnimationFrame(() => {
+    const canvas = root.querySelector(".grid-canvas");
+    if (!canvas || !canvas.width || !canvas.height) return;
+    const filename = `${safeDownloadName(defaultSavedGraphName())}.png`;
+    const download = (url) => {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+    };
+
+    if (typeof canvas.toBlob === "function") {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          download(canvas.toDataURL("image/png"));
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        download(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, "image/png");
+      return;
+    }
+    download(canvas.toDataURL("image/png"));
+  });
+}
+
+function safeDownloadName(value) {
+  const cleaned = String(value || "lepton-graph")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleaned || "lepton-graph";
 }
 
 function deleteSavedGraph(id) {

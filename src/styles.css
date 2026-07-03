@@ -905,12 +905,6 @@ select {
   box-shadow: 0 0 0 2px rgba(79, 125, 217, 0.35);
 }
 
-.brand-row .toolbar-button {
-  min-width: 54px;
-  flex: 0 0 auto;
-  padding-inline: 8px;
-}
-
 .tutorial-button {
   min-height: 30px;
   flex: 0 1 auto;
@@ -929,6 +923,49 @@ select {
   background: #dceaff;
   outline: 2px solid rgba(79, 125, 217, 0.35);
   outline-offset: 1px;
+}
+
+.graph-actions-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.graph-actions-trigger {
+  min-width: 58px;
+  padding-inline: 9px;
+}
+
+.graph-actions-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 25;
+  min-width: 96px;
+  display: grid;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid #d9dfe9;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.graph-actions-menu:hover .graph-actions-popover,
+.graph-actions-menu:focus-within .graph-actions-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.graph-actions-popover .toolbar-button {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  text-align: left;
 }
 
 .display-row {

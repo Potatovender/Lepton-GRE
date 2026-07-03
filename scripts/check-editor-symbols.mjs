@@ -3,6 +3,29 @@ import vm from "node:vm";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const storage = new Map();
+const headLinks = [];
+function createMockElement(tagName) {
+  return {
+    tagName: tagName.toUpperCase(),
+    rel: "",
+    href: "",
+    type: "",
+    sizes: "",
+    setAttribute(name, value) {
+      this[name] = String(value);
+    },
+    classList: { toggle: () => {} },
+    dataset: {},
+    append: () => {},
+    remove() {
+      const index = headLinks.indexOf(this);
+      if (index >= 0) headLinks.splice(index, 1);
+    },
+    click: () => {},
+    querySelector: () => null,
+    querySelectorAll: () => []
+  };
+}
 const sandbox = {
   console,
   structuredClone: globalThis.structuredClone,
@@ -12,6 +35,10 @@ const sandbox = {
     removeItem: (key) => storage.delete(key)
   },
   document: {
+    head: { append: (node) => headLinks.push(node) },
+    body: { append: () => {} },
+    createElement: createMockElement,
+    querySelectorAll: (selector) => (selector.includes("link") ? headLinks : []),
     querySelector: () => ({
       innerHTML: "",
       querySelector: () => null,
@@ -36,6 +63,19 @@ vm.runInContext(
 );
 
 const functionNames = Object.keys(sandbox.__debugLatexFunctions);
+
+check("runtime favicon links use the Lepton icon", () => {
+  assert(headLinks.length === 3, JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260702-export-menu")), JSON.stringify(headLinks));
+  assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
+});
+
+check("graph actions menu exposes New Save Load and Export", () => {
+  const html = sandbox.renderGraphActionsMenu();
+  for (const action of ["new-graph", "open-save-dialog", "open-library", "export-graph"]) {
+    assert(html.includes(`data-action="${action}"`), html);
+  }
+});
 
 check("LaTeX trig expressions normalize for compiler and GLSL", () => {
   const normalized = sandbox.normalizeExpressionText("\\sin(x)+\\cos(y)");
