@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260705-export-viewport")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260705-glsl-export")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -557,6 +557,12 @@ check("export sizing follows settings viewport instead of renderer shape", () =>
 
   const tall = sandbox.exportCanvasSizeForViewport({ xMin: -1, xMax: 1, yMin: -3, yMax: 3 }, { width: 1200, height: 500 });
   assert(tall.width === 167 && tall.height === 500, JSON.stringify(tall));
+});
+
+check("export uses GLSL renderer instead of CPU pixel loop", () => {
+  const source = sandbox.exportCurrentGraphImage.toString();
+  assert(source.includes("renderSceneWebGlInto"), source);
+  assert(!source.includes("renderSceneCpuInto"), source);
 });
 
 check("invalid viewport bounds warn with square grid and error without it", () => {

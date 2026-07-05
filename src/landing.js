@@ -1,4 +1,4 @@
-const APP_VERSION = "20260705-export-viewport";
+const APP_VERSION = "20260705-glsl-export";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

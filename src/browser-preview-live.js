@@ -21,7 +21,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260705-export-viewport";
+const APP_VERSION = "20260705-glsl-export";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -282,6 +282,7 @@ let saveDialogOpen = false;
 let libraryDialogOpen = false;
 let saveNameDraft = "";
 let hasUnsavedChanges = false;
+let graphActionFeedback = "";
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -350,7 +351,7 @@ function renderGraphActionsMenu() {
         <button class="toolbar-button" data-action="new-graph" type="button" role="menuitem">New</button>
         <button class="toolbar-button ${hasUnsavedChanges ? "primary" : ""}" data-action="open-save-dialog" type="button" role="menuitem">Save</button>
         <button class="toolbar-button" data-action="open-library" type="button" role="menuitem">Load</button>
-        <button class="toolbar-button" data-action="export-graph" type="button" role="menuitem">Export</button>
+        <button class="toolbar-button" data-action="export-graph" type="button" role="menuitem">${graphActionFeedback === "export-graph" ? "Exporting..." : "Export"}</button>
       </div>
     </div>
   `;
@@ -578,6 +579,24 @@ function markUnsavedChange() {
 function markSaved() {
   hasUnsavedChanges = false;
   updateSaveButtonState();
+}
+
+function setGraphActionFeedback(action) {
+  graphActionFeedback = action;
+  window.clearTimeout(setGraphActionFeedback.timer);
+  setGraphActionFeedback.timer = window.setTimeout(() => {
+    graphActionFeedback = "";
+    root?.querySelectorAll?.(".graph-actions-popover .toolbar-button.is-action-feedback").forEach((button) => {
+      button.classList.remove("is-action-feedback");
+    });
+  }, 900);
+  root?.querySelectorAll?.(".graph-actions-popover .toolbar-button").forEach((button) => {
+    const active = button.dataset.action === action;
+    button.classList.toggle("is-action-feedback", active);
+    if (button.dataset.action === "export-graph") {
+      button.textContent = active ? "Exporting..." : "Export";
+    }
+  });
 }
 
 function updateSaveButtonState() {
@@ -1318,6 +1337,7 @@ function bindEvents() {
   };
 
   root.querySelector('[data-action="open-save-dialog"]')?.addEventListener("click", () => {
+    setGraphActionFeedback("open-save-dialog");
     syncFields();
     saveNameDraft = defaultSavedGraphName();
     saveDialogOpen = true;
@@ -1325,6 +1345,7 @@ function bindEvents() {
     renderApp();
   });
   root.querySelector('[data-action="new-graph"]')?.addEventListener("click", () => {
+    setGraphActionFeedback("new-graph");
     syncFields();
     const before = sceneSnapshot();
     scene = structuredClone(DEFAULT_SCENE);
@@ -1337,12 +1358,14 @@ function bindEvents() {
     renderApp();
   });
   root.querySelector('[data-action="open-library"]')?.addEventListener("click", () => {
+    setGraphActionFeedback("open-library");
     syncFields();
     libraryDialogOpen = true;
     saveDialogOpen = false;
     renderApp();
   });
   root.querySelector('[data-action="export-graph"]')?.addEventListener("click", () => {
+    setGraphActionFeedback("export-graph");
     exportCurrentGraphImage();
   });
   root.querySelectorAll('[data-action="close-save-dialog"]').forEach((target) => {
@@ -2638,15 +2661,21 @@ function renderSceneCpuInto(canvas, options = {}) {
 }
 
 function renderSceneWebGl(canvas) {
+  return renderSceneWebGlInto(canvas);
+}
+
+function renderSceneWebGlInto(canvas, options = {}) {
   const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true }) ?? canvas.getContext("webgl", { preserveDrawingBuffer: true });
   if (!gl) return false;
 
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-  const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
-  updateBoundaryOverlay(canvas, visibleViewport);
+  const rect = canvas.getBoundingClientRect?.() ?? { width: canvas.width || 1, height: canvas.height || 1 };
+  const cssWidth = Math.max(1, options.cssWidth ?? rect.width);
+  const cssHeight = Math.max(1, options.cssHeight ?? rect.height);
+  const dpr = options.dpr ?? window.devicePixelRatio ?? 1;
+  canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
+  canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
+  const visibleViewport = options.visibleViewport ?? displayViewportForSize(viewport, cssWidth, cssHeight);
+  if (options.updateOverlay !== false) updateBoundaryOverlay(canvas, visibleViewport);
   gl.viewport(0, 0, canvas.width, canvas.height);
 
   const fragmentSource = buildFragmentShader();
@@ -2662,7 +2691,7 @@ function renderSceneWebGl(canvas) {
     window.__leptonGlError = gl.getError();
     gl.clearColor(0.98, 0.94, 0.94, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    return true;
+    return options.fallbackOnFailure === true ? false : true;
   }
 
   const buffer = gl.createBuffer();
@@ -2697,6 +2726,7 @@ function renderSceneWebGl(canvas) {
   gl.clearColor(backgroundColor.rgb[0] / 255, backgroundColor.rgb[1] / 255, backgroundColor.rgb[2] / 255, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.finish();
   return true;
 }
 
@@ -6266,13 +6296,17 @@ function exportCurrentGraphImage() {
   if (viewportIssue || !isValidViewport(exportViewport)) {
     drawErrorCanvas(exportCanvas, viewportIssue?.message ?? "Invalid export viewport");
   } else {
-    renderSceneCpuInto(exportCanvas, {
+    const exportedWithGl = renderSceneWebGlInto(exportCanvas, {
       cssWidth: size.width,
       cssHeight: size.height,
       dpr: 1,
       visibleViewport: exportViewport,
-      updateOverlay: false
+      updateOverlay: false,
+      fallbackOnFailure: true
     });
+    if (!exportedWithGl) {
+      drawErrorCanvas(exportCanvas, "Export needs GLSL-compatible expressions");
+    }
   }
   requestAnimationFrame(() => {
     const filename = `${safeDownloadName(defaultSavedGraphName())}.png`;
