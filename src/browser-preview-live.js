@@ -21,7 +21,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260702-export-menu";
+const APP_VERSION = "20260705-export-viewport";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -2561,25 +2561,31 @@ function drawErrorState(canvas, message) {
 }
 
 function renderSceneCpu(canvas) {
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  renderSceneCpuInto(canvas);
+}
+
+function renderSceneCpuInto(canvas, options = {}) {
+  const rect = canvas.getBoundingClientRect?.() ?? { width: canvas.width || 1, height: canvas.height || 1 };
+  const cssWidth = Math.max(1, options.cssWidth ?? rect.width);
+  const cssHeight = Math.max(1, options.cssHeight ?? rect.height);
+  const dpr = options.dpr ?? window.devicePixelRatio ?? 1;
+  canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
+  canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
 
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const backgroundColor = resolveBackgroundColor();
-  drawGrid(ctx, rect.width, rect.height, backgroundColor.custom ? backgroundColor.rgb : null);
+  drawGrid(ctx, cssWidth, cssHeight, backgroundColor.custom ? backgroundColor.rgb : null);
 
   const env = buildRuntimeEnv(sceneFunctionEnv(true));
-  const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
-  updateBoundaryOverlay(canvas, visibleViewport);
+  const visibleViewport = options.visibleViewport ?? displayViewportForSize(viewport, cssWidth, cssHeight);
+  if (options.updateOverlay !== false) updateBoundaryOverlay(canvas, visibleViewport);
   const clipViewport = scene.settings.drawOnlyInsideBoundary ? sceneViewport() : null;
   const shouldClip = clipViewport && isValidViewport(clipViewport);
   const xPoints = axis(visibleViewport.xMin, visibleViewport.xMax, scene.settings.xPoints);
   const yPoints = axis(visibleViewport.yMin, visibleViewport.yMax, scene.settings.yPoints);
-  const pixelWidth = rect.width / Math.max(1, xPoints.length - 1);
-  const pixelHeight = rect.height / Math.max(1, yPoints.length - 1);
+  const pixelWidth = cssWidth / Math.max(1, xPoints.length - 1);
+  const pixelHeight = cssHeight / Math.max(1, yPoints.length - 1);
 
   for (const draw of scene.draws) {
     if (draw.hidden) continue;
@@ -2625,7 +2631,7 @@ function renderSceneCpu(canvas) {
         if (!Number.isFinite(z)) continue;
 
         ctx.fillStyle = `rgb(${channel(red(z, 0, env))}, ${channel(green(z, 0, env))}, ${channel(blue(z, 0, env))})`;
-        ctx.fillRect(xi * pixelWidth, rect.height - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
+        ctx.fillRect(xi * pixelWidth, cssHeight - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
       }
     }
   }
@@ -6250,10 +6256,25 @@ function saveCurrentGraph(name) {
 
 function exportCurrentGraphImage() {
   syncFields();
-  renderScene(validateScene());
+  const diagnostics = validateScene();
+  const exportViewport = exportViewportForImage();
+  const size = exportCanvasSizeForViewport(exportViewport);
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = size.width;
+  exportCanvas.height = size.height;
+  const viewportIssue = diagnostics.settings?.find((item) => item.status === "invalid");
+  if (viewportIssue || !isValidViewport(exportViewport)) {
+    drawErrorCanvas(exportCanvas, viewportIssue?.message ?? "Invalid export viewport");
+  } else {
+    renderSceneCpuInto(exportCanvas, {
+      cssWidth: size.width,
+      cssHeight: size.height,
+      dpr: 1,
+      visibleViewport: exportViewport,
+      updateOverlay: false
+    });
+  }
   requestAnimationFrame(() => {
-    const canvas = root.querySelector(".grid-canvas");
-    if (!canvas || !canvas.width || !canvas.height) return;
     const filename = `${safeDownloadName(defaultSavedGraphName())}.png`;
     const download = (url) => {
       const link = document.createElement("a");
@@ -6264,10 +6285,10 @@ function exportCurrentGraphImage() {
       link.remove();
     };
 
-    if (typeof canvas.toBlob === "function") {
-      canvas.toBlob((blob) => {
+    if (typeof exportCanvas.toBlob === "function") {
+      exportCanvas.toBlob((blob) => {
         if (!blob) {
-          download(canvas.toDataURL("image/png"));
+          download(exportCanvas.toDataURL("image/png"));
           return;
         }
         const url = URL.createObjectURL(blob);
@@ -6276,8 +6297,52 @@ function exportCurrentGraphImage() {
       }, "image/png");
       return;
     }
-    download(canvas.toDataURL("image/png"));
+    download(exportCanvas.toDataURL("image/png"));
   });
+}
+
+function exportViewportForImage() {
+  const candidate = sceneViewport();
+  if (isValidViewport(candidate)) return candidate;
+  return {
+    xMin: Number(DEFAULT_SCENE.settings.xMin),
+    xMax: Number(DEFAULT_SCENE.settings.xMax),
+    yMin: Number(DEFAULT_SCENE.settings.yMin),
+    yMax: Number(DEFAULT_SCENE.settings.yMax)
+  };
+}
+
+function exportCanvasSizeForViewport(exportViewport, sourceRect = null) {
+  const fallbackRect = { width: 1200, height: 1200 };
+  const canvas = root?.querySelector?.(".grid-canvas");
+  const rect = sourceRect ?? canvas?.getBoundingClientRect?.() ?? fallbackRect;
+  const dpr = window.devicePixelRatio || 1;
+  const availableWidth = Math.max(1, Math.floor((rect.width || fallbackRect.width) * dpr));
+  const availableHeight = Math.max(1, Math.floor((rect.height || fallbackRect.height) * dpr));
+  const xRange = Math.max(Number.EPSILON, exportViewport.xMax - exportViewport.xMin);
+  const yRange = Math.max(Number.EPSILON, exportViewport.yMax - exportViewport.yMin);
+  const viewportRatio = xRange / yRange;
+  const availableRatio = availableWidth / Math.max(1, availableHeight);
+  let width;
+  let height;
+  if (availableRatio > viewportRatio) {
+    height = availableHeight;
+    width = height * viewportRatio;
+  } else {
+    width = availableWidth;
+    height = width / viewportRatio;
+  }
+  const maxDimension = 2400;
+  const largest = Math.max(width, height);
+  if (largest > maxDimension) {
+    const scale = maxDimension / largest;
+    width *= scale;
+    height *= scale;
+  }
+  return {
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height))
+  };
 }
 
 function safeDownloadName(value) {
@@ -6322,6 +6387,8 @@ window.__leptonDebug = {
   latexToExpression,
   renderEditableLatex,
   serializeMathField,
+  exportCanvasSizeForViewport,
+  exportViewportForImage,
   scene: () => structuredClone(scene)
 };
 

@@ -930,6 +930,17 @@ select {
   flex: 0 0 auto;
 }
 
+.graph-actions-menu::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: -8px;
+  left: -8px;
+  height: 14px;
+  z-index: 24;
+  pointer-events: auto;
+}
+
 .graph-actions-trigger {
   min-width: 58px;
   padding-inline: 9px;
@@ -937,7 +948,7 @@ select {
 
 .graph-actions-popover {
   position: absolute;
-  top: calc(100% + 6px);
+  top: 100%;
   right: 0;
   z-index: 25;
   min-width: 96px;

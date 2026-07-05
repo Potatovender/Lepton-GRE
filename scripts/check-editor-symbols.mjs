@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260702-export-menu")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260705-export-viewport")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -546,6 +546,17 @@ variable f1 = x`);
   const exported = sandbox.exportScene();
   assert(exported.includes("set aspect_ratio = sqrt(2):1"), exported);
   assert(exported.includes("set draw_only_inside_boundary = True"), exported);
+});
+
+check("export sizing follows settings viewport instead of renderer shape", () => {
+  const square = sandbox.exportCanvasSizeForViewport({ xMin: -1, xMax: 1, yMin: -1, yMax: 1 }, { width: 500, height: 1200 });
+  assert(square.width === 500 && square.height === 500, JSON.stringify(square));
+
+  const wide = sandbox.exportCanvasSizeForViewport({ xMin: -2, xMax: 2, yMin: -1, yMax: 1 }, { width: 500, height: 1200 });
+  assert(wide.width === 500 && wide.height === 250, JSON.stringify(wide));
+
+  const tall = sandbox.exportCanvasSizeForViewport({ xMin: -1, xMax: 1, yMin: -3, yMax: 3 }, { width: 1200, height: 500 });
+  assert(tall.width === 167 && tall.height === 500, JSON.stringify(tall));
 });
 
 check("invalid viewport bounds warn with square grid and error without it", () => {
