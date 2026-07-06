@@ -21,7 +21,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260705-glsl-export";
+const APP_VERSION = "20260706-comments";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -377,8 +377,41 @@ function normalizeFunctionEntry(entry) {
     sliderMin: String(entry?.sliderMin ?? "0"),
     sliderMax: String(entry?.sliderMax ?? "10"),
     time: Boolean(entry?.time),
-    timeMode: TIME_VARIABLE_MODES.has(entry?.timeMode) ? entry.timeMode : "bounded"
+    timeMode: TIME_VARIABLE_MODES.has(entry?.timeMode) ? entry.timeMode : "bounded",
+    comment: String(entry?.comment ?? "")
   };
+}
+
+function isCommentEntry(entry) {
+  return entry?.type === "comment";
+}
+
+function createCommentEntry(text = "") {
+  return { type: "comment", text: String(text ?? "") };
+}
+
+function commentText(entry) {
+  return String(entry?.text ?? "");
+}
+
+function dataEntries(entries) {
+  return Array.isArray(entries) ? entries.filter((entry) => !isCommentEntry(entry)) : [];
+}
+
+function firstDataId(entries) {
+  return dataEntries(entries)[0]?.id ?? "";
+}
+
+function nextEntryId(entries, prefix) {
+  const data = dataEntries(entries);
+  const used = new Set(data.map((entry) => String(entry.id ?? "")));
+  let index = data.length + 1;
+  let id = `${prefix}${index}`;
+  while (used.has(id)) {
+    index += 1;
+    id = `${prefix}${index}`;
+  }
+  return id;
 }
 
 function formatSliderValue(value, entry = null) {
@@ -502,7 +535,7 @@ function renderMathKeyboard() {
       }
       return left.localeCompare(right);
     });
-  const variables = scene.functions.map((entry) => entry.id).filter(Boolean);
+  const variables = dataEntries(scene.functions).map((entry) => entry.id).filter(Boolean);
   return `
     <div class="keyboard-tabs" role="tablist" aria-label="Keyboard tabs">
       <button class="keyboard-tab" data-keyboard-tab="pad" aria-selected="${keyboardTab === "pad"}" type="button">Pad</button>
@@ -687,6 +720,7 @@ function scrollFieldHorizontally(field, event) {
 }
 
 function keepTextInputCaretVisible(field, event = null) {
+  if (field.matches?.("[data-scene-text]")) return;
   if (field.selectionStart == null || field.selectionEnd == null) return;
   if (field.selectionStart !== field.selectionEnd) return;
   const caretIndex = textInputVisibleCaretIndex(field, event);
@@ -868,7 +902,9 @@ function renderPanel() {
       tutorialCoachmark(),
       listControlBar("functions", "functions"),
       ...visibleEntries(scene.functions, "functions").map(
-        ([entry, index]) => expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", functionRowContent(entry, index), "functions", index)
+        ([entry, index]) => isCommentEntry(entry)
+          ? commentRow("functions", index, entry)
+          : expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", functionRowContent(entry, index), "functions", index)
       ),
       addRow("Add function", "functions")
     ].join("");
@@ -879,11 +915,13 @@ function renderPanel() {
       tutorialCoachmark(),
       listControlBar("colors", "colors"),
       ...visibleEntries(scene.colors, "colors").map(
-        ([entry, index]) => expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
+        ([entry, index]) => isCommentEntry(entry)
+          ? commentRow("colors", index, entry)
+          : expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
           <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Color id" />
-          <label class="channel-row"><span class="channel-label">red channel</span>${searchableReference(`colors.${index}.red`, scene.functions, entry.red, "Red function")}</label>
-          <label class="channel-row"><span class="channel-label">green channel</span>${searchableReference(`colors.${index}.green`, scene.functions, entry.green, "Green function")}</label>
-          <label class="channel-row"><span class="channel-label">blue channel</span>${searchableReference(`colors.${index}.blue`, scene.functions, entry.blue, "Blue function")}</label>
+          <label class="channel-row"><span class="channel-label">red channel</span>${searchableReference(`colors.${index}.red`, dataEntries(scene.functions), entry.red, "Red function")}</label>
+          <label class="channel-row"><span class="channel-label">green channel</span>${searchableReference(`colors.${index}.green`, dataEntries(scene.functions), entry.green, "Green function")}</label>
+          <label class="channel-row"><span class="channel-label">blue channel</span>${searchableReference(`colors.${index}.blue`, dataEntries(scene.functions), entry.blue, "Blue function")}</label>
         `, "colors", index)
       ),
       addRow("Add color", "colors")
@@ -895,9 +933,11 @@ function renderPanel() {
       tutorialCoachmark(),
       listControlBar("restrictions", "bounds"),
       ...visibleEntries(scene.restrictions, "restrictions").map(
-        ([entry, index]) => expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
+        ([entry, index]) => isCommentEntry(entry)
+          ? commentRow("restrictions", index, entry)
+          : expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
           <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Restriction id" />
-          <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, scene.functions, entry.expression, "Boundary function")}</label>
+          <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, dataEntries(scene.functions), entry.expression, "Boundary function")}</label>
           <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> draw when less than or equal to 0 ${helpMark("boundaryDirection")}</label>
         `, "restrictions", index)
       ),
@@ -910,7 +950,9 @@ function renderPanel() {
       tutorialCoachmark(),
       timePlaybackControls(),
       ...scene.draws.map(
-        (entry, index) => expressionRow(diagnostics.draws[index]?.status ?? "invalid", diagnostics.draws[index]?.message ?? "", `
+        (entry, index) => isCommentEntry(entry)
+          ? commentRow("draws", index, entry)
+          : expressionRow(diagnostics.draws[index]?.status ?? "invalid", diagnostics.draws[index]?.message ?? "", `
           <div class="draw-layer-toolbar">
             <button class="draw-drag-handle" data-draw-handle="${index}" draggable="true" title="Drag to reorder draw layer" aria-label="Drag to reorder draw layer">↕</button>
             <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
@@ -978,7 +1020,7 @@ function renderPanel() {
       ${scene.settings.backgroundColor !== "0" ? `
         <label class="settings-row">
           <span>Background color ID ${helpMark("settingBackgroundColorId")}</span>
-          ${searchableReference("settings.backgroundColor", scene.colors, scene.settings.backgroundColor, "Background color")}
+          ${searchableReference("settings.backgroundColor", dataEntries(scene.colors), scene.settings.backgroundColor, "Background color")}
         </label>
       ` : ""}
     </div>
@@ -986,7 +1028,7 @@ function renderPanel() {
 }
 
 function timePlaybackControls() {
-  const timeVariables = scene.functions.map(normalizeFunctionEntry).filter((entry) => entry.kind === "slider" && entry.time && entry.id);
+  const timeVariables = dataEntries(scene.functions).map(normalizeFunctionEntry).filter((entry) => entry.kind === "slider" && entry.time && entry.id);
   const hasTimeVariables = timeVariables.length > 0;
   const anyPlaying = timeVariables.some((entry) => playingTimeIds.has(entry.id));
   return `
@@ -1081,15 +1123,27 @@ function visibleEntries(entries, kind) {
   const query = state.query.trim().toLowerCase();
   let indexed = entries.map((entry, index) => [entry, index]);
   if (query) {
-    indexed = indexed.filter(([entry]) => entry.id.toLowerCase().includes(query));
+    indexed = indexed.filter(([entry]) => {
+      if (isCommentEntry(entry)) return commentText(entry).toLowerCase().includes(query);
+      return String(entry.id ?? "").toLowerCase().includes(query);
+    });
   }
   if (state.sort !== "custom") {
     indexed.sort(([left], [right]) => {
-      const order = left.id.localeCompare(right.id, undefined, { numeric: true, sensitivity: "base" });
+      if (isCommentEntry(left) && isCommentEntry(right)) return 0;
+      if (isCommentEntry(left)) return 1;
+      if (isCommentEntry(right)) return -1;
+      const order = String(left.id ?? "").localeCompare(String(right.id ?? ""), undefined, { numeric: true, sensitivity: "base" });
       return state.sort === "az" ? order : -order;
     });
   }
   return indexed;
+}
+
+function commentRow(kind, index, entry) {
+  return expressionRow("valid", "Comment", `
+    <textarea class="entry-comment-body" data-field="${kind}.${index}.text" placeholder="// comment" aria-label="Comment">${escapeHtml(commentText(entry))}</textarea>
+  `, kind, index, { rowClass: "expression-row-comment", noInlineComment: true });
 }
 
 function functionRowContent(entry, index) {
@@ -1189,21 +1243,39 @@ function mathEditor(field, value, label, small = false, placeholder = "") {
 function expressionRow(status, message, content, kind = null, index = null, options = {}) {
   const entryAttrs = kind ? `data-entry-kind="${kind}" data-entry-index="${index}"` : "";
   const statusLabel = status === "valid" ? "status: valid" : message || `status: ${status}`;
+  const inlineComment = kind && !options.noInlineComment
+    ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="// comment" aria-label="Line comment" />`
+    : "";
   return `
     <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
       <span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>
-      <div class="entry-content">${content}</div>
-      ${kind ? `<button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
+      <div class="entry-content">${content}${inlineComment}</div>
+      ${kind ? `
+        <div class="row-actions">
+          <select class="row-insert-select" data-insert-after="${kind}.${index}" title="Insert below" aria-label="Insert below">
+            <option value="">+</option>
+            <option value="data">data</option>
+            <option value="comment">comment</option>
+          </select>
+          <button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>
+        </div>
+      ` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
     </div>
   `;
 }
 
 function addRow(label, kind) {
   return `
-    <button class="add-row" data-add="${kind}">
-      <span class="entry-status"></span>
-      <span>${label}</span>
-    </button>
+    <div class="add-row-wrap">
+      <button class="add-row" data-add="${kind}">
+        <span class="entry-status"></span>
+        <span>${label}</span>
+      </button>
+      <select class="add-row-type" data-add-type="${kind}" aria-label="Choose what to add">
+        <option value="data">data</option>
+        <option value="comment">comment</option>
+      </select>
+    </div>
   `;
 }
 
@@ -1592,7 +1664,7 @@ function bindEvents() {
   });
   root.querySelector("[data-background-mode]")?.addEventListener("change", (event) => {
     const before = sceneSnapshot();
-    scene.settings.backgroundColor = event.target.value === "custom" ? scene.colors[0]?.id ?? "0" : "0";
+    scene.settings.backgroundColor = event.target.value === "custom" ? firstDataId(scene.colors) || "0" : "0";
     recordSceneHistory(before);
     renderApp();
   });
@@ -1740,25 +1812,34 @@ function bindEvents() {
   });
 
   root.querySelectorAll("input, textarea").forEach((field) => {
+    const isSceneText = field.matches?.("[data-scene-text]");
     field.addEventListener("focusin", () => activateKeyboardTarget(field));
     field.addEventListener("pointerdown", () => {
       activateKeyboardTarget(field);
-      beginSelectionPointerScroll(field);
+      if (!isSceneText) beginSelectionPointerScroll(field);
     });
     field.addEventListener("mousedown", () => {
       activateKeyboardTarget(field);
-      beginSelectionPointerScroll(field);
+      if (!isSceneText) beginSelectionPointerScroll(field);
     });
-    field.addEventListener("input", () => keepTextInputCaretVisible(field));
-    field.addEventListener("keyup", () => keepTextInputCaretVisible(field));
-    field.addEventListener("mouseup", () => keepTextInputCaretVisible(field));
+    field.addEventListener("input", () => {
+      if (!isSceneText) keepTextInputCaretVisible(field);
+    });
+    field.addEventListener("keyup", () => {
+      if (!isSceneText) keepTextInputCaretVisible(field);
+    });
+    field.addEventListener("mouseup", () => {
+      if (!isSceneText) keepTextInputCaretVisible(field);
+    });
     field.addEventListener("pointermove", (event) => {
+      if (isSceneText) return;
       if (event.buttons) {
         scrollFieldNearPointer(field, event);
         keepTextInputCaretVisible(field, event);
       }
     });
     field.addEventListener("mousemove", (event) => {
+      if (isSceneText) return;
       if (event.buttons) {
         scrollFieldNearPointer(field, event);
         keepTextInputCaretVisible(field, event);
@@ -1798,11 +1879,25 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       const kind = button.dataset.add;
+      const type = root.querySelector(`[data-add-type="${cssEscape(kind)}"]`)?.value ?? "data";
       if (listControls[kind]) {
         listControls[kind].query = "";
         listControls[kind].sort = "custom";
       }
-      const target = addEntry(kind);
+      const target = addEntry(kind, type);
+      recordSceneHistory(before);
+      pendingScrollTarget = target;
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-insert-after]").forEach((select) => {
+    select.addEventListener("change", () => {
+      if (!select.value) return;
+      syncFields();
+      const before = sceneSnapshot();
+      const [kind, rawIndex] = select.dataset.insertAfter.split(".");
+      const target = insertEntryAfter(kind, Number(rawIndex), select.value);
       recordSceneHistory(before);
       pendingScrollTarget = target;
       renderApp();
@@ -2195,6 +2290,12 @@ function updateField(field) {
     return;
   }
 
+  const targetEntry = scene[collection]?.[Number(rawIndex)];
+  if (isCommentEntry(targetEntry)) {
+    targetEntry.text = String(value ?? "");
+    return;
+  }
+
   if (collection === "functions" && property === "expression") {
     const assignment = parseAssignment(value);
     if (assignment) {
@@ -2283,7 +2384,9 @@ function refreshAfterSliderChange() {
 
 function timeVariableEntries() {
   return scene.functions
-    .map((entry, index) => ({ entry: normalizeFunctionEntry(entry), index }))
+    .map((entry, index) => ({ raw: entry, index }))
+    .filter(({ raw }) => !isCommentEntry(raw))
+    .map(({ raw, index }) => ({ entry: normalizeFunctionEntry(raw), index }))
     .filter(({ entry }) => entry.kind === "slider" && entry.time && entry.id);
 }
 
@@ -2425,74 +2528,92 @@ function syncFields() {
 }
 
 function resolveFunctionEntry(id) {
-  const entry = scene.functions.find((item) => item.id === id);
+  const entry = dataEntries(scene.functions).find((item) => item.id === id);
   return entry ? normalizeFunctionEntry(entry) : (id === DEFAULT_DRAW_FUNCTION.id ? DEFAULT_DRAW_FUNCTION : null);
 }
 
 function resolveColorEntry(id) {
-  return scene.colors.find((entry) => entry.id === id) ??
+  return dataEntries(scene.colors).find((entry) => entry.id === id) ??
     (id === DEFAULT_DRAW_COLOR.id || LEGACY_DEFAULT_COLOR_IDS.has(id) ? DEFAULT_DRAW_COLOR : null);
 }
 
 function resolveBoundaryEntry(id) {
-  return scene.restrictions.find((entry) => entry.id === id) ??
+  return dataEntries(scene.restrictions).find((entry) => entry.id === id) ??
     (id === DEFAULT_DRAW_BOUNDARY.id || LEGACY_DEFAULT_BOUNDARY_IDS.has(id) ? DEFAULT_DRAW_BOUNDARY : null);
 }
 
 function drawFunctionEntries() {
-  return scene.functions.length ? scene.functions.map(normalizeFunctionEntry) : [DEFAULT_DRAW_FUNCTION];
+  const functions = dataEntries(scene.functions).map(normalizeFunctionEntry);
+  return functions.length ? functions : [DEFAULT_DRAW_FUNCTION];
 }
 
 function drawColorEntries() {
-  return scene.colors.some((entry) => entry.id === DEFAULT_DRAW_COLOR.id)
-    ? scene.colors
-    : [DEFAULT_DRAW_COLOR, ...scene.colors];
+  const colors = dataEntries(scene.colors);
+  return colors.some((entry) => entry.id === DEFAULT_DRAW_COLOR.id)
+    ? colors
+    : [DEFAULT_DRAW_COLOR, ...colors];
 }
 
 function drawBoundaryEntries() {
-  return scene.restrictions.some((entry) => entry.id === DEFAULT_DRAW_BOUNDARY.id)
-    ? scene.restrictions
-    : [DEFAULT_DRAW_BOUNDARY, ...scene.restrictions];
+  const restrictions = dataEntries(scene.restrictions);
+  return restrictions.some((entry) => entry.id === DEFAULT_DRAW_BOUNDARY.id)
+    ? restrictions
+    : [DEFAULT_DRAW_BOUNDARY, ...restrictions];
 }
 
 function sceneFunctionEnv(includeDefault = false) {
-  const entries = scene.functions.map((entry) => {
+  const functions = dataEntries(scene.functions);
+  const entries = functions.map((entry) => {
     const normalized = normalizeFunctionEntry(entry);
     return [normalized.id, normalized];
   });
-  if (includeDefault && !scene.functions.some((entry) => entry.id === DEFAULT_DRAW_FUNCTION.id)) {
+  if (includeDefault && !functions.some((entry) => entry.id === DEFAULT_DRAW_FUNCTION.id)) {
     entries.push([DEFAULT_DRAW_FUNCTION.id, DEFAULT_DRAW_FUNCTION]);
   }
   return Object.fromEntries(entries);
 }
 
-function addEntry(kind) {
+function defaultEntryForKind(kind) {
   if (kind === "functions") {
-    scene.functions.push({ id: `f${scene.functions.length + 1}`, kind: "variable", expression: "" });
-    return { kind, index: scene.functions.length - 1 };
+    return { id: nextEntryId(scene.functions, "f"), kind: "variable", expression: "" };
   }
   if (kind === "colors") {
-    scene.colors.push({ id: `c${scene.colors.length + 1}`, red: scene.functions[0]?.id ?? "", green: scene.functions[0]?.id ?? "", blue: scene.functions[0]?.id ?? "" });
-    return { kind, index: scene.colors.length - 1 };
+    const first = firstDataId(scene.functions);
+    return { id: nextEntryId(scene.colors, "c"), red: first, green: first, blue: first };
   }
   if (kind === "restrictions") {
-    scene.restrictions.push({ id: `r${scene.restrictions.length + 1}`, expression: scene.functions[0]?.id ?? "", checkSmaller: false });
-    return { kind, index: scene.restrictions.length - 1 };
+    return { id: nextEntryId(scene.restrictions, "r"), expression: firstDataId(scene.functions), checkSmaller: false };
   }
   if (kind === "draws") {
-    scene.draws.push({
+    return {
       equationId: drawFunctionEntries()[0]?.id ?? "",
       colorId: drawColorEntries()[0]?.id ?? "",
       restrictionId: drawBoundaryEntries()[0]?.id ?? "",
       hidden: false
-    });
-    return { kind, index: scene.draws.length - 1 };
+    };
   }
   return null;
 }
 
+function addEntry(kind, type = "data") {
+  if (!Array.isArray(scene[kind])) return null;
+  const entry = type === "comment" ? createCommentEntry("") : defaultEntryForKind(kind);
+  if (!entry) return null;
+  scene[kind].push(entry);
+  return { kind, index: scene[kind].length - 1 };
+}
+
+function insertEntryAfter(kind, index, type = "data") {
+  if (!Array.isArray(scene[kind])) return null;
+  const entry = type === "comment" ? createCommentEntry("") : defaultEntryForKind(kind);
+  if (!entry) return null;
+  const targetIndex = Math.max(0, Math.min(scene[kind].length, index + 1));
+  scene[kind].splice(targetIndex, 0, entry);
+  return { kind, index: targetIndex };
+}
+
 function toggleDrawHidden(index) {
-  if (!scene.draws[index]) return;
+  if (!scene.draws[index] || isCommentEntry(scene.draws[index])) return;
   scene.draws[index].hidden = !scene.draws[index].hidden;
 }
 
@@ -2507,23 +2628,28 @@ function deleteEntry(kind, index) {
   if (!Array.isArray(scene[kind]) || !scene[kind][index]) return;
   const removed = scene[kind][index];
   scene[kind].splice(index, 1);
+  if (isCommentEntry(removed)) return;
   if (kind === "functions") {
-    const replacement = scene.functions[0]?.id ?? "";
+    const replacement = firstDataId(scene.functions);
     scene.draws.forEach((draw) => {
+      if (isCommentEntry(draw)) return;
       if (draw.equationId === removed.id) draw.equationId = replacement;
     });
     scene.colors.forEach((color) => {
+      if (isCommentEntry(color)) return;
       if (color.red === removed.id) color.red = replacement;
       if (color.green === removed.id) color.green = replacement;
       if (color.blue === removed.id) color.blue = replacement;
     });
     scene.restrictions.forEach((restriction) => {
+      if (isCommentEntry(restriction)) return;
       if (restriction.expression === removed.id) restriction.expression = replacement;
     });
   }
   if (kind === "colors") {
-    const replacement = scene.colors[0]?.id ?? "";
+    const replacement = firstDataId(scene.colors);
     scene.draws.forEach((draw) => {
+      if (isCommentEntry(draw)) return;
       if (draw.colorId === removed.id) draw.colorId = replacement;
     });
     if (scene.settings.backgroundColor === removed.id) {
@@ -2531,8 +2657,9 @@ function deleteEntry(kind, index) {
     }
   }
   if (kind === "restrictions") {
-    const replacement = scene.restrictions[0]?.id ?? "";
+    const replacement = firstDataId(scene.restrictions);
     scene.draws.forEach((draw) => {
+      if (isCommentEntry(draw)) return;
       if (draw.restrictionId === removed.id) draw.restrictionId = replacement;
     });
   }
@@ -2610,7 +2737,7 @@ function renderSceneCpuInto(canvas, options = {}) {
   const pixelWidth = cssWidth / Math.max(1, xPoints.length - 1);
   const pixelHeight = cssHeight / Math.max(1, yPoints.length - 1);
 
-  for (const draw of scene.draws) {
+  for (const draw of dataEntries(scene.draws)) {
     if (draw.hidden) continue;
     const fn = resolveFunctionEntry(draw.equationId);
     const color = resolveColorEntry(draw.colorId);
@@ -2734,7 +2861,7 @@ function resolveBackgroundColor() {
   const fallback = { custom: false, rgb: [247, 250, 252] };
   const id = scene.settings.backgroundColor ?? "0";
   if (id === "0") return fallback;
-  const color = scene.colors.find((entry) => entry.id === id);
+  const color = dataEntries(scene.colors).find((entry) => entry.id === id);
   if (!color) return fallback;
   try {
     const env = buildRuntimeEnv(sceneFunctionEnv());
@@ -2765,7 +2892,7 @@ function buildFragmentShader() {
   }
 
   const env = sceneFunctionEnv(true);
-  const layers = scene.draws
+  const layers = dataEntries(scene.draws)
     .map((draw) => {
       if (draw?.hidden) return null;
       const fn = resolveFunctionEntry(draw?.equationId);
@@ -3414,10 +3541,12 @@ function validateScene() {
   };
   diagnostics.settings = [viewportDiagnostic()];
   const timeVariableCount = scene.functions
+    .filter((entry) => !isCommentEntry(entry))
     .map(normalizeFunctionEntry)
     .filter((entry) => entry.kind === "slider" && entry.time).length;
 
   diagnostics.functions = scene.functions.map((rawEntry) => {
+    if (isCommentEntry(rawEntry)) return { status: "valid", message: "Comment" };
     const entry = normalizeFunctionEntry(rawEntry);
     const label = entry.kind === "slider" ? "Slider" : entry.kind === "function" ? "Function" : "Variable";
     const idResult = validateEntryId(entry.id, label, env);
@@ -3447,6 +3576,7 @@ function validateScene() {
     return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, env, [entry.id])]);
   });
   diagnostics.colors = scene.colors.map((entry) => {
+    if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     const idResult = validateEntryId(entry.id, "Color", env);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Color", duplicateIds.colors);
@@ -3459,12 +3589,14 @@ function validateScene() {
     ]);
   });
   diagnostics.restrictions = scene.restrictions.map((entry) => {
+    if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     const idResult = validateEntryId(entry.id, "Boundary", env);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Boundary", duplicateIds.restrictions);
     return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, env)]);
   });
   diagnostics.draws = scene.draws.map((entry) => {
+    if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     if (entry.hidden) {
       return { status: "valid", message: "Draw layer hidden" };
     }
@@ -3564,6 +3696,7 @@ function isValidViewport(candidate) {
 function duplicateEntryIds(entries) {
   const counts = new Map();
   for (const entry of entries) {
+    if (isCommentEntry(entry)) continue;
     const id = entry.id.trim();
     if (!id) continue;
     counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -5620,24 +5753,103 @@ function exportScene() {
     `set aspect_ratio = ${scene.settings.aspectRatio ?? "1:1"}`,
     `set draw_only_inside_boundary = ${formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))}`,
     `set unbounded_decimal_places = ${clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)}`,
-    ...scene.functions.map(exportFunctionEntry),
-    ...scene.colors.map((entry) => `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`),
-    ...scene.restrictions.map((entry) => `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`),
-    ...scene.draws.map((entry) => `draw(${entry.equationId},${entry.colorId},${entry.restrictionId},${formatLeptonBoolean(entry.hidden)})`)
+    ...scene.functions.map((entry) => exportFunctionEntry(entry, "functions")),
+    ...scene.colors.map((entry) => exportColorEntry(entry, "colors")),
+    ...scene.restrictions.map((entry) => exportRestrictionEntry(entry, "restrictions")),
+    ...scene.draws.map((entry) => exportDrawEntry(entry, "draws"))
   ].join("\n");
 }
 
-function exportFunctionEntry(rawEntry) {
+function exportFunctionEntry(rawEntry, section = "functions") {
+  if (isCommentEntry(rawEntry)) return exportStandaloneComment(rawEntry, section);
   const entry = normalizeFunctionEntry(rawEntry);
   const expression = textModeExpression(entry.expression);
+  let line = "";
   if (entry.kind === "slider") {
     const range = entry.time && normalizeTimeMode(entry.timeMode) === "unbounded" ? "" : ` range ${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`;
-    return entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${range}` : `slider ${entry.id} = ${expression}${range}`;
+    line = entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${range}` : `slider ${entry.id} = ${expression}${range}`;
+  } else if (entry.kind === "function") {
+    line = `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
+  } else {
+    line = `variable ${entry.id} = ${expression}`;
   }
-  if (entry.kind === "function") {
-    return `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
-  }
-  return `variable ${entry.id} = ${expression}`;
+  return appendInlineComment(line, entry.comment);
+}
+
+function exportColorEntry(entry) {
+  if (isCommentEntry(entry)) return exportStandaloneComment(entry, "colors");
+  return appendInlineComment(
+    `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`,
+    entry.comment
+  );
+}
+
+function exportRestrictionEntry(entry) {
+  if (isCommentEntry(entry)) return exportStandaloneComment(entry, "restrictions");
+  return appendInlineComment(
+    `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`,
+    entry.comment
+  );
+}
+
+function exportDrawEntry(entry) {
+  if (isCommentEntry(entry)) return exportStandaloneComment(entry, "draws");
+  return appendInlineComment(
+    `draw(${entry.equationId},${entry.colorId},${entry.restrictionId},${formatLeptonBoolean(entry.hidden)})`,
+    entry.comment
+  );
+}
+
+function exportStandaloneComment(entry, section = "functions") {
+  const sectionName = {
+    functions: "functions",
+    colors: "colors",
+    restrictions: "bounds",
+    draws: "draw"
+  }[section] ?? section;
+  const text = commentText(entry).trim();
+  return text ? `// ${sectionName}: ${text}` : `// ${sectionName}:`;
+}
+
+function appendInlineComment(line, comment) {
+  const trimmed = String(comment ?? "").trim();
+  return trimmed ? `${line} // ${trimmed}` : line;
+}
+
+function splitLeptonComment(line) {
+  const index = String(line ?? "").indexOf("//");
+  if (index === -1) return { code: String(line ?? ""), comment: "" };
+  return {
+    code: String(line ?? "").slice(0, index).trimEnd(),
+    comment: String(line ?? "").slice(index + 2).trimStart()
+  };
+}
+
+function withInlineComment(entry, comment) {
+  const trimmed = String(comment ?? "").trim();
+  return trimmed ? { ...entry, comment: trimmed } : entry;
+}
+
+function parseStandaloneComment(comment, currentSection = "functions") {
+  const match = String(comment ?? "").match(/^(functions?|colou?rs?|bounds?|boundaries|restrictions?|draws?)\s*:\s*(.*)$/i);
+  if (!match) return { section: currentSection, text: String(comment ?? "") };
+  const section = {
+    function: "functions",
+    functions: "functions",
+    color: "colors",
+    colors: "colors",
+    colour: "colors",
+    colours: "colors",
+    bound: "restrictions",
+    bounds: "restrictions",
+    boundary: "restrictions",
+    boundaries: "restrictions",
+    restriction: "restrictions",
+    restrictions: "restrictions",
+    draw: "draws",
+    draws: "draws"
+  }[match[1].toLowerCase()] ?? currentSection;
+  return { section, text: match[2] };
 }
 
 function splitSliderRange(source) {
@@ -5730,23 +5942,38 @@ function importScene(raw) {
   next.colors = [];
   next.restrictions = [];
   next.draws = [];
+  let currentCommentSection = "functions";
 
-  for (const line of raw.replace(/\r\n/g, "\n").trim().split("\n")) {
-    if (!line || line === "~~~~~") continue;
+  for (const rawLine of raw.replace(/\r\n/g, "\n").split("\n")) {
+    const { code, comment } = splitLeptonComment(rawLine);
+    const line = code.trim();
+    if (!line) {
+      if (comment.trim()) {
+        const parsedComment = parseStandaloneComment(comment, currentCommentSection);
+        next[parsedComment.section].push(createCommentEntry(parsedComment.text));
+        currentCommentSection = parsedComment.section;
+      }
+      continue;
+    }
+    if (line === "~~~~~") continue;
     if (line.startsWith("F:")) {
       const [id, expression] = splitFirst(line.slice(2), "~");
-      next.functions.push({ id, kind: "variable", expression: convertDivisionsToFrac(expression) });
+      currentCommentSection = "functions";
+      next.functions.push(withInlineComment({ id, kind: "variable", expression: convertDivisionsToFrac(expression) }, comment));
     } else if (line.startsWith("C:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [red = "0", green = "0", blue = "0"] = rest.split("~");
-      next.colors.push({ id, red, green, blue });
+      currentCommentSection = "colors";
+      next.colors.push(withInlineComment({ id, red, green, blue }, comment));
     } else if (line.startsWith("R:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [expression = "1", flag = "0"] = rest.split("~");
-      next.restrictions.push({ id, expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) });
+      currentCommentSection = "restrictions";
+      next.restrictions.push(withInlineComment({ id, expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
     } else if (line.startsWith("D~")) {
       const [, equationId, colorId, restrictionId, hidden = "0"] = line.split("~");
-      next.draws.push({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) });
+      currentCommentSection = "draws";
+      next.draws.push(withInlineComment({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) }, comment));
     } else if (line.startsWith("S:")) {
       const [key, value] = splitFirst(line.slice(2), "~");
       setSceneSetting(next, key, value);
@@ -5755,14 +5982,18 @@ function importScene(raw) {
       if (assignment) setSceneSetting(next, assignment[1], assignment[2]);
     } else if (/^variable\s+/i.test(line)) {
       const assignment = line.match(/^variable\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
-      if (assignment) next.functions.push({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) });
+      if (assignment) {
+        currentCommentSection = "functions";
+        next.functions.push(withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
+      }
     } else if (/^(slider|time)\s+/i.test(line)) {
       const assignment = line.match(/^(slider|time)(?:\s+(bounded_looped|bounded looped|bounded|unbounded))?\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {
         const time = assignment[1].toLowerCase() === "time";
         const timeMode = normalizeTimeMode(assignment[2]);
         const range = splitSliderRange(assignment[4]);
-        next.functions.push({
+        currentCommentSection = "functions";
+        next.functions.push(withInlineComment({
           id: assignment[3],
           kind: "slider",
           expression: convertDivisionsToFrac(range.expression),
@@ -5770,38 +6001,45 @@ function importScene(raw) {
           sliderMax: convertDivisionsToFrac(range.sliderMax),
           time,
           timeMode
-        });
+        }, comment));
       }
     } else if (/^function\s+/i.test(line)) {
       const callAssignment = line.match(/^function\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=\s*(.+)$/i);
       if (callAssignment) {
-        next.functions.push({
+        currentCommentSection = "functions";
+        next.functions.push(withInlineComment({
           id: callAssignment[1],
           kind: "function",
           params: parseFunctionParams(callAssignment[2]),
           expression: convertDivisionsToFrac(callAssignment[3].trim())
-        });
+        }, comment));
       } else {
         const assignment = line.match(/^function\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
-        if (assignment) next.functions.push({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) });
+        if (assignment) {
+          currentCommentSection = "functions";
+          next.functions.push(withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
+        }
       }
     } else if (/^(colour|color)\s+/i.test(line)) {
       const assignment = line.match(/^(?:colour|color)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {
         const [red = "0", green = "0", blue = "0"] = assignment[2].split("~").map((part) => part.trim());
-        next.colors.push({ id: assignment[1], red, green, blue });
+        currentCommentSection = "colors";
+        next.colors.push(withInlineComment({ id: assignment[1], red, green, blue }, comment));
       }
     } else if (/^(boundary|restriction)\s+/i.test(line)) {
       const assignment = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {
         const [expression = "1", flag = "False"] = assignment[2].split("~").map((part) => part.trim());
-        next.restrictions.push({ id: assignment[1], expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) });
+        currentCommentSection = "restrictions";
+        next.restrictions.push(withInlineComment({ id: assignment[1], expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
       }
     } else if (/^draw\s*\(/i.test(line)) {
       const call = line.match(/^draw\s*\((.*)\)\s*$/i);
       if (call) {
         const [equationId = "", colorId = "", restrictionId = "", hidden = "False"] = splitFunctionArgs(call[1]).map((part) => part.trim());
-        next.draws.push({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) });
+        currentCommentSection = "draws";
+        next.draws.push(withInlineComment({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) }, comment));
       }
     }
   }
@@ -5810,7 +6048,7 @@ function importScene(raw) {
 }
 
 function normalizeSceneReferences(next) {
-  const hasFunction = (id) => next.functions.some((entry) => entry.id === id);
+  const hasFunction = (id) => dataEntries(next.functions).some((entry) => entry.id === id);
   const ensureFunction = (preferredId, expression) => {
     const trimmed = String(expression ?? "").trim();
     if (hasFunction(trimmed)) return trimmed;
@@ -5825,14 +6063,16 @@ function normalizeSceneReferences(next) {
   };
 
   next.colors.forEach((color) => {
+    if (isCommentEntry(color)) return;
     color.red = ensureFunction(`${color.id}_r`, color.red);
     color.green = ensureFunction(`${color.id}_g`, color.green);
     color.blue = ensureFunction(`${color.id}_b`, color.blue);
   });
   next.restrictions.forEach((restriction) => {
+    if (isCommentEntry(restriction)) return;
     restriction.expression = ensureFunction(`${restriction.id}_fn`, restriction.expression);
   });
-  if (next.settings.backgroundColor !== "0" && !next.colors.some((color) => color.id === next.settings.backgroundColor)) {
+  if (next.settings.backgroundColor !== "0" && !dataEntries(next.colors).some((color) => color.id === next.settings.backgroundColor)) {
     next.settings.backgroundColor = "0";
   }
   return next;
@@ -6144,7 +6384,7 @@ function highlightLeptonText(source) {
 function collectTextDeclaredIdentifiers(source) {
   const ids = new Set();
   String(source ?? "").split("\n").forEach((line) => {
-    const code = line.split("#")[0] ?? "";
+    const { code } = splitLeptonComment(line);
     const declaration = code.match(/^\s*(?:variable|slider|function|colour|color|boundary|restriction)\s+([A-Za-z_]\w*)/i);
     if (declaration) ids.add(declaration[1]);
     const time = code.match(/^\s*time\s+(?:bounded|unbounded|bounded_looped)\s+([A-Za-z_]\w*)/i);
@@ -6154,10 +6394,8 @@ function collectTextDeclaredIdentifiers(source) {
 }
 
 function highlightLeptonLine(line, context = { declaredIds: new Set() }) {
-  const commentIndex = line.indexOf("#");
-  const code = commentIndex === -1 ? line : line.slice(0, commentIndex);
-  const comment = commentIndex === -1 ? "" : line.slice(commentIndex);
-  return highlightLeptonCode(code, context) + (comment ? `<span class="syntax-comment">${escapeHtml(comment)}</span>` : "");
+  const { code, comment } = splitLeptonComment(line);
+  return highlightLeptonCode(code, context) + (comment ? `<span class="syntax-comment">// ${escapeHtml(comment)}</span>` : "");
 }
 
 function highlightLeptonCode(line, context = { declaredIds: new Set() }) {

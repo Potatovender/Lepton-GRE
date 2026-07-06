@@ -413,6 +413,9 @@ select {
   background: #eef1f5;
   color: #4c5668;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab-button {
@@ -1009,6 +1012,9 @@ select {
   background: #eef1f5;
   color: #4c5668;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .display-button[aria-selected="true"] {
@@ -1074,6 +1080,53 @@ select {
   min-width: 0;
   display: grid;
   gap: 8px;
+}
+
+.entry-comment-inline,
+.entry-comment-body {
+  width: 100%;
+  min-width: 0;
+  border: 1px dashed #cbd3df;
+  border-radius: 5px;
+  padding: 7px 8px;
+  background: #fbfcfe;
+  color: #586476;
+  font-size: 12px;
+}
+
+.entry-comment-body {
+  min-height: 58px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.expression-row-comment {
+  min-height: 68px;
+  background: #fafbfd;
+}
+
+.expression-row-comment .entry-status {
+  background: #9aa3b2;
+  box-shadow: 0 0 0 3px #edf0f4;
+}
+
+.row-actions {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.row-insert-select {
+  width: 34px;
+  height: 28px;
+  min-width: 0;
+  border: 0;
+  border-radius: 5px;
+  background: #eef1f5;
+  color: #596273;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .draw-layer-toolbar {
@@ -1148,6 +1201,9 @@ select {
   font-weight: 650;
   text-transform: capitalize;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .function-kind-button[data-help] {
@@ -1386,6 +1442,13 @@ select {
   color: #9f2f2a;
 }
 
+.add-row-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  align-items: stretch;
+  border-bottom: 1px solid #eceff4;
+}
+
 .add-row {
   width: 100%;
   min-height: 64px;
@@ -1394,11 +1457,28 @@ select {
   gap: 10px;
   align-items: center;
   border: 0;
-  border-bottom: 1px solid #eceff4;
   padding: 12px 10px;
   background: #ffffff;
   color: #667085;
   text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.add-row span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-row-type {
+  min-width: 0;
+  border: 0;
+  border-left: 1px solid #eceff4;
+  padding: 0 8px;
+  background: #fbfcfe;
+  color: #596273;
   cursor: pointer;
 }
 

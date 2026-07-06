@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260705-glsl-export")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260706-comments")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -476,6 +476,58 @@ check("text mode refresh preserves frac brace syntax", () => {
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
   assert(exported.includes("variable eq = frac{x}{y}+frac{y}{2}"), exported);
+});
+
+check("comments round-trip between standard and text sections", () => {
+  const imported = sandbox.importScene(`// functions: helper note
+variable eq = x+y // inline equation
+// colors: palette note
+colour rgb = eq~eq~eq // inline colour
+// bounds: gate note
+boundary rest = 1~False // inline boundary
+// draw: layer note
+draw(eq,rgb,rest,False) // inline draw`);
+  assert(imported.functions[0].type === "comment", JSON.stringify(imported.functions));
+  assert(imported.functions[0].text === "helper note", JSON.stringify(imported.functions[0]));
+  assert(imported.functions[1].comment === "inline equation", JSON.stringify(imported.functions[1]));
+  assert(imported.colors[0].type === "comment", JSON.stringify(imported.colors));
+  assert(imported.colors[1].comment === "inline colour", JSON.stringify(imported.colors[1]));
+  assert(imported.restrictions[0].text === "gate note", JSON.stringify(imported.restrictions));
+  assert(imported.draws[0].text === "layer note", JSON.stringify(imported.draws));
+
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("// functions: helper note\nvariable eq = x+y // inline equation"), exported);
+  assert(exported.includes("// colors: palette note\ncolour rgb = eq~eq~eq // inline colour"), exported);
+  assert(exported.includes("// bounds: gate note\nboundary rest = rest_fn~False // inline boundary"), exported);
+  assert(exported.includes("// draw: layer note\ndraw(eq,rgb,rest,False) // inline draw"), exported);
+
+  const second = sandbox.importScene(exported);
+  assert(second.colors[0].type === "comment" && second.colors[0].text === "palette note", JSON.stringify(second.colors));
+  assert(second.draws[1].comment === "inline draw", JSON.stringify(second.draws));
+});
+
+check("comment entries are ignored by graph validation and references", () => {
+  const imported = sandbox.importScene(`// functions: note
+variable eq = x
+// colors: note
+colour rgb = eq~eq~eq
+// bounds: note
+boundary rest = 1~False
+// draw: note
+draw(eq,rgb,rest,False)`);
+  sandbox.__debugSetScene(imported);
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
+  assert(sandbox.sceneFunctionEnv().eq.id === "eq", JSON.stringify(sandbox.sceneFunctionEnv()));
+  assert(!sandbox.sceneFunctionEnv()[""], JSON.stringify(sandbox.sceneFunctionEnv()));
+});
+
+check("Lepton text highlighting uses double slash comments", () => {
+  const html = sandbox.highlightLeptonText(`variable eq = x // inline note
+// functions: standalone`);
+  assert(html.includes('<span class="syntax-comment">// inline note</span>'), html);
+  assert(html.includes('<span class="syntax-comment">// functions: standalone</span>'), html);
 });
 
 check("updated water sample imports an unbounded time variable", () => {
