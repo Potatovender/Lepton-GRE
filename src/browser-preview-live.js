@@ -3,6 +3,8 @@ const DEFAULT_SCENE = {
   colors: [],
   restrictions: [],
   draws: [],
+  settingsComments: [],
+  settingLineComments: {},
   settings: {
     xMin: -10,
     xMax: 10,
@@ -21,7 +23,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260706-comments";
+const APP_VERSION = "20260706-comments-ui";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -412,6 +414,11 @@ function nextEntryId(entries, prefix) {
     id = `${prefix}${index}`;
   }
   return id;
+}
+
+function settingsCommentEntries() {
+  if (!Array.isArray(scene.settingsComments)) scene.settingsComments = [];
+  return scene.settingsComments;
 }
 
 function formatSliderValue(value, entry = null) {
@@ -1023,6 +1030,11 @@ function renderPanel() {
           ${searchableReference("settings.backgroundColor", dataEntries(scene.colors), scene.settings.backgroundColor, "Background color")}
         </label>
       ` : ""}
+      <section class="settings-section">
+        <h3>Comments</h3>
+        ${settingsCommentEntries().map((entry, index) => commentRow("settingsComments", index, entry)).join("")}
+        <button class="comment-add-button" data-add="settingsComments" type="button">Add comment</button>
+      </section>
     </div>
   `;
 }
@@ -1243,7 +1255,9 @@ function mathEditor(field, value, label, small = false, placeholder = "") {
 function expressionRow(status, message, content, kind = null, index = null, options = {}) {
   const entryAttrs = kind ? `data-entry-kind="${kind}" data-entry-index="${index}"` : "";
   const statusLabel = status === "valid" ? "status: valid" : message || `status: ${status}`;
-  const inlineComment = kind && !options.noInlineComment
+  const hasInlineComment = kind && index != null && Object.prototype.hasOwnProperty.call(scene[kind]?.[index] ?? {}, "comment");
+  const existingComment = hasInlineComment ? String(scene[kind]?.[index]?.comment ?? "") : "";
+  const inlineComment = kind && !options.noInlineComment && hasInlineComment
     ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="// comment" aria-label="Line comment" />`
     : "";
   return `
@@ -1252,11 +1266,9 @@ function expressionRow(status, message, content, kind = null, index = null, opti
       <div class="entry-content">${content}${inlineComment}</div>
       ${kind ? `
         <div class="row-actions">
-          <select class="row-insert-select" data-insert-after="${kind}.${index}" title="Insert below" aria-label="Insert below">
-            <option value="">+</option>
-            <option value="data">data</option>
-            <option value="comment">comment</option>
-          </select>
+          <button class="row-action row-action-small" data-move-entry="${kind}.${index}.-1" title="Move up" aria-label="Move row up">↑</button>
+          <button class="row-action row-action-small" data-move-entry="${kind}.${index}.1" title="Move down" aria-label="Move row down">↓</button>
+          ${options.noInlineComment || hasInlineComment ? "" : `<button class="row-action row-action-comment" data-add-inline-comment="${kind}.${index}" title="Add comment" aria-label="Add comment">Comment</button>`}
           <button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>
         </div>
       ` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
@@ -1265,16 +1277,16 @@ function expressionRow(status, message, content, kind = null, index = null, opti
 }
 
 function addRow(label, kind) {
+  if (kind === "settingsComments") {
+    return `<button class="comment-add-button" data-add="${kind}" type="button">Add comment</button>`;
+  }
   return `
     <div class="add-row-wrap">
       <button class="add-row" data-add="${kind}">
         <span class="entry-status"></span>
         <span>${label}</span>
       </button>
-      <select class="add-row-type" data-add-type="${kind}" aria-label="Choose what to add">
-        <option value="data">data</option>
-        <option value="comment">comment</option>
-      </select>
+      <button class="add-comment-side-button" data-add-comment="${kind}" type="button">Add comment</button>
     </div>
   `;
 }
@@ -1879,27 +1891,49 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       const kind = button.dataset.add;
-      const type = root.querySelector(`[data-add-type="${cssEscape(kind)}"]`)?.value ?? "data";
       if (listControls[kind]) {
         listControls[kind].query = "";
         listControls[kind].sort = "custom";
       }
-      const target = addEntry(kind, type);
+      const target = addEntry(kind, kind === "settingsComments" ? "comment" : "data");
       recordSceneHistory(before);
       pendingScrollTarget = target;
       renderApp();
     });
   });
 
-  root.querySelectorAll("[data-insert-after]").forEach((select) => {
-    select.addEventListener("change", () => {
-      if (!select.value) return;
+  root.querySelectorAll("[data-add-comment]").forEach((button) => {
+    button.addEventListener("click", () => {
       syncFields();
       const before = sceneSnapshot();
-      const [kind, rawIndex] = select.dataset.insertAfter.split(".");
-      const target = insertEntryAfter(kind, Number(rawIndex), select.value);
+      const kind = button.dataset.addComment;
+      const target = addEntry(kind, "comment");
       recordSceneHistory(before);
       pendingScrollTarget = target;
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-add-inline-comment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      const before = sceneSnapshot();
+      const [kind, rawIndex] = button.dataset.addInlineComment.split(".");
+      const entry = scene[kind]?.[Number(rawIndex)];
+      if (entry && !isCommentEntry(entry)) entry.comment = "";
+      recordSceneHistory(before);
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-move-entry]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      const before = sceneSnapshot();
+      const [kind, rawIndex, rawDirection] = button.dataset.moveEntry.split(".");
+      moveEntry(kind, Number(rawIndex), Number(rawDirection));
+      recordSceneHistory(before);
+      pendingScrollTarget = { kind, index: Number(rawIndex) + Number(rawDirection) };
       renderApp();
     });
   });
@@ -2597,7 +2631,7 @@ function defaultEntryForKind(kind) {
 
 function addEntry(kind, type = "data") {
   if (!Array.isArray(scene[kind])) return null;
-  const entry = type === "comment" ? createCommentEntry("") : defaultEntryForKind(kind);
+  const entry = type === "comment" || kind === "settingsComments" ? createCommentEntry("") : defaultEntryForKind(kind);
   if (!entry) return null;
   scene[kind].push(entry);
   return { kind, index: scene[kind].length - 1 };
@@ -2610,6 +2644,15 @@ function insertEntryAfter(kind, index, type = "data") {
   const targetIndex = Math.max(0, Math.min(scene[kind].length, index + 1));
   scene[kind].splice(targetIndex, 0, entry);
   return { kind, index: targetIndex };
+}
+
+function moveEntry(kind, index, direction) {
+  if (!Array.isArray(scene[kind]) || !Number.isInteger(index) || !Number.isInteger(direction)) return false;
+  const target = index + direction;
+  if (index < 0 || target < 0 || index >= scene[kind].length || target >= scene[kind].length || index === target) return false;
+  const [entry] = scene[kind].splice(index, 1);
+  scene[kind].splice(target, 0, entry);
+  return true;
 }
 
 function toggleDrawHidden(index) {
@@ -5742,22 +5785,27 @@ function setSceneSetting(target, key, value) {
 
 function exportScene() {
   return [
-    `set x_min = ${scene.settings.xMin}`,
-    `set x_max = ${scene.settings.xMax}`,
-    `set y_min = ${scene.settings.yMin}`,
-    `set y_max = ${scene.settings.yMax}`,
-    `set max_recursion = ${scene.settings.maxRecursion}`,
-    `set angle_mode = ${normalizeAngleMode(scene.settings.angleMode)}`,
-    `set background_color = ${scene.settings.backgroundColor ?? "0"}`,
-    `set ensure_square_grid = ${formatLeptonBoolean(scene.settings.ensureSquareGrid !== false)}`,
-    `set aspect_ratio = ${scene.settings.aspectRatio ?? "1:1"}`,
-    `set draw_only_inside_boundary = ${formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))}`,
-    `set unbounded_decimal_places = ${clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)}`,
+    exportSettingLine("x_min", scene.settings.xMin),
+    exportSettingLine("x_max", scene.settings.xMax),
+    exportSettingLine("y_min", scene.settings.yMin),
+    exportSettingLine("y_max", scene.settings.yMax),
+    exportSettingLine("max_recursion", scene.settings.maxRecursion),
+    exportSettingLine("angle_mode", normalizeAngleMode(scene.settings.angleMode)),
+    exportSettingLine("background_color", scene.settings.backgroundColor ?? "0"),
+    exportSettingLine("ensure_square_grid", formatLeptonBoolean(scene.settings.ensureSquareGrid !== false)),
+    exportSettingLine("aspect_ratio", scene.settings.aspectRatio ?? "1:1"),
+    exportSettingLine("draw_only_inside_boundary", formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))),
+    exportSettingLine("unbounded_decimal_places", clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)),
+    ...settingsCommentEntries().map((entry) => exportStandaloneComment(entry, "settings")),
     ...scene.functions.map((entry) => exportFunctionEntry(entry, "functions")),
     ...scene.colors.map((entry) => exportColorEntry(entry, "colors")),
     ...scene.restrictions.map((entry) => exportRestrictionEntry(entry, "restrictions")),
     ...scene.draws.map((entry) => exportDrawEntry(entry, "draws"))
   ].join("\n");
+}
+
+function exportSettingLine(key, value) {
+  return appendInlineComment(`set ${key} = ${value}`, scene.settingLineComments?.[key]);
 }
 
 function exportFunctionEntry(rawEntry, section = "functions") {
@@ -5802,6 +5850,7 @@ function exportDrawEntry(entry) {
 
 function exportStandaloneComment(entry, section = "functions") {
   const sectionName = {
+    settings: "settings",
     functions: "functions",
     colors: "colors",
     restrictions: "bounds",
@@ -5831,9 +5880,11 @@ function withInlineComment(entry, comment) {
 }
 
 function parseStandaloneComment(comment, currentSection = "functions") {
-  const match = String(comment ?? "").match(/^(functions?|colou?rs?|bounds?|boundaries|restrictions?|draws?)\s*:\s*(.*)$/i);
+  const match = String(comment ?? "").match(/^(settings?|functions?|colou?rs?|bounds?|boundaries|restrictions?|draws?)\s*:\s*(.*)$/i);
   if (!match) return { section: currentSection, text: String(comment ?? "") };
   const section = {
+    setting: "settings",
+    settings: "settings",
     function: "functions",
     functions: "functions",
     color: "colors",
@@ -5942,6 +5993,8 @@ function importScene(raw) {
   next.colors = [];
   next.restrictions = [];
   next.draws = [];
+  next.settingsComments = [];
+  next.settingLineComments = {};
   let currentCommentSection = "functions";
 
   for (const rawLine of raw.replace(/\r\n/g, "\n").split("\n")) {
@@ -5950,7 +6003,11 @@ function importScene(raw) {
     if (!line) {
       if (comment.trim()) {
         const parsedComment = parseStandaloneComment(comment, currentCommentSection);
-        next[parsedComment.section].push(createCommentEntry(parsedComment.text));
+        if (parsedComment.section === "settings") {
+          next.settingsComments.push(createCommentEntry(parsedComment.text));
+        } else {
+          next[parsedComment.section].push(createCommentEntry(parsedComment.text));
+        }
         currentCommentSection = parsedComment.section;
       }
       continue;
@@ -5976,10 +6033,16 @@ function importScene(raw) {
       next.draws.push(withInlineComment({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) }, comment));
     } else if (line.startsWith("S:")) {
       const [key, value] = splitFirst(line.slice(2), "~");
+      currentCommentSection = "settings";
       setSceneSetting(next, key, value);
+      if (comment.trim()) next.settingLineComments[key] = comment.trim();
     } else if (/^set\s+/i.test(line)) {
       const assignment = line.match(/^set\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
-      if (assignment) setSceneSetting(next, assignment[1], assignment[2]);
+      if (assignment) {
+        currentCommentSection = "settings";
+        setSceneSetting(next, assignment[1], assignment[2]);
+        if (comment.trim()) next.settingLineComments[assignment[1]] = comment.trim();
+      }
     } else if (/^variable\s+/i.test(line)) {
       const assignment = line.match(/^variable\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {

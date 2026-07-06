@@ -468,10 +468,10 @@ select {
 .expression-row {
   min-height: 76px;
   display: grid;
-  grid-template-columns: 34px 1fr 34px;
-  gap: 10px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: start;
-  padding: 12px 10px;
+  padding: 10px 0 10px 10px;
   border-bottom: 1px solid #eceff4;
 }
 
@@ -1080,6 +1080,7 @@ select {
   min-width: 0;
   display: grid;
   gap: 8px;
+  padding-right: 4px;
 }
 
 .entry-comment-inline,
@@ -1112,21 +1113,40 @@ select {
 
 .row-actions {
   min-width: 0;
-  display: grid;
-  gap: 6px;
-  justify-items: end;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  justify-content: flex-start;
+  border-left: 1px solid #eceff4;
+  background: #f8fafc;
 }
 
-.row-insert-select {
+.row-action {
   width: 34px;
+  min-width: 34px;
   height: 28px;
-  min-width: 0;
+  margin: 0;
   border: 0;
-  border-radius: 5px;
-  background: #eef1f5;
+  border-radius: 0;
+  background: transparent;
   color: #596273;
   cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.row-action-small {
+  font-size: 13px;
+}
+
+.row-action-comment {
+  width: 74px;
+  min-width: 74px;
   font-size: 12px;
+  font-weight: 650;
+  line-height: 1.1;
+  white-space: normal;
 }
 
 .draw-layer-toolbar {
@@ -1424,27 +1444,14 @@ select {
   gap: 6px;
 }
 
-.row-action {
-  width: 28px;
-  height: 28px;
-  margin-top: 8px;
-  border: 0;
-  border-radius: 5px;
-  background: #eef1f5;
-  color: #596273;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-}
-
 .row-action:hover {
-  background: #f5d9d7;
-  color: #9f2f2a;
+  background: #e8edf5;
+  color: #26364f;
 }
 
 .add-row-wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px;
+  grid-template-columns: minmax(0, 1fr) 116px;
   align-items: stretch;
   border-bottom: 1px solid #eceff4;
 }
@@ -1472,14 +1479,25 @@ select {
   white-space: nowrap;
 }
 
-.add-row-type {
+.add-comment-side-button,
+.comment-add-button {
   min-width: 0;
   border: 0;
-  border-left: 1px solid #eceff4;
-  padding: 0 8px;
-  background: #fbfcfe;
-  color: #596273;
+  padding: 8px 10px;
+  background: #e8f0ff;
+  color: #244f99;
   cursor: pointer;
+  font-weight: 700;
+}
+
+.add-comment-side-button {
+  border-left: 1px solid #d5e2fa;
+}
+
+.comment-add-button {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 5px;
 }
 
 .compact-field {
@@ -1674,6 +1692,7 @@ textarea.compact-field,
 
 .scene-textarea,
 .scene-text-highlight {
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-height: 320px;
@@ -1685,6 +1704,9 @@ textarea.compact-field,
   line-height: 1.45;
   tab-size: 2;
   white-space: pre;
+  font-variant-ligatures: none;
+  font-kerning: none;
+  letter-spacing: 0;
 }
 
 .scene-textarea {
@@ -1705,9 +1727,13 @@ textarea.compact-field,
   color: #202938;
 }
 
+.scene-text-highlight span {
+  font-weight: 400;
+  font-style: normal;
+}
+
 .syntax-keyword {
   color: #7c3aed;
-  font-weight: 700;
 }
 
 .syntax-name {
@@ -1721,12 +1747,10 @@ textarea.compact-field,
 
 .syntax-setting {
   color: #9333ea;
-  font-weight: 650;
 }
 
 .syntax-boolean {
   color: #0f766e;
-  font-weight: 650;
 }
 
 .syntax-operator {
@@ -1735,7 +1759,6 @@ textarea.compact-field,
 
 .syntax-comment {
   color: #64748b;
-  font-style: italic;
 }
 
 .text-mode-actions {

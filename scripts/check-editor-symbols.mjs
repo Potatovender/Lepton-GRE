@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260706-comments")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260706-comments-ui")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -507,6 +507,22 @@ draw(eq,rgb,rest,False) // inline draw`);
   assert(second.draws[1].comment === "inline draw", JSON.stringify(second.draws));
 });
 
+check("settings comments round-trip in the settings section", () => {
+  const imported = sandbox.importScene(`// settings: viewport note
+set x_min = -8 // left edge
+set x_max = 8
+variable eq = x`);
+  sandbox.__debugSetScene(imported);
+  assert(sandbox.__debugScene.settingsComments[0].text === "viewport note", JSON.stringify(sandbox.__debugScene.settingsComments));
+  assert(sandbox.__debugScene.settingLineComments.x_min === "left edge", JSON.stringify(sandbox.__debugScene.settingLineComments));
+  const exported = sandbox.exportScene();
+  assert(exported.includes("set x_min = -8 // left edge"), exported);
+  assert(exported.includes("// settings: viewport note"), exported);
+  const second = sandbox.importScene(exported);
+  assert(second.settingsComments[0].text === "viewport note", JSON.stringify(second.settingsComments));
+  assert(second.settingLineComments.x_min === "left edge", JSON.stringify(second.settingLineComments));
+});
+
 check("comment entries are ignored by graph validation and references", () => {
   const imported = sandbox.importScene(`// functions: note
 variable eq = x
@@ -521,6 +537,16 @@ draw(eq,rgb,rest,False)`);
   assert(diagnostics.hasErrors === false, JSON.stringify(diagnostics));
   assert(sandbox.sceneFunctionEnv().eq.id === "eq", JSON.stringify(sandbox.sceneFunctionEnv()));
   assert(!sandbox.sceneFunctionEnv()[""], JSON.stringify(sandbox.sceneFunctionEnv()));
+});
+
+check("entries can be reordered without losing comments", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`variable a = x
+// functions: middle note
+variable b = y`));
+  sandbox.moveEntry("functions", 2, -1);
+  assert(sandbox.__debugScene.functions.map((entry) => entry.type === "comment" ? `//${entry.text}` : entry.id).join(",") === "a,b,//middle note", JSON.stringify(sandbox.__debugScene.functions));
+  sandbox.moveEntry("functions", 1, -1);
+  assert(sandbox.__debugScene.functions.map((entry) => entry.type === "comment" ? `//${entry.text}` : entry.id).join(",") === "b,a,//middle note", JSON.stringify(sandbox.__debugScene.functions));
 });
 
 check("Lepton text highlighting uses double slash comments", () => {
