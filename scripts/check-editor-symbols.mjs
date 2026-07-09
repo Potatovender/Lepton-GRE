@@ -350,16 +350,16 @@ set background_color = 0`);
   const exported = sandbox.exportScene();
   assert(!exported.includes("~~~~~"), exported);
   assert(exported.startsWith("set x_min = -15\nset x_max = 15"), exported);
-  assert(exported.includes("\nvariable f1 = x+y"), exported);
+  assert(exported.includes("\nexpression f1 = x+y"), exported);
   assert(exported.includes("\ncolour c1 = f1~f1~f1"), exported);
   assert(exported.includes("\nboundary r1 = f1~False"), exported);
   assert(exported.includes("\ndraw(f1,c1,r1,False)"), exported);
 });
 
-check("new Lepton language accepts aliases booleans and invalid angle fallback", () => {
+check("new Lepton language accepts expression aliases booleans and invalid angle fallback", () => {
   const imported = sandbox.importScene(`set angle_mode = sideways
 set max_recursion = 33
-variable f1 = pi+x
+expression f1 = pi+x
 color c1 = f1~f1~f1
 restriction r1 = f1~true
 draw(f1,c1,r1,true)`);
@@ -380,7 +380,7 @@ boundary r1 = f~False
 draw(f,c1,r1,False)`);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("\nvariable y = 100"), exported);
+  assert(exported.includes("\nexpression y = 100"), exported);
   assert(exported.includes("\nslider speed = 5 range -2~8"), exported);
   assert(exported.includes("\ntime unbounded t = 0"), exported);
   assert(!exported.includes("\ntime unbounded t = 0 range"), exported);
@@ -467,7 +467,7 @@ variable f3 = f1\\left(f2,3\\right)`);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
   assert(exported.includes("\nfunction f1(x,y) = x^2+y^2"), exported);
-  assert(exported.includes("\nvariable f3 = f1(f2,3)"), exported);
+  assert(exported.includes("\nexpression f3 = f1(f2,3)"), exported);
   assert(!exported.includes("\\left") && !exported.includes("\\right"), exported);
 });
 
@@ -475,7 +475,7 @@ check("text mode refresh preserves frac brace syntax", () => {
   const imported = sandbox.importScene(`variable eq = x/y+frac{y}{2}`);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("variable eq = frac{x}{y}+frac{y}{2}"), exported);
+  assert(exported.includes("expression eq = frac{x}{y}+frac{y}{2}"), exported);
 });
 
 check("comments round-trip between standard and text sections", () => {
@@ -497,7 +497,7 @@ draw(eq,rgb,rest,False) // inline draw`);
 
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("// functions: helper note\nvariable eq = x+y // inline equation"), exported);
+  assert(exported.includes("// functions: helper note\nexpression eq = x+y // inline equation"), exported);
   assert(exported.includes("// colors: palette note\ncolour rgb = eq~eq~eq // inline colour"), exported);
   assert(exported.includes("// bounds: gate note\nboundary rest = rest_fn~False // inline boundary"), exported);
   assert(exported.includes("// draw: layer note\ndraw(eq,rgb,rest,False) // inline draw"), exported);
@@ -550,10 +550,23 @@ variable b = y`));
 });
 
 check("Lepton text highlighting uses double slash comments", () => {
-  const html = sandbox.highlightLeptonText(`variable eq = x // inline note
+  const html = sandbox.highlightLeptonText(`expression eq = x // inline note
 // functions: standalone`);
   assert(html.includes('<span class="syntax-comment">// inline note</span>'), html);
   assert(html.includes('<span class="syntax-comment">// functions: standalone</span>'), html);
+});
+
+check("function rows use an expression dropdown and icon actions", () => {
+  const html = sandbox.functionRowContent({ id: "eq", kind: "variable", expression: "x+y" }, 0);
+  assert(html.includes('data-function-kind-select="0"'), html);
+  assert(html.includes(">expression<"), html);
+  assert(!html.includes('data-function-kind="0.variable"'), html);
+
+  const row = sandbox.expressionRow("valid", "ok", html, "functions", 0);
+  assert(row.includes('data-entry-drag-handle="functions.0"'), row);
+  assert(row.includes('data-add-inline-comment="functions.0"'), row);
+  assert(!row.includes("data-move-entry"), row);
+  assert(!row.includes("Move up"), row);
 });
 
 check("updated water sample imports an unbounded time variable", () => {
@@ -842,7 +855,7 @@ boundary rest = 1~False
 draw(eq,rgb,rest,False)`));
   const saved = sandbox.saveCurrentGraph("Local sample");
   assert(saved.name === "Local sample", JSON.stringify(saved));
-  assert(saved.scene.includes("variable eq = x"), saved.scene);
+  assert(saved.scene.includes("expression eq = x"), saved.scene);
   assert(saved.thumbnail.startsWith("data:image/"), saved.thumbnail);
   const graphs = sandbox.loadSavedGraphs();
   assert(graphs.length === 1, JSON.stringify(graphs));

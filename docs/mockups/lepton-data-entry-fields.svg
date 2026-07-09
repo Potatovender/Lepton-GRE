@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1320" viewBox="0 0 1600 1320">
+  <defs>
+    <filter id="softShadow" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <linearGradient id="activeLine" x1="0" x2="1">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <style>
+      .page { fill: #edf2f7; }
+      .sidebar { fill: #ffffff; filter: url(#softShadow); }
+      .header { fill: #fbfdff; stroke: #dbe3ef; stroke-width: 1; }
+      .tab { fill: #f8fafc; stroke: #dbe3ef; stroke-width: 1; }
+      .tab-on { fill: #eaf3ff; stroke: #93c5fd; stroke-width: 1.2; }
+      .row { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1.2; }
+      .row-active { stroke: #60a5fa; stroke-width: 1.6; }
+      .line { stroke: #e2e8f0; stroke-width: 1.2; }
+      .subtle { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 1; }
+      .ghost { fill: transparent; stroke: #dbe3ef; stroke-width: 1; }
+      .icon { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1; }
+      .icon-hot { fill: #eef6ff; stroke: #93c5fd; stroke-width: 1.2; }
+      .danger { fill: #fff7f7; stroke: #fecaca; stroke-width: 1; }
+      .dot-valid { fill: #16a34a; }
+      .dot-warn { fill: #eab308; }
+      .dot-muted { fill: #94a3b8; }
+      .drag { fill: #94a3b8; }
+      .label { font: 650 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .small { font: 520 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .tiny { font: 500 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .chipText { font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .mono { font: 500 18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1e293b; }
+      .math { font: 500 29px Georgia, "Times New Roman", serif; fill: #111827; }
+      .mathSmall { font: 500 22px Georgia, "Times New Roman", serif; fill: #111827; }
+      .mutedMath { font: 500 24px Georgia, "Times New Roman", serif; fill: #64748b; }
+      .comment { font: 500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; font-style: italic; }
+      .blue { fill: #2563eb; }
+      .white { fill: #ffffff; }
+      .tick { stroke: #64748b; stroke-width: 1.4; }
+    </style>
+  </defs>
+
+  <rect class="page" x="0" y="0" width="1600" height="1320"/>
+
+  <!-- Full-height sidebar context -->
+  <rect class="sidebar" x="80" y="60" width="880" height="1200" rx="0"/>
+  <rect class="header" x="80" y="60" width="880" height="74"/>
+  <text x="112" y="107" class="label">Lepton GRE</text>
+  <rect class="tab-on" x="430" y="78" width="140" height="38" rx="9"/>
+  <text x="476" y="103" class="small">Standard</text>
+  <rect class="tab" x="580" y="78" width="140" height="38" rx="9"/>
+  <text x="633" y="103" class="small">Text</text>
+  <rect class="tab" x="733" y="78" width="190" height="38" rx="9"/>
+  <text x="776" y="103" class="small">Graph menu ▾</text>
+
+  <rect class="tab-on" x="112" y="158" width="154" height="42" rx="10"/>
+  <text x="157" y="185" class="small">Functions</text>
+  <rect class="tab" x="274" y="158" width="154" height="42" rx="10"/>
+  <text x="323" y="185" class="small">Colors</text>
+  <rect class="tab" x="436" y="158" width="154" height="42" rx="10"/>
+  <text x="483" y="185" class="small">Bounds</text>
+  <rect class="tab" x="598" y="158" width="154" height="42" rx="10"/>
+  <text x="645" y="185" class="small">Draw</text>
+  <rect class="tab" x="760" y="158" width="154" height="42" rx="10"/>
+  <text x="804" y="185" class="small">Settings</text>
+
+  <text x="112" y="240" class="tiny">These are not separate cards: each row spans the sidebar, keeps controls minimal, and gives the formula the widest usable area.</text>
+
+  <!-- ROW 1: EXPRESSION -->
+  <g transform="translate(80,270)">
+    <rect class="row row-active" x="0" y="0" width="880" height="150"/>
+    <rect class="subtle" x="18" y="20" width="28" height="68" rx="14"/>
+    <circle class="dot-valid" cx="32" cy="54" r="8"/>
+    <circle class="drag" cx="32" cy="34" r="2.8"/>
+    <circle class="drag" cx="32" cy="74" r="2.8"/>
+    <text x="62" y="48" class="mono">eq</text>
+    <rect class="ghost" x="126" y="23" width="132" height="34" rx="8"/>
+    <text x="153" y="45" class="chipText">expression</text>
+    <path d="M236 36l6 6 6-6" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect class="icon-hot" x="806" y="20" width="28" height="28" rx="7"/>
+    <path d="M815 30h10a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4h-4l-5 5v-5h-1a4 4 0 0 1-4-4v-4a4 4 0 0 1 4-4z" fill="none" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+    <rect class="danger" x="844" y="20" width="28" height="28" rx="7"/>
+    <path d="M853 29l10 10M863 29l-10 10" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"/>
+    <line class="line" x1="62" y1="68" x2="872" y2="68"/>
+    <text x="62" y="113" class="math">sin(x) + cos(y) + </text>
+    <text x="327" y="100" class="mathSmall">x</text>
+    <line x1="320" y1="107" x2="351" y2="107" stroke="#111827" stroke-width="1.8"/>
+    <text x="327" y="131" class="mathSmall">y</text>
+  </g>
+
+  <!-- ROW 2: SLIDER -->
+  <g transform="translate(80,442)">
+    <rect class="row" x="0" y="0" width="880" height="178"/>
+    <rect class="subtle" x="18" y="20" width="28" height="88" rx="14"/>
+    <circle class="dot-warn" cx="32" cy="64" r="8"/>
+    <circle class="drag" cx="32" cy="42" r="2.8"/>
+    <circle class="drag" cx="32" cy="86" r="2.8"/>
+    <text x="62" y="48" class="mono">t</text>
+    <rect class="ghost" x="126" y="23" width="98" height="34" rx="8"/>
+    <text x="151" y="45" class="chipText">slider</text>
+    <path d="M203 36l6 6 6-6" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="242" y="48" class="mono">1.25</text>
+    <rect class="icon-hot" x="730" y="20" width="74" height="28" rx="14"/>
+    <path d="M748 27l12 7-12 7z" fill="#2563eb"/>
+    <text x="768" y="40" class="tiny" fill="#2563eb">play</text>
+    <rect class="icon-hot" x="806" y="20" width="28" height="28" rx="7"/>
+    <path d="M815 30h10a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4h-4l-5 5v-5h-1a4 4 0 0 1-4-4v-4a4 4 0 0 1 4-4z" fill="none" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+    <rect class="danger" x="844" y="20" width="28" height="28" rx="7"/>
+    <path d="M853 29l10 10M863 29l-10 10" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"/>
+    <line class="line" x1="62" y1="68" x2="872" y2="68"/>
+    <text x="62" y="115" class="mono">0</text>
+    <line x1="122" y1="107" x2="705" y2="107" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round"/>
+    <line x1="122" y1="107" x2="305" y2="107" stroke="url(#activeLine)" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="305" cy="107" r="17" fill="#ffffff" stroke="#2563eb" stroke-width="4"/>
+    <text x="738" y="115" class="mono">4</text>
+    <rect class="ghost" x="62" y="132" width="118" height="30" rx="15"/>
+    <text x="84" y="152" class="tiny">time variable</text>
+    <rect class="ghost" x="190" y="132" width="132" height="30" rx="15"/>
+    <text x="213" y="152" class="tiny">bounded loop</text>
+  </g>
+
+  <!-- ROW 3: FUNCTION -->
+  <g transform="translate(80,642)">
+    <rect class="row" x="0" y="0" width="880" height="150"/>
+    <rect class="subtle" x="18" y="20" width="28" height="68" rx="14"/>
+    <circle class="dot-valid" cx="32" cy="54" r="8"/>
+    <circle class="drag" cx="32" cy="34" r="2.8"/>
+    <circle class="drag" cx="32" cy="74" r="2.8"/>
+    <text x="62" y="48" class="mono">wave</text>
+    <rect class="ghost" x="150" y="23" width="112" height="34" rx="8"/>
+    <text x="174" y="45" class="chipText">function</text>
+    <path d="M240 36l6 6 6-6" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="282" y="48" class="mono">(x, y, speed)</text>
+    <rect class="icon-hot" x="806" y="20" width="28" height="28" rx="7"/>
+    <path d="M815 30h10a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4h-4l-5 5v-5h-1a4 4 0 0 1-4-4v-4a4 4 0 0 1 4-4z" fill="none" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+    <rect class="danger" x="844" y="20" width="28" height="28" rx="7"/>
+    <path d="M853 29l10 10M863 29l-10 10" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"/>
+    <line class="line" x1="62" y1="68" x2="872" y2="68"/>
+    <text x="62" y="113" class="math">sin(speed · x) + cos(y)</text>
+  </g>
+
+  <!-- ROW 4: COMMENT -->
+  <g transform="translate(80,814)">
+    <rect class="row" x="0" y="0" width="880" height="118"/>
+    <rect class="subtle" x="18" y="20" width="28" height="58" rx="14"/>
+    <circle class="dot-muted" cx="32" cy="49" r="8"/>
+    <circle class="drag" cx="32" cy="31" r="2.8"/>
+    <circle class="drag" cx="32" cy="67" r="2.8"/>
+    <rect class="ghost" x="62" y="22" width="92" height="30" rx="15"/>
+    <text x="84" y="42" class="tiny">comment</text>
+    <rect class="danger" x="844" y="20" width="28" height="28" rx="7"/>
+    <path d="M853 29l10 10M863 29l-10 10" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"/>
+    <line class="line" x1="62" y1="63" x2="872" y2="63"/>
+    <text x="62" y="95" class="comment">Use this note to explain the group below. Text mode exports it as a // comment.</text>
+  </g>
+
+  <!-- Add area -->
+  <g transform="translate(80,954)">
+    <rect class="row" x="0" y="0" width="880" height="66"/>
+    <text x="62" y="42" class="small">Add expression</text>
+    <rect class="icon-hot" x="806" y="18" width="28" height="28" rx="7"/>
+    <path d="M815 28h10a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4h-4l-5 5v-5h-1a4 4 0 0 1-4-4v-4a4 4 0 0 1 4-4z" fill="none" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+    <rect class="icon" x="844" y="18" width="28" height="28" rx="7"/>
+    <path d="M852 32h12M858 26v12" stroke="#475569" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
+
+  <!-- Graph area stub to show sidebar is full-height and rows are flush in sidebar -->
+  <rect x="960" y="60" width="560" height="1200" fill="#0b1020"/>
+  <path d="M1006 686c92-210 204-256 328-138 70 66 104 153 114 260" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.75"/>
+  <path d="M1012 720c130-164 286-184 442-54" fill="none" stroke="#f97316" stroke-width="3" opacity="0.72"/>
+  <circle cx="1250" cy="660" r="140" fill="none" stroke="#64748b" stroke-width="1" opacity="0.35"/>
+  <text x="1018" y="115" class="small" fill="#cbd5e1">Graph canvas continues beside the sidebar</text>
+
+  <!-- Callouts -->
+  <g transform="translate(1020,1010)">
+    <rect x="0" y="0" width="430" height="174" rx="14" fill="#ffffff" opacity="0.96"/>
+    <text x="24" y="38" class="label">Design intent</text>
+    <text x="24" y="72" class="small">1. Press Enter inside a row to create the next line.</text>
+    <text x="24" y="101" class="small">2. Drag/status share one slim strip, saving width.</text>
+    <text x="24" y="130" class="small">3. Comment/delete are small flush icons, not a side menu.</text>
+    <text x="24" y="159" class="small">4. Formula areas are borderless except row separators.</text>
+  </g>
+</svg>

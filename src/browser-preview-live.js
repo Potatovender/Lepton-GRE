@@ -181,12 +181,12 @@ const TIME_VARIABLE_MODES = new Set(["bounded", "unbounded", "bounded_looped"]);
 const HELP_TEXT = {
   standard: "Standard mode is the visual editor. Use tabs for functions, colors, bounds, draw layers, and settings.",
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
-  functions: "Functions tab entries can be variables, sliders, or parameterized functions. Variables are named formulas, sliders are adjustable numeric values, and functions accept inputs like f(x,y).",
+  functions: "Functions tab entries can be expressions, sliders, or parameterized functions. Expressions are named formulas over x and y, sliders are adjustable numeric values, and functions accept inputs like f(x,y).",
   colors: "Colors map red, green, and blue channels to function IDs. For example colour rgb = r~g~b uses functions named r, g, and b.",
   restrictions: "Bounds draw only where their function is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
   draws: "Draw layers connect a function, color, and bound. Layers are drawn in order and can be hidden or dragged.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
-  textLanguage: "Lepton text is the same graph in one copyable script. Use set, variable, slider, time, function, colour/color, boundary/restriction, and draw(...).",
+  textLanguage: "Lepton text is the same graph in one copyable script. Use set, expression, slider, time, function, colour/color, boundary/restriction, and draw(...).",
   applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
   refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
   backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
@@ -203,7 +203,7 @@ const HELP_TEXT = {
   settingAngleMode: "Chooses whether trig functions read angles as radians or degrees.",
   settingBackgroundColorId: "Choose the color ID used as the solid background when Background color is set to Custom.",
   boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
-  variableType: "Variable entries are named formulas. Use them for constants, equations, color channels, and helper expressions that other entries can reference.",
+  variableType: "Expression entries are named formulas over x and y. Use them for equations, constants, color channels, and helper math that other entries can reference.",
   sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
   functionType: "Function entries accept named inputs such as f(x,y). Inside the function body, input names take priority over outer variables with the same name.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
@@ -212,7 +212,7 @@ const HELP_TEXT = {
 let scene = structuredClone(DEFAULT_SCENE);
 let displayMode = "standard";
 let activeTab = "functions";
-const SIDEBAR_MIN_WIDTH = 340;
+const SIDEBAR_MIN_WIDTH = 380;
 let sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, Number(localStorage.getItem("lepton-sidebar-width") ?? "380"));
 let sidebarCollapsed = localStorage.getItem("lepton-sidebar-collapsed") === "true";
 let viewport = loadViewport();
@@ -223,13 +223,13 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 1: Choose an entry type",
-    body: "The Functions tab now starts each row as a variable. Keep variable for ordinary formulas like eq = sin(x)+cos(y), switch to slider for a draggable value, or switch to function when you want inputs like f(x,y)."
+    body: "The Functions tab now starts each row as an expression. Keep expression for ordinary formulas like eq = sin(x)+cos(y), switch to slider for a draggable value, or switch to function when you want inputs like f(x,y)."
   },
   {
     mode: "standard",
     tab: "functions",
-    title: "Step 2: Use variables, sliders, and functions",
-    body: "Variables can reference other IDs. Sliders expose a value between editable min and max endpoints. Functions add an inputs box; inside function f(x,banana), those input names override any outer variables with the same names."
+    title: "Step 2: Use expressions, sliders, and functions",
+    body: "Expressions can reference other IDs. Sliders expose a value between editable min and max endpoints. Functions add an inputs box; inside function f(x,banana), those input names override any outer expressions with the same names."
   },
   {
     mode: "standard",
@@ -253,7 +253,7 @@ const TUTORIAL_STEPS = [
     mode: "text",
     tab: "draws",
     title: "Step 6: Share or bulk edit",
-    body: "Text mode is the same graph as script. Settings appear first, followed by variable, slider, time, function, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
+    body: "Text mode is the same graph as script. Settings appear first, followed by expression, slider, time, function, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
   }
 ];
 const listControls = {
@@ -267,6 +267,7 @@ const playingTimeIds = new Set();
 const timeVariableDirections = new Map();
 const entryScrollTops = new Map();
 let pendingScrollTarget = null;
+let entryDragState = null;
 let keyboardOpen = false;
 let keyboardTab = "pad";
 let activeKeyboardTarget = null;
@@ -913,7 +914,7 @@ function renderPanel() {
           ? commentRow("functions", index, entry)
           : expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", functionRowContent(entry, index), "functions", index)
       ),
-      addRow("Add function", "functions")
+      addRow("Add expression", "functions")
     ].join("");
   }
 
@@ -1154,7 +1155,7 @@ function visibleEntries(entries, kind) {
 
 function commentRow(kind, index, entry) {
   return expressionRow("valid", "Comment", `
-    <textarea class="entry-comment-body" data-field="${kind}.${index}.text" placeholder="// comment" aria-label="Comment">${escapeHtml(commentText(entry))}</textarea>
+    <textarea class="entry-comment-body" data-field="${kind}.${index}.text" placeholder="write a comment" aria-label="Comment">${escapeHtml(commentText(entry))}</textarea>
   `, kind, index, { rowClass: "expression-row-comment", noInlineComment: true });
 }
 
@@ -1177,13 +1178,18 @@ function functionKindSelector(kind, index) {
     slider: "sliderType",
     function: "functionType"
   };
+  const labels = {
+    variable: "expression",
+    slider: "slider",
+    function: "function"
+  };
   return `
-    <div class="function-kind-selector" aria-label="Function entry type">
-      ${["variable", "slider", "function"].map((entryKind) => `
-        <button class="function-kind-button" type="button" data-function-kind="${index}.${entryKind}" data-help="${escapeHtml(HELP_TEXT[helpKeys[entryKind]])}" title="${escapeHtml(HELP_TEXT[helpKeys[entryKind]])}" aria-pressed="${kind === entryKind}">
-          ${entryKind}
-        </button>
-      `).join("")}
+    <div class="function-kind-selector" data-help="${escapeHtml(HELP_TEXT[helpKeys[kind] ?? "variableType"])}" title="${escapeHtml(HELP_TEXT[helpKeys[kind] ?? "variableType"])}">
+      <select class="function-kind-select" data-function-kind-select="${index}" aria-label="Function entry type">
+        ${["variable", "slider", "function"].map((entryKind) => `
+          <option value="${entryKind}" ${kind === entryKind ? "selected" : ""}>${labels[entryKind]}</option>
+        `).join("")}
+      </select>
     </div>
   `;
 }
@@ -1208,7 +1214,6 @@ function sliderRowContent(entry, index) {
   return `
     <div class="slider-controls">
       <label class="slider-value-row">
-        <span>value</span>
         ${mathEditor(`functions.${index}.expression`, entry.expression, "Slider value", true, "value")}
       </label>
       ${isUnboundedTime ? "" : `<div class="slider-track-row">
@@ -1256,19 +1261,22 @@ function expressionRow(status, message, content, kind = null, index = null, opti
   const entryAttrs = kind ? `data-entry-kind="${kind}" data-entry-index="${index}"` : "";
   const statusLabel = status === "valid" ? "status: valid" : message || `status: ${status}`;
   const hasInlineComment = kind && index != null && Object.prototype.hasOwnProperty.call(scene[kind]?.[index] ?? {}, "comment");
-  const existingComment = hasInlineComment ? String(scene[kind]?.[index]?.comment ?? "") : "";
   const inlineComment = kind && !options.noInlineComment && hasInlineComment
-    ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="// comment" aria-label="Line comment" />`
+    ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="line comment" aria-label="Line comment" />`
     : "";
   return `
     <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
-      <span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>
+      ${kind ? `
+        <div class="entry-row-grip" draggable="true" data-entry-drag-handle="${kind}.${index}" title="Drag to reorder" aria-label="Drag to reorder">
+          <span class="entry-grip-dot"></span>
+          <span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>
+          <span class="entry-grip-dot"></span>
+        </div>
+      ` : `<span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>`}
       <div class="entry-content">${content}${inlineComment}</div>
       ${kind ? `
         <div class="row-actions">
-          <button class="row-action row-action-small" data-move-entry="${kind}.${index}.-1" title="Move up" aria-label="Move row up">↑</button>
-          <button class="row-action row-action-small" data-move-entry="${kind}.${index}.1" title="Move down" aria-label="Move row down">↓</button>
-          ${options.noInlineComment || hasInlineComment ? "" : `<button class="row-action row-action-comment" data-add-inline-comment="${kind}.${index}" title="Add comment" aria-label="Add comment">Comment</button>`}
+          ${options.noInlineComment || hasInlineComment ? "" : `<button class="row-action row-action-comment" data-add-inline-comment="${kind}.${index}" title="Add comment" aria-label="Add comment">◌</button>`}
           <button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>
         </div>
       ` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
@@ -1286,7 +1294,7 @@ function addRow(label, kind) {
         <span class="entry-status"></span>
         <span>${label}</span>
       </button>
-      <button class="add-comment-side-button" data-add-comment="${kind}" type="button">Add comment</button>
+      <button class="add-comment-side-button" data-add-comment="${kind}" type="button" title="Add comment" aria-label="Add comment">◌</button>
     </div>
   `;
 }
@@ -1567,11 +1575,11 @@ function bindEvents() {
     keyboardOpen = false;
     renderApp();
   });
-  root.querySelectorAll("[data-function-kind]").forEach((button) => {
-    button.addEventListener("click", () => {
+  root.querySelectorAll("[data-function-kind-select]").forEach((field) => {
+    field.addEventListener("change", () => {
       syncFields();
-      const [rawIndex, kind] = button.dataset.functionKind.split(".");
-      const index = Number(rawIndex);
+      const index = Number(field.dataset.functionKindSelect);
+      const kind = field.value;
       if (!FUNCTION_ENTRY_KINDS.has(kind) || !scene.functions[index]) return;
       const before = sceneSnapshot();
       const entry = normalizeFunctionEntry(scene.functions[index]);
@@ -1926,18 +1934,6 @@ function bindEvents() {
     });
   });
 
-  root.querySelectorAll("[data-move-entry]").forEach((button) => {
-    button.addEventListener("click", () => {
-      syncFields();
-      const before = sceneSnapshot();
-      const [kind, rawIndex, rawDirection] = button.dataset.moveEntry.split(".");
-      moveEntry(kind, Number(rawIndex), Number(rawDirection));
-      recordSceneHistory(before);
-      pendingScrollTarget = { kind, index: Number(rawIndex) + Number(rawDirection) };
-      renderApp();
-    });
-  });
-
   root.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", () => {
       syncFields();
@@ -1986,6 +1982,45 @@ function bindEvents() {
       const before = sceneSnapshot();
       moveDrawLayer(from, to);
       recordSceneHistory(before);
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-entry-drag-handle]").forEach((handle) => {
+    handle.addEventListener("dragstart", (event) => {
+      const [kind, rawIndex] = handle.dataset.entryDragHandle.split(".");
+      entryDragState = { kind, index: Number(rawIndex) };
+      event.dataTransfer?.setData("text/plain", handle.dataset.entryDragHandle);
+      event.dataTransfer?.setDragImage(handle, handle.offsetWidth / 2, handle.offsetHeight / 2);
+    });
+    handle.addEventListener("dragend", () => {
+      entryDragState = null;
+      root.querySelectorAll(".expression-row-drop-target").forEach((row) => row.classList.remove("expression-row-drop-target"));
+    });
+  });
+
+  root.querySelectorAll("[data-entry-kind][data-entry-index]").forEach((row) => {
+    row.addEventListener("dragover", (event) => {
+      const state = entryDragState;
+      if (!state || state.kind !== row.dataset.entryKind) return;
+      event.preventDefault();
+      row.classList.add("expression-row-drop-target");
+    });
+    row.addEventListener("dragleave", () => {
+      row.classList.remove("expression-row-drop-target");
+    });
+    row.addEventListener("drop", (event) => {
+      const state = entryDragState;
+      if (!state || state.kind !== row.dataset.entryKind) return;
+      event.preventDefault();
+      row.classList.remove("expression-row-drop-target");
+      syncFields();
+      const before = sceneSnapshot();
+      const to = Number(row.dataset.entryIndex);
+      moveEntryTo(state.kind, state.index, to);
+      recordSceneHistory(before);
+      pendingScrollTarget = { kind: state.kind, index: to };
+      entryDragState = null;
       renderApp();
     });
   });
@@ -2652,6 +2687,14 @@ function moveEntry(kind, index, direction) {
   if (index < 0 || target < 0 || index >= scene[kind].length || target >= scene[kind].length || index === target) return false;
   const [entry] = scene[kind].splice(index, 1);
   scene[kind].splice(target, 0, entry);
+  return true;
+}
+
+function moveEntryTo(kind, from, to) {
+  if (!Array.isArray(scene[kind]) || !Number.isInteger(from) || !Number.isInteger(to)) return false;
+  if (from < 0 || from >= scene[kind].length || to < 0 || to >= scene[kind].length || from === to) return false;
+  const [entry] = scene[kind].splice(from, 1);
+  scene[kind].splice(to, 0, entry);
   return true;
 }
 
@@ -3591,7 +3634,7 @@ function validateScene() {
   diagnostics.functions = scene.functions.map((rawEntry) => {
     if (isCommentEntry(rawEntry)) return { status: "valid", message: "Comment" };
     const entry = normalizeFunctionEntry(rawEntry);
-    const label = entry.kind === "slider" ? "Slider" : entry.kind === "function" ? "Function" : "Variable";
+    const label = entry.kind === "slider" ? "Slider" : entry.kind === "function" ? "Function" : "Expression";
     const idResult = validateEntryId(entry.id, label, env);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, label, duplicateIds.functions);
@@ -5819,7 +5862,7 @@ function exportFunctionEntry(rawEntry, section = "functions") {
   } else if (entry.kind === "function") {
     line = `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
   } else {
-    line = `variable ${entry.id} = ${expression}`;
+    line = `expression ${entry.id} = ${expression}`;
   }
   return appendInlineComment(line, entry.comment);
 }
@@ -6043,8 +6086,8 @@ function importScene(raw) {
         setSceneSetting(next, assignment[1], assignment[2]);
         if (comment.trim()) next.settingLineComments[assignment[1]] = comment.trim();
       }
-    } else if (/^variable\s+/i.test(line)) {
-      const assignment = line.match(/^variable\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+    } else if (/^(variable|expression)\s+/i.test(line)) {
+      const assignment = line.match(/^(?:variable|expression)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {
         currentCommentSection = "functions";
         next.functions.push(withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
@@ -6448,7 +6491,7 @@ function collectTextDeclaredIdentifiers(source) {
   const ids = new Set();
   String(source ?? "").split("\n").forEach((line) => {
     const { code } = splitLeptonComment(line);
-    const declaration = code.match(/^\s*(?:variable|slider|function|colour|color|boundary|restriction)\s+([A-Za-z_]\w*)/i);
+    const declaration = code.match(/^\s*(?:variable|expression|slider|function|colour|color|boundary|restriction)\s+([A-Za-z_]\w*)/i);
     if (declaration) ids.add(declaration[1]);
     const time = code.match(/^\s*time\s+(?:bounded|unbounded|bounded_looped)\s+([A-Za-z_]\w*)/i);
     if (time) ids.add(time[1]);
@@ -6462,7 +6505,7 @@ function highlightLeptonLine(line, context = { declaredIds: new Set() }) {
 }
 
 function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
-  const declaration = line.match(/^(\s*)(set|variable|slider|time|function|colour|color|boundary|restriction)(\b)/i);
+  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|colour|color|boundary|restriction)(\b)/i);
   if (declaration) {
     const prefix = escapeHtml(declaration[1]);
     const keyword = declaration[2].toLowerCase();
@@ -6471,7 +6514,7 @@ function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
     return `${prefix}<span class="syntax-keyword">${declaration[2]}</span>${highlightLeptonTokens(rest, {
       ...context,
       markFirstNameAsSetting: keyword === "set",
-      mathDefinition: ["variable", "slider", "time", "function"].includes(keyword),
+      mathDefinition: ["variable", "expression", "slider", "time", "function"].includes(keyword),
       localIds: new Set(functionParams)
     })}`;
   }
