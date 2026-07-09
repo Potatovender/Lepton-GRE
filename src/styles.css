@@ -484,7 +484,20 @@ select {
 }
 
 .expression-row-drop-target {
-  box-shadow: inset 0 0 0 2px #4f7dd9;
+  box-shadow: inset 0 0 0 2px rgba(79, 125, 217, 0.7);
+}
+
+.expression-row-drag-image {
+  position: fixed;
+  top: -10000px;
+  left: -10000px;
+  z-index: 9999;
+  border: 1px solid rgba(79, 125, 217, 0.7);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 .entry-status {
@@ -1165,9 +1178,9 @@ select {
 
 .row-action-comment {
   font-size: 15px;
-  color: #255a9c;
-  background: #eef6ff;
-  border-color: #b7d4ff;
+  color: #6b7280;
+  background: #f8fafc;
+  border-color: #d8dee8;
 }
 
 .draw-layer-toolbar {
@@ -1499,10 +1512,10 @@ select {
 .add-comment-side-button,
 .comment-add-button {
   min-width: 0;
-  border: 1px solid #b7d4ff;
+  border: 1px solid #d8dee8;
   padding: 0;
-  background: #eef6ff;
-  color: #244f99;
+  background: #f8fafc;
+  color: #6b7280;
   cursor: pointer;
   font-weight: 700;
   overflow: hidden;
@@ -1515,9 +1528,10 @@ select {
 }
 
 .comment-add-button {
-  width: 100%;
-  min-height: 38px;
-  border-radius: 5px;
+  width: 38px;
+  min-height: 30px;
+  border-radius: 6px;
+  font-size: 12px;
 }
 
 .compact-field {

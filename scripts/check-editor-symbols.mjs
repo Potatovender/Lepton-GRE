@@ -479,13 +479,13 @@ check("text mode refresh preserves frac brace syntax", () => {
 });
 
 check("comments round-trip between standard and text sections", () => {
-  const imported = sandbox.importScene(`// functions: helper note
+  const imported = sandbox.importScene(`// helper note
 variable eq = x+y // inline equation
-// colors: palette note
+// palette note
 colour rgb = eq~eq~eq // inline colour
-// bounds: gate note
+// gate note
 boundary rest = 1~False // inline boundary
-// draw: layer note
+// layer note
 draw(eq,rgb,rest,False) // inline draw`);
   assert(imported.functions[0].type === "comment", JSON.stringify(imported.functions));
   assert(imported.functions[0].text === "helper note", JSON.stringify(imported.functions[0]));
@@ -497,10 +497,14 @@ draw(eq,rgb,rest,False) // inline draw`);
 
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("// functions: helper note\nexpression eq = x+y // inline equation"), exported);
-  assert(exported.includes("// colors: palette note\ncolour rgb = eq~eq~eq // inline colour"), exported);
-  assert(exported.includes("// bounds: gate note\nboundary rest = rest_fn~False // inline boundary"), exported);
-  assert(exported.includes("// draw: layer note\ndraw(eq,rgb,rest,False) // inline draw"), exported);
+  assert(exported.includes("// helper note\nexpression eq = x+y // inline equation"), exported);
+  assert(exported.includes("// palette note\ncolour rgb = eq~eq~eq // inline colour"), exported);
+  assert(exported.includes("// gate note\nboundary rest = rest_fn~False // inline boundary"), exported);
+  assert(exported.includes("// layer note\ndraw(eq,rgb,rest,False) // inline draw"), exported);
+  assert(!exported.includes("// functions:"), exported);
+  assert(!exported.includes("// colors:"), exported);
+  assert(!exported.includes("// bounds:"), exported);
+  assert(!exported.includes("// draw:"), exported);
 
   const second = sandbox.importScene(exported);
   assert(second.colors[0].type === "comment" && second.colors[0].text === "palette note", JSON.stringify(second.colors));
@@ -508,7 +512,7 @@ draw(eq,rgb,rest,False) // inline draw`);
 });
 
 check("settings comments round-trip in the settings section", () => {
-  const imported = sandbox.importScene(`// settings: viewport note
+  const imported = sandbox.importScene(`// viewport note
 set x_min = -8 // left edge
 set x_max = 8
 variable eq = x`);
@@ -517,20 +521,21 @@ variable eq = x`);
   assert(sandbox.__debugScene.settingLineComments.x_min === "left edge", JSON.stringify(sandbox.__debugScene.settingLineComments));
   const exported = sandbox.exportScene();
   assert(exported.includes("set x_min = -8 // left edge"), exported);
-  assert(exported.includes("// settings: viewport note"), exported);
+  assert(exported.startsWith("// viewport note\nset x_min = -8"), exported);
+  assert(!exported.includes("// settings:"), exported);
   const second = sandbox.importScene(exported);
   assert(second.settingsComments[0].text === "viewport note", JSON.stringify(second.settingsComments));
   assert(second.settingLineComments.x_min === "left edge", JSON.stringify(second.settingLineComments));
 });
 
 check("comment entries are ignored by graph validation and references", () => {
-  const imported = sandbox.importScene(`// functions: note
+  const imported = sandbox.importScene(`// note
 variable eq = x
-// colors: note
+// note
 colour rgb = eq~eq~eq
-// bounds: note
+// note
 boundary rest = 1~False
-// draw: note
+// note
 draw(eq,rgb,rest,False)`);
   sandbox.__debugSetScene(imported);
   const diagnostics = sandbox.validateScene();
@@ -551,9 +556,11 @@ variable b = y`));
 
 check("Lepton text highlighting uses double slash comments", () => {
   const html = sandbox.highlightLeptonText(`expression eq = x // inline note
-// functions: standalone`);
+// standalone`);
   assert(html.includes('<span class="syntax-comment">// inline note</span>'), html);
-  assert(html.includes('<span class="syntax-comment">// functions: standalone</span>'), html);
+  assert(html.includes('<span class="syntax-comment">// standalone</span>'), html);
+  assert(sandbox.highlightLeptonText("//") === '<span class="syntax-comment">//</span>');
+  assert(sandbox.highlightLeptonText("// ") === '<span class="syntax-comment">// </span>');
 });
 
 check("function rows use an expression dropdown and icon actions", () => {
