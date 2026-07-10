@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260706-comments-ui")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-unified-data")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -384,7 +384,7 @@ draw(f,c1,r1,False)`);
   assert(exported.includes("\nslider speed = 5 range -2~8"), exported);
   assert(exported.includes("\ntime unbounded t = 0"), exported);
   assert(!exported.includes("\ntime unbounded t = 0 range"), exported);
-  assert(exported.includes("\nfunction f(x,y) = x+y"), exported);
+  assert(exported.includes("\nmap f(x,y) = x+y"), exported);
 
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
   const value = sandbox.compileExpression("f(2,3)")(0, 0, env);
@@ -466,7 +466,7 @@ variable f2 = 2*x+y
 variable f3 = f1\\left(f2,3\\right)`);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("\nfunction f1(x,y) = x^2+y^2"), exported);
+  assert(exported.includes("\nmap f1(x,y) = x^2+y^2"), exported);
   assert(exported.includes("\nexpression f3 = f1(f2,3)"), exported);
   assert(!exported.includes("\\left") && !exported.includes("\\right"), exported);
 });
@@ -574,6 +574,59 @@ check("function rows use an expression dropdown and icon actions", () => {
   assert(row.includes('data-add-inline-comment="functions.0"'), row);
   assert(!row.includes("data-move-entry"), row);
   assert(!row.includes("Move up"), row);
+});
+
+check("standard panel renders a unified data workspace", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`expression eq = x
+colour rgb = eq~eq~eq
+boundary rest = 1~False
+draw(eq,rgb,rest,False)`));
+  const html = sandbox.renderPanel();
+  assert(html.includes('data-list-controls="data"'), html);
+  assert(html.includes('data-new-entry-menu'), html);
+  assert(html.includes('data-add="functions" data-entry-kind-choice="variable"'), html);
+  assert(html.includes('data-entry-kind="colors"'), html);
+  assert(html.includes('data-entry-kind="restrictions"'), html);
+  assert(html.includes('data-entry-kind="draws"'), html);
+});
+
+check("mixed data order round-trips through text export", () => {
+  const imported = sandbox.importScene(`expression eq = x
+colour rgb = eq~eq~eq
+// note before boundary
+boundary rest = 1~False
+draw(eq,rgb,rest,False)
+expression later = y`);
+  sandbox.__debugSetScene(imported);
+  sandbox.moveMixedDataEntry("colors", 0, "functions", 0);
+  const exported = sandbox.exportScene();
+  const eqIndex = exported.indexOf("expression eq = x");
+  const colorIndex = exported.indexOf("colour rgb = eq~eq~eq");
+  const laterIndex = exported.indexOf("expression later = y");
+  assert(colorIndex !== -1 && eqIndex !== -1 && laterIndex !== -1, exported);
+  assert(colorIndex < eqIndex, exported);
+  assert(exported.includes("// note before boundary\nboundary rest = rest_fn~False"), exported);
+});
+
+check("new data entries append after imported entries", () => {
+  const imported = sandbox.importScene(`expression eq = x`);
+  sandbox.__debugSetScene(imported);
+  const target = sandbox.addEntry("functions", "data");
+  sandbox.__debugScene.functions[target.index].kind = "function";
+  const exported = sandbox.exportScene();
+  assert(exported.indexOf("expression eq = x") < exported.indexOf("map f"), exported);
+});
+
+check("map text imports as a parameterized value", () => {
+  const imported = sandbox.importScene(`map wave(a,b)=sqrt(a^2+b^2)
+expression eq = wave(x,y)`);
+  sandbox.__debugSetScene(imported);
+  const mapEntry = sandbox.__debugScene.functions[0];
+  assert(mapEntry.kind === "function", JSON.stringify(mapEntry));
+  assert(mapEntry.id === "wave", JSON.stringify(mapEntry));
+  assert(mapEntry.params.join(",") === "a,b", JSON.stringify(mapEntry));
+  const exported = sandbox.exportScene();
+  assert(exported.includes("map wave(a,b) = sqrt(a^2+b^2)"), exported);
 });
 
 check("updated water sample imports an unbounded time variable", () => {

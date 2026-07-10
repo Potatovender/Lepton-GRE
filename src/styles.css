@@ -366,7 +366,7 @@ select {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   background: #ffffff;
   border-right: 1px solid #d7dce5;
   overflow: hidden;
@@ -456,12 +456,18 @@ select {
   background: #ffffff;
 }
 
+.data-list-controls {
+  grid-template-columns: 118px minmax(0, 1fr) 94px;
+}
+
 .list-search,
-.list-sort {
+.list-sort,
+.list-type-filter {
   min-width: 0;
 }
 
-.list-sort {
+.list-sort,
+.list-type-filter {
   cursor: pointer;
 }
 
@@ -1117,8 +1123,25 @@ select {
 .entry-content {
   min-width: 0;
   display: grid;
-  gap: 8px;
-  padding-right: 4px;
+  gap: 7px;
+  padding-right: 0;
+}
+
+.entry-type-label {
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid #d8dee8;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #f8fafc;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .entry-comment-inline,
@@ -1177,10 +1200,20 @@ select {
 }
 
 .row-action-comment {
-  font-size: 15px;
   color: #6b7280;
   background: #f8fafc;
   border-color: #d8dee8;
+}
+
+.row-action-comment svg,
+.add-comment-side-button svg,
+.comment-add-button svg,
+.new-entry-popover svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
 }
 
 .draw-layer-toolbar {
@@ -1486,6 +1519,82 @@ select {
   border-bottom: 1px solid #eceff4;
 }
 
+.add-data-row-wrap {
+  display: block;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.new-entry-menu {
+  position: relative;
+  min-width: 0;
+}
+
+.new-entry-menu > summary {
+  list-style: none;
+  border: 1px solid #d8dee8;
+  border-radius: 7px;
+  min-height: 42px;
+  padding: 8px 10px;
+}
+
+.new-entry-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.new-entry-menu[open] > summary {
+  border-color: #abc6f6;
+  background: #eef4ff;
+  color: #174ea6;
+}
+
+.new-entry-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 16;
+  width: min(240px, calc(var(--sidebar-width) - 36px));
+  display: grid;
+  gap: 3px;
+  border: 1px solid #cfd6e3;
+  border-radius: 8px;
+  padding: 6px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+}
+
+.new-entry-popover button {
+  min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 9px;
+  background: transparent;
+  color: #26364f;
+  text-align: left;
+  cursor: pointer;
+}
+
+.new-entry-popover button:hover,
+.new-entry-popover button:focus-visible {
+  background: #eef4ff;
+  outline: none;
+}
+
+.new-entry-group {
+  display: grid;
+  gap: 2px;
+  border-bottom: 1px solid #edf0f5;
+  padding-bottom: 5px;
+}
+
+.new-entry-heading {
+  padding: 3px 9px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .add-row {
   width: 100%;
   min-height: 64px;
@@ -1524,14 +1633,16 @@ select {
 
 .add-comment-side-button {
   width: 38px;
-  font-size: 16px;
+  display: grid;
+  place-items: center;
 }
 
 .comment-add-button {
   width: 38px;
   min-height: 30px;
   border-radius: 6px;
-  font-size: 12px;
+  display: grid;
+  place-items: center;
 }
 
 .compact-field {
@@ -1668,6 +1779,25 @@ textarea.compact-field,
   display: grid;
   gap: 12px;
   padding: 12px;
+}
+
+.settings-panel-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eceff4;
+  background: #ffffff;
+}
+
+.settings-panel-heading h2 {
+  margin: 0;
+  color: #26364f;
+  font-size: 15px;
 }
 
 .settings-section {
@@ -1926,6 +2056,39 @@ textarea.compact-field,
   backdrop-filter: blur(6px);
 }
 
+.graph-settings-toggle {
+  position: absolute;
+  top: 52px;
+  left: 12px;
+  z-index: 4;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(126, 154, 213, 0.82);
+  border-radius: 5px;
+  background: rgba(239, 246, 255, 0.82);
+  color: #1d4ed8;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.graph-settings-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.85;
+}
+
+.graph-settings-toggle:hover,
+.graph-settings-toggle:focus-visible,
+.graph-settings-toggle.active {
+  background: rgba(255, 255, 255, 0.94);
+  outline: 2px solid rgba(79, 125, 217, 0.72);
+  outline-offset: 1px;
+}
+
 .sidebar-toggle:hover,
 .sidebar-toggle:focus-visible {
   background: rgba(255, 255, 255, 0.92);
@@ -2055,6 +2218,12 @@ textarea.compact-field,
   font-size: 12px;
 }
 
+.render-overlay-error {
+  border-color: #efb5b1;
+  background: rgba(255, 246, 246, 0.96);
+  color: #9f2f28;
+}
+
 .keyboard-toggle {
   position: absolute;
   right: 14px;
@@ -2173,6 +2342,7 @@ textarea.compact-field,
 }
 
 .capture-mode .sidebar-toggle,
+.capture-mode .graph-settings-toggle,
 .capture-mode .render-overlay,
 .capture-mode .keyboard-toggle,
 .capture-mode .keyboard-panel {

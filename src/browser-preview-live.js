@@ -3,6 +3,7 @@ const DEFAULT_SCENE = {
   colors: [],
   restrictions: [],
   draws: [],
+  dataOrder: [],
   settingsComments: [],
   settingLineComments: {},
   settings: {
@@ -23,7 +24,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260706-comments-ui";
+const APP_VERSION = "20260710-unified-data";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -40,13 +41,7 @@ function ensureLeptonFavicon() {
   }
 }
 
-const tabs = [
-  ["functions", "Functions"],
-  ["colors", "Colors"],
-  ["restrictions", "Bounds"],
-  ["draws", "Draw"],
-  ["settings", "Settings"]
-];
+const DATA_ENTRY_KINDS = ["functions", "colors", "restrictions", "draws"];
 
 const BUILTIN_NAMES = new Set([
   "x",
@@ -178,21 +173,27 @@ const LEGACY_DEFAULT_COLOR_IDS = new Set(["c1"]);
 const LEGACY_DEFAULT_BOUNDARY_IDS = new Set(["rest"]);
 const FUNCTION_ENTRY_KINDS = new Set(["variable", "slider", "function"]);
 const TIME_VARIABLE_MODES = new Set(["bounded", "unbounded", "bounded_looped"]);
+const DATA_TYPE_LABELS = {
+  functions: "value",
+  colors: "colour",
+  restrictions: "boundary",
+  draws: "draw layer"
+};
 const HELP_TEXT = {
   standard: "Standard mode is the visual editor. Use tabs for functions, colors, bounds, draw layers, and settings.",
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
-  functions: "Functions tab entries can be expressions, sliders, or parameterized functions. Expressions are named formulas over x and y, sliders are adjustable numeric values, and functions accept inputs like f(x,y).",
-  colors: "Colors map red, green, and blue channels to function IDs. For example colour rgb = r~g~b uses functions named r, g, and b.",
-  restrictions: "Bounds draw only where their function is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
-  draws: "Draw layers connect a function, color, and bound. Layers are drawn in order and can be hidden or dragged.",
+  functions: "The Data workspace holds values, colours, boundaries, draw layers, and comments in one reorderable list.",
+  colors: "Colours map red, green, and blue channels to value IDs. For example colour rgb = r~g~b uses values named r, g, and b.",
+  restrictions: "Boundaries draw only where their referenced value is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
+  draws: "Draw layers connect a value, colour, and boundary. Layers are drawn in the order you place them and can be hidden.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
-  textLanguage: "Lepton text is the same graph in one copyable script. Use set, expression, slider, time, function, colour/color, boundary/restriction, and draw(...).",
+  textLanguage: "Lepton text is the same graph in one copyable script. Use set, expression, slider, time, map, colour/color, boundary/restriction, and draw(...).",
   applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
   refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
-  backgroundColor: "Default uses the grid background. Custom uses a color ID from the Colors tab as a solid canvas background.",
+  backgroundColor: "Default uses the grid background. Custom uses a colour ID from the Data workspace as a solid canvas background.",
   settingXMin: "The left edge of the coordinate window. You can enter numbers or expressions such as -pi.",
   settingXMax: "The right edge of the coordinate window. It must be greater than x minimum when square grid is off.",
-  settingYMin: "The bottom edge of the coordinate window. You can use the same math syntax as function fields.",
+  settingYMin: "The bottom edge of the coordinate window. You can use the same math syntax as value fields.",
   settingYMax: "The top edge of the coordinate window. It must be greater than y minimum when square grid is off.",
   settingEnsureSquareGrid: "Keeps graph units visually square. If the requested bounds do not match the aspect ratio, Lepton expands the window to fit.",
   settingAspectRatio: "Controls the shape Lepton fits the square grid into. Use a preset or Custom for your own width:height ratio.",
@@ -205,13 +206,14 @@ const HELP_TEXT = {
   boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
   variableType: "Expression entries are named formulas over x and y. Use them for equations, constants, color channels, and helper math that other entries can reference.",
   sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
-  functionType: "Function entries accept named inputs such as f(x,y). Inside the function body, input names take priority over outer variables with the same name.",
+  functionType: "Map entries accept named inputs such as wave(x,y). Inside the map body, input names take priority over outer values with the same name.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
 };
 
 let scene = structuredClone(DEFAULT_SCENE);
 let displayMode = "standard";
 let activeTab = "functions";
+let settingsPanelOpen = false;
 const SIDEBAR_MIN_WIDTH = 380;
 let sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, Number(localStorage.getItem("lepton-sidebar-width") ?? "380"));
 let sidebarCollapsed = localStorage.getItem("lepton-sidebar-collapsed") === "true";
@@ -222,41 +224,42 @@ const TUTORIAL_STEPS = [
   {
     mode: "standard",
     tab: "functions",
-    title: "Step 1: Choose an entry type",
-    body: "The Functions tab now starts each row as an expression. Keep expression for ordinary formulas like eq = sin(x)+cos(y), switch to slider for a draggable value, or switch to function when you want inputs like f(x,y)."
+    title: "Step 1: Create data",
+    body: "The Data workspace holds everything except settings. Use New to create a value, colour, boundary, draw layer, or comment. Values can be expressions, sliders, or maps."
   },
   {
     mode: "standard",
     tab: "functions",
-    title: "Step 2: Use expressions, sliders, and functions",
-    body: "Expressions can reference other IDs. Sliders expose a value between editable min and max endpoints. Functions add an inputs box; inside function f(x,banana), those input names override any outer expressions with the same names."
+    title: "Step 2: Use expressions, sliders, and maps",
+    body: "Expressions reference x, y, and other IDs. Sliders expose an adjustable value. Maps accept inputs like wave(a,b); inside a map, input names override outer values with the same names."
   },
   {
     mode: "standard",
     tab: "colors",
     title: "Step 3: Make a colour",
-    body: "Colours point their red, green, and blue channels at function IDs. A simple colour can use the same function three times; richer graphs use separate r, g, and b functions."
+    body: "Colours point their red, green, and blue channels at value IDs. A simple colour can use the same value three times; richer graphs use separate r, g, and b values."
   },
   {
     mode: "standard",
     tab: "restrictions",
     title: "Step 4: Add a boundary",
-    body: "Boundaries decide where a layer draws. Unchecked draws when the boundary function is >= 0. Checked draws when it is <= 0. Use the default boundary for no restriction."
+    body: "Boundaries decide where a layer draws. Unchecked draws when the boundary value is >= 0. Checked draws when it is <= 0. Use the default boundary for no restriction."
   },
   {
     mode: "standard",
     tab: "draws",
     title: "Step 5: Connect a draw layer",
-    body: "Draw chooses the function, colour, and boundary to render. Blank graphs offer f1, default colour, and default boundary so there is always a valid starting layer."
+    body: "Draw chooses the value, colour, and boundary to render. Blank graphs offer f1, default colour, and default boundary so there is always a valid starting layer."
   },
   {
     mode: "text",
     tab: "draws",
     title: "Step 6: Share or bulk edit",
-    body: "Text mode is the same graph as script. Settings appear first, followed by expression, slider, time, function, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
+    body: "Text mode is the same graph as script. Settings appear first, followed by expression, slider, time, map, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
   }
 ];
 const listControls = {
+  data: { query: "", sort: "custom", type: "all" },
   functions: { query: "", sort: "custom" },
   colors: { query: "", sort: "custom" },
   restrictions: { query: "", sort: "custom" }
@@ -315,11 +318,6 @@ function renderApp() {
             <button class="display-button" data-display-mode="text" aria-selected="${displayMode === "text"}">${helpDash("Text", "text")}</button>
           </div>
         </header>
-        <nav class="tab-row" aria-label="Editor sections" ${displayMode === "text" ? "hidden" : ""}>
-          ${tabs
-            .map(([id, label]) => `<button class="tab-button" data-tab="${id}" aria-selected="${id === activeTab}">${helpDash(label, id)}</button>`)
-            .join("")}
-        </nav>
         <div class="entry-list ${displayMode === "text" ? "entry-list-text" : ""}">${renderPanel()}</div>
         <button class="keyboard-toggle" data-action="toggle-keyboard" type="button" aria-pressed="${keyboardOpen}" aria-label="${keyboardOpen ? "Hide keyboard" : "Show keyboard"}">⌨</button>
       </section>
@@ -328,10 +326,11 @@ function renderApp() {
         <button class="sidebar-toggle" data-action="toggle-sidebar" aria-label="${sidebarCollapsed ? "Show expression panel" : "Hide expression panel"}" aria-pressed="${sidebarCollapsed}">
           <span aria-hidden="true"></span>
         </button>
+        ${displayMode === "standard" ? `<button class="graph-settings-toggle ${settingsPanelOpen ? "active" : ""}" data-action="toggle-settings-panel" aria-label="${settingsPanelOpen ? "Hide settings" : "Show settings"}" aria-pressed="${settingsPanelOpen}" type="button">${gearIcon()}</button>` : ""}
         ${keyboardOpen ? renderKeyboardPanel() : ""}
         <canvas class="grid-canvas"></canvas>
         <div class="grid-boundary-overlay" aria-hidden="true"></div>
-        <div class="render-overlay">${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}</div>
+        ${diagnostics.hasErrors ? `<div class="render-overlay render-overlay-error">${diagnostics.summary}</div>` : ""}
       </section>
       ${renderSavedGraphsDialog()}
     </main>
@@ -362,14 +361,112 @@ function renderGraphActionsMenu() {
   `;
 }
 
+function gearIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6z"/><path d="M19 12a7.4 7.4 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.8-1L14.4 3h-4.8l-.3 3.1a8 8 0 0 0-1.8 1l-2.4-1-2 3.4 2 1.5A7.4 7.4 0 0 0 5 12c0 .3 0 .7.1 1l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.8 1l.3 3.1h4.8l.3-3.1a8 8 0 0 0 1.8-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></svg>`;
+}
+
+function commentIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5h14v8.5H9l-4 3V6.5z"/><path d="M8 10h8M8 13h5"/></svg>`;
+}
+
 function panelScrollKey() {
-  return displayMode === "text" ? "text" : activeTab;
+  if (displayMode === "text") return "text";
+  return settingsPanelOpen ? "settings" : "data";
 }
 
 function sortLabel(sort) {
   if (sort === "az") return "ID A-Z";
   if (sort === "za") return "ID Z-A";
   return "In order";
+}
+
+function createEntryUid(kind = "entry") {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return `${kind}-${crypto.randomUUID()}`;
+  return `${kind}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function ensureEntryUid(entry, kind = "entry") {
+  if (!entry || typeof entry !== "object") return "";
+  if (!entry._uid) entry._uid = createEntryUid(kind);
+  return entry._uid;
+}
+
+function entryOrderKey(kind, uid) {
+  return `${kind}:${uid}`;
+}
+
+function ensureSceneDataOrder(target = scene) {
+  if (!target || typeof target !== "object") return [];
+  if (!Array.isArray(target.dataOrder)) target.dataOrder = [];
+  const valid = new Set();
+  for (const kind of DATA_ENTRY_KINDS) {
+    for (const entry of target[kind] ?? []) {
+      valid.add(entryOrderKey(kind, ensureEntryUid(entry, kind)));
+    }
+  }
+  const seen = new Set();
+  target.dataOrder = target.dataOrder.filter((ref) => {
+    const key = entryOrderKey(ref?.kind, ref?.uid);
+    if (!valid.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  for (const kind of DATA_ENTRY_KINDS) {
+    for (const entry of target[kind] ?? []) {
+      const uid = ensureEntryUid(entry, kind);
+      const key = entryOrderKey(kind, uid);
+      if (seen.has(key)) continue;
+      target.dataOrder.push({ kind, uid });
+      seen.add(key);
+    }
+  }
+  return target.dataOrder;
+}
+
+function orderedDataEntries(target = scene) {
+  ensureSceneDataOrder(target);
+  const entries = [];
+  for (const ref of target.dataOrder ?? []) {
+    const list = target[ref.kind];
+    if (!Array.isArray(list)) continue;
+    const index = list.findIndex((entry) => ensureEntryUid(entry, ref.kind) === ref.uid);
+    if (index === -1) continue;
+    entries.push({ kind: ref.kind, index, entry: list[index] });
+  }
+  return entries;
+}
+
+function dataSubtype(entry, kind) {
+  if (isCommentEntry(entry)) return "comment";
+  if (kind === "functions") return normalizeFunctionEntry(entry).kind;
+  return kind;
+}
+
+function dataTypeLabel(kind, entry) {
+  if (isCommentEntry(entry)) return "comment";
+  if (kind === "functions") {
+    const subtype = normalizeFunctionEntry(entry).kind;
+    if (subtype === "slider") return "value · slider";
+    if (subtype === "function") return "value · map";
+    return "value · expression";
+  }
+  return DATA_TYPE_LABELS[kind] ?? kind;
+}
+
+function exportOrderedDataEntry(kind, entry) {
+  if (kind === "functions") return exportFunctionEntry(entry, kind);
+  if (kind === "colors") return exportColorEntry(entry);
+  if (kind === "restrictions") return exportRestrictionEntry(entry);
+  if (kind === "draws") return exportDrawEntry(entry);
+  return "";
+}
+
+function pushDataEntry(target, kind, entry) {
+  ensureEntryUid(entry, kind);
+  target[kind].push(entry);
+  if (!Array.isArray(target.dataOrder)) target.dataOrder = [];
+  target.dataOrder.push({ kind, uid: entry._uid });
+  return entry;
 }
 
 function normalizeFunctionEntry(entry) {
@@ -907,78 +1004,69 @@ function renderPanel() {
     `;
   }
 
-  if (activeTab === "functions") {
-    return [
-      tutorialCoachmark(),
-      listControlBar("functions", "functions"),
-      ...visibleEntries(scene.functions, "functions").map(
-        ([entry, index]) => isCommentEntry(entry)
-          ? commentRow("functions", index, entry)
-          : expressionRow(diagnostics.functions[index]?.status ?? "invalid", diagnostics.functions[index]?.message ?? "", functionRowContent(entry, index), "functions", index)
-      ),
-      addRow("Add expression", "functions")
-    ].join("");
-  }
+  if (settingsPanelOpen) return renderSettingsPanel(diagnostics);
+  return renderDataPanel(diagnostics);
+}
 
-  if (activeTab === "colors") {
-    return [
-      tutorialCoachmark(),
-      listControlBar("colors", "colors"),
-      ...visibleEntries(scene.colors, "colors").map(
-        ([entry, index]) => isCommentEntry(entry)
-          ? commentRow("colors", index, entry)
-          : expressionRow(diagnostics.colors[index]?.status ?? "invalid", diagnostics.colors[index]?.message ?? "", `
-          <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Color id" />
-          <label class="channel-row"><span class="channel-label">red channel</span>${searchableReference(`colors.${index}.red`, dataEntries(scene.functions), entry.red, "Red function")}</label>
-          <label class="channel-row"><span class="channel-label">green channel</span>${searchableReference(`colors.${index}.green`, dataEntries(scene.functions), entry.green, "Green function")}</label>
-          <label class="channel-row"><span class="channel-label">blue channel</span>${searchableReference(`colors.${index}.blue`, dataEntries(scene.functions), entry.blue, "Blue function")}</label>
-        `, "colors", index)
-      ),
-      addRow("Add color", "colors")
-    ].join("");
-  }
+function renderDataPanel(diagnostics) {
+  const rows = visibleDataEntries().map(({ kind, index, entry }) => {
+    if (isCommentEntry(entry)) return commentRow(kind, index, entry, dataTypeLabel(kind, entry));
+    return expressionRow(
+      diagnostics[kind]?.[index]?.status ?? "invalid",
+      diagnostics[kind]?.[index]?.message ?? "",
+      dataRowContent(kind, entry, index),
+      kind,
+      index,
+      { rowClass: kind === "draws" && entry.hidden ? "expression-row-hidden" : "", typeLabel: dataTypeLabel(kind, entry) }
+    );
+  });
+  return [
+    tutorialCoachmark(),
+    timePlaybackControls(),
+    listControlBar("data", "data"),
+    ...rows,
+    addDataRow()
+  ].join("");
+}
 
-  if (activeTab === "restrictions") {
-    return [
-      tutorialCoachmark(),
-      listControlBar("restrictions", "bounds"),
-      ...visibleEntries(scene.restrictions, "restrictions").map(
-        ([entry, index]) => isCommentEntry(entry)
-          ? commentRow("restrictions", index, entry)
-          : expressionRow(diagnostics.restrictions[index]?.status ?? "invalid", diagnostics.restrictions[index]?.message ?? "", `
-          <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Restriction id" />
-          <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, dataEntries(scene.functions), entry.expression, "Boundary function")}</label>
-          <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> draw when less than or equal to 0 ${helpMark("boundaryDirection")}</label>
-        `, "restrictions", index)
-      ),
-      addRow("Add boundary", "restrictions")
-    ].join("");
+function dataRowContent(kind, entry, index) {
+  if (kind === "functions") return functionRowContent(entry, index);
+  if (kind === "colors") {
+    return `
+      <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Colour id" />
+      <label class="channel-row"><span class="channel-label">red channel</span>${searchableReference(`colors.${index}.red`, dataEntries(scene.functions), entry.red, "Red function")}</label>
+      <label class="channel-row"><span class="channel-label">green channel</span>${searchableReference(`colors.${index}.green`, dataEntries(scene.functions), entry.green, "Green function")}</label>
+      <label class="channel-row"><span class="channel-label">blue channel</span>${searchableReference(`colors.${index}.blue`, dataEntries(scene.functions), entry.blue, "Blue function")}</label>
+    `;
   }
-
-  if (activeTab === "draws") {
-    return [
-      tutorialCoachmark(),
-      timePlaybackControls(),
-      ...scene.draws.map(
-        (entry, index) => isCommentEntry(entry)
-          ? commentRow("draws", index, entry)
-          : expressionRow(diagnostics.draws[index]?.status ?? "invalid", diagnostics.draws[index]?.message ?? "", `
-          <div class="draw-layer-toolbar">
-            <button class="draw-drag-handle" data-draw-handle="${index}" draggable="true" title="Drag to reorder draw layer" aria-label="Drag to reorder draw layer">↕</button>
-            <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
-          </div>
-          ${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}
-          ${searchableReference(`draws.${index}.colorId`, drawColorEntries(), entry.colorId, "Draw color")}
-          ${searchableReference(`draws.${index}.restrictionId`, drawBoundaryEntries(), entry.restrictionId, "Draw boundary")}
-        `, "draws", index, { rowClass: entry.hidden ? "expression-row-hidden" : "", attrs: `data-draw-index="${index}"` })
-      ),
-      addRow("Add draw layer", "draws")
-    ].join("");
+  if (kind === "restrictions") {
+    return `
+      <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Boundary id" />
+      <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, dataEntries(scene.functions), entry.expression, "Boundary function")}</label>
+      <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> draw when less than or equal to 0 ${helpMark("boundaryDirection")}</label>
+    `;
   }
+  if (kind === "draws") {
+    return `
+      <div class="draw-layer-toolbar">
+        <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
+      </div>
+      ${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}
+      ${searchableReference(`draws.${index}.colorId`, drawColorEntries(), entry.colorId, "Draw color")}
+      ${searchableReference(`draws.${index}.restrictionId`, drawBoundaryEntries(), entry.restrictionId, "Draw boundary")}
+    `;
+  }
+  return "";
+}
 
+function renderSettingsPanel(diagnostics) {
   const gridStatus = diagnostics.settings[0] ?? { status: "valid", message: "Grid rendering settings are valid" };
   return `
     ${tutorialCoachmark()}
+    <div class="settings-panel-heading">
+      <h2>Settings</h2>
+      <button class="toolbar-button" data-action="toggle-settings-panel" type="button">Back to data</button>
+    </div>
     <div class="settings-grid">
       <section class="settings-section">
         <h3 class="settings-section-title">
@@ -1036,7 +1124,7 @@ function renderPanel() {
       <section class="settings-section">
         <h3>Comments</h3>
         ${settingsCommentEntries().map((entry, index) => commentRow("settingsComments", index, entry)).join("")}
-        <button class="comment-add-button" data-add="settingsComments" type="button">Add comment</button>
+        <button class="comment-add-button" data-add="settingsComments" type="button" title="Add comment" aria-label="Add comment">${commentIcon()}</button>
       </section>
     </div>
   `;
@@ -1125,12 +1213,58 @@ function formatSavedGraphDate(value) {
 function listControlBar(kind, label) {
   const state = listControls[kind];
   const placeholder = `search for ${label} by ID`;
+  if (kind === "data") {
+    return `
+      <div class="list-controls data-list-controls" data-list-controls="data">
+        <select class="list-type-filter compact-field" data-entry-type-filter="data" aria-label="Filter data type">
+          ${[
+            ["all", "All data"],
+            ["variable", "Expressions"],
+            ["slider", "Sliders"],
+            ["function", "Maps"],
+            ["colors", "Colours"],
+            ["restrictions", "Boundaries"],
+            ["draws", "Draw layers"],
+            ["comment", "Comments"]
+          ].map(([value, optionLabel]) => `<option value="${value}" ${state.type === value ? "selected" : ""}>${optionLabel}</option>`).join("")}
+        </select>
+        <input class="list-search compact-field" data-entry-search="data" value="${escapeHtml(state.query)}" placeholder="search by ID" aria-label="search by ID" />
+        <button class="list-sort compact-field" data-entry-sort="data" type="button" aria-label="Sort data by ID: ${sortLabel(state.sort)}">${sortLabel(state.sort)}</button>
+      </div>
+    `;
+  }
   return `
     <div class="list-controls" data-list-controls="${kind}">
       <input class="list-search compact-field" data-entry-search="${kind}" value="${escapeHtml(state.query)}" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)}" />
       <button class="list-sort compact-field" data-entry-sort="${kind}" type="button" aria-label="Sort ${escapeHtml(kind)} by ID: ${sortLabel(state.sort)}">${sortLabel(state.sort)}</button>
     </div>
   `;
+}
+
+function visibleDataEntries() {
+  const state = listControls.data ?? { query: "", sort: "custom", type: "all" };
+  const query = state.query.trim().toLowerCase();
+  const type = state.type ?? "all";
+  let indexed = orderedDataEntries(scene);
+  if (type !== "all") {
+    indexed = indexed.filter(({ kind, entry }) => dataSubtype(entry, kind) === type);
+  }
+  if (query) {
+    indexed = indexed.filter(({ entry }) => {
+      if (isCommentEntry(entry)) return commentText(entry).toLowerCase().includes(query);
+      return String(entry.id ?? "").toLowerCase().includes(query);
+    });
+  }
+  if (state.sort !== "custom") {
+    indexed.sort((left, right) => {
+      if (isCommentEntry(left.entry) && isCommentEntry(right.entry)) return 0;
+      if (isCommentEntry(left.entry)) return 1;
+      if (isCommentEntry(right.entry)) return -1;
+      const order = String(left.entry.id ?? "").localeCompare(String(right.entry.id ?? ""), undefined, { numeric: true, sensitivity: "base" });
+      return state.sort === "az" ? order : -order;
+    });
+  }
+  return indexed;
 }
 
 function visibleEntries(entries, kind) {
@@ -1155,10 +1289,10 @@ function visibleEntries(entries, kind) {
   return indexed;
 }
 
-function commentRow(kind, index, entry) {
+function commentRow(kind, index, entry, typeLabel = "comment") {
   return expressionRow("valid", "Comment", `
     <textarea class="entry-comment-body" data-field="${kind}.${index}.text" placeholder="write a comment" aria-label="Comment">${escapeHtml(commentText(entry))}</textarea>
-  `, kind, index, { rowClass: "expression-row-comment", noInlineComment: true });
+  `, kind, index, { rowClass: "expression-row-comment", noInlineComment: true, typeLabel });
 }
 
 function functionRowContent(entry, index) {
@@ -1183,11 +1317,11 @@ function functionKindSelector(kind, index) {
   const labels = {
     variable: "expression",
     slider: "slider",
-    function: "function"
+    function: "map"
   };
   return `
     <div class="function-kind-selector" data-help="${escapeHtml(HELP_TEXT[helpKeys[kind] ?? "variableType"])}" title="${escapeHtml(HELP_TEXT[helpKeys[kind] ?? "variableType"])}">
-      <select class="function-kind-select" data-function-kind-select="${index}" aria-label="Function entry type">
+      <select class="function-kind-select" data-function-kind-select="${index}" aria-label="Value entry type">
         ${["variable", "slider", "function"].map((entryKind) => `
           <option value="${entryKind}" ${kind === entryKind ? "selected" : ""}>${labels[entryKind]}</option>
         `).join("")}
@@ -1284,6 +1418,7 @@ function expressionRow(status, message, content, kind = null, index = null, opti
   const inlineComment = kind && !options.noInlineComment && hasInlineComment
     ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="line comment" aria-label="Line comment" />`
     : "";
+  const typeLabel = options.typeLabel ? `<span class="entry-type-label">${escapeHtml(options.typeLabel)}</span>` : "";
   return `
     <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
       ${kind ? `
@@ -1293,10 +1428,10 @@ function expressionRow(status, message, content, kind = null, index = null, opti
           <span class="entry-grip-dot"></span>
         </div>
       ` : `<span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>`}
-      <div class="entry-content">${content}${inlineComment}</div>
+      <div class="entry-content">${typeLabel}${content}${inlineComment}</div>
       ${kind ? `
         <div class="row-actions">
-          ${options.noInlineComment || hasInlineComment ? "" : `<button class="row-action row-action-comment" data-add-inline-comment="${kind}.${index}" title="Add comment" aria-label="Add comment">//</button>`}
+          ${options.noInlineComment || hasInlineComment ? "" : `<button class="row-action row-action-comment" data-add-inline-comment="${kind}.${index}" title="Add comment" aria-label="Add comment">${commentIcon()}</button>`}
           <button class="row-action" data-delete="${kind}" data-index="${index}" title="Delete entry" aria-label="Delete entry">×</button>
         </div>
       ` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
@@ -1304,9 +1439,34 @@ function expressionRow(status, message, content, kind = null, index = null, opti
   `;
 }
 
+function addDataRow() {
+  return `
+    <div class="add-row-wrap add-data-row-wrap">
+      <details class="new-entry-menu" data-new-entry-menu>
+        <summary class="add-row">
+          <span class="entry-status"></span>
+          <span>New</span>
+        </summary>
+        <div class="new-entry-popover">
+          <div class="new-entry-group">
+            <span class="new-entry-heading">Value</span>
+            <button data-add="functions" data-entry-kind-choice="variable" type="button">Expression</button>
+            <button data-add="functions" data-entry-kind-choice="slider" type="button">Slider</button>
+            <button data-add="functions" data-entry-kind-choice="function" type="button">Map</button>
+          </div>
+          <button data-add="colors" type="button">Colour</button>
+          <button data-add="restrictions" type="button">Boundary</button>
+          <button data-add="draws" type="button">Draw layer</button>
+          <button data-add-comment="functions" data-comment-target="data" type="button">${commentIcon()} Comment</button>
+        </div>
+      </details>
+    </div>
+  `;
+}
+
 function addRow(label, kind) {
   if (kind === "settingsComments") {
-    return `<button class="comment-add-button" data-add="${kind}" type="button" title="Add comment" aria-label="Add comment">//</button>`;
+    return `<button class="comment-add-button" data-add="${kind}" type="button" title="Add comment" aria-label="Add comment">${commentIcon()}</button>`;
   }
   return `
     <div class="add-row-wrap">
@@ -1314,7 +1474,7 @@ function addRow(label, kind) {
         <span class="entry-status"></span>
         <span>${label}</span>
       </button>
-      <button class="add-comment-side-button" data-add-comment="${kind}" type="button" title="Add comment" aria-label="Add comment">//</button>
+      <button class="add-comment-side-button" data-add-comment="${kind}" type="button" title="Add comment" aria-label="Add comment">${commentIcon()}</button>
     </div>
   `;
 }
@@ -1534,6 +1694,15 @@ function bindEvents() {
     button.addEventListener("click", () => {
       syncFields();
       displayMode = button.dataset.displayMode;
+      if (displayMode === "text") settingsPanelOpen = false;
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll('[data-action="toggle-settings-panel"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      settingsPanelOpen = !settingsPanelOpen;
       renderApp();
     });
   });
@@ -1583,6 +1752,15 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const kind = button.dataset.entrySort;
       listControls[kind].sort = nextSort(listControls[kind].sort);
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-entry-type-filter]").forEach((field) => {
+    field.addEventListener("change", () => {
+      const kind = field.dataset.entryTypeFilter;
+      if (!listControls[kind]) return;
+      listControls[kind].type = field.value;
       renderApp();
     });
   });
@@ -1936,6 +2114,9 @@ function bindEvents() {
         listControls[kind].sort = "custom";
       }
       const target = addEntry(kind, kind === "settingsComments" ? "comment" : "data");
+      if (target && kind === "functions" && button.dataset.entryKindChoice) {
+        scene.functions[target.index].kind = button.dataset.entryKindChoice;
+      }
       recordSceneHistory(before);
       pendingScrollTarget = target;
       renderApp();
@@ -2039,7 +2220,7 @@ function bindEvents() {
   root.querySelectorAll("[data-entry-kind][data-entry-index]").forEach((row) => {
     row.addEventListener("dragover", (event) => {
       const state = entryDragState;
-      if (!state || state.kind !== row.dataset.entryKind) return;
+      if (!state) return;
       event.preventDefault();
       row.classList.add("expression-row-drop-target");
     });
@@ -2048,15 +2229,15 @@ function bindEvents() {
     });
     row.addEventListener("drop", (event) => {
       const state = entryDragState;
-      if (!state || state.kind !== row.dataset.entryKind) return;
+      if (!state) return;
       event.preventDefault();
       row.classList.remove("expression-row-drop-target");
       syncFields();
       const before = sceneSnapshot();
       const to = Number(row.dataset.entryIndex);
-      moveEntryTo(state.kind, state.index, to);
+      moveMixedDataEntry(state.kind, state.index, row.dataset.entryKind, to);
       recordSceneHistory(before);
-      pendingScrollTarget = { kind: state.kind, index: to };
+      pendingScrollTarget = { kind: row.dataset.entryKind, index: to };
       entryDragState = null;
       renderApp();
     });
@@ -2763,6 +2944,11 @@ function addEntry(kind, type = "data") {
   const entry = type === "comment" || kind === "settingsComments" ? createCommentEntry("") : defaultEntryForKind(kind);
   if (!entry) return null;
   scene[kind].push(entry);
+  if (DATA_ENTRY_KINDS.includes(kind)) {
+    ensureEntryUid(entry, kind);
+    if (!Array.isArray(scene.dataOrder)) scene.dataOrder = [];
+    scene.dataOrder.push({ kind, uid: entry._uid });
+  }
   return { kind, index: scene[kind].length - 1 };
 }
 
@@ -2792,6 +2978,23 @@ function moveEntryTo(kind, from, to) {
   return true;
 }
 
+function moveMixedDataEntry(fromKind, fromIndex, toKind, toIndex) {
+  if (!DATA_ENTRY_KINDS.includes(fromKind) || !DATA_ENTRY_KINDS.includes(toKind)) return false;
+  const fromEntry = scene[fromKind]?.[fromIndex];
+  const toEntry = scene[toKind]?.[toIndex];
+  if (!fromEntry || !toEntry) return false;
+  ensureSceneDataOrder(scene);
+  const fromUid = ensureEntryUid(fromEntry, fromKind);
+  const toUid = ensureEntryUid(toEntry, toKind);
+  const fromOrderIndex = scene.dataOrder.findIndex((ref) => ref.kind === fromKind && ref.uid === fromUid);
+  const toOrderIndex = scene.dataOrder.findIndex((ref) => ref.kind === toKind && ref.uid === toUid);
+  if (fromOrderIndex < 0 || toOrderIndex < 0 || fromOrderIndex === toOrderIndex) return false;
+  const [ref] = scene.dataOrder.splice(fromOrderIndex, 1);
+  const adjustedTo = fromOrderIndex < toOrderIndex ? toOrderIndex - 1 : toOrderIndex;
+  scene.dataOrder.splice(adjustedTo, 0, ref);
+  return true;
+}
+
 function toggleDrawHidden(index) {
   if (!scene.draws[index] || isCommentEntry(scene.draws[index])) return;
   scene.draws[index].hidden = !scene.draws[index].hidden;
@@ -2807,7 +3010,11 @@ function moveDrawLayer(from, to) {
 function deleteEntry(kind, index) {
   if (!Array.isArray(scene[kind]) || !scene[kind][index]) return;
   const removed = scene[kind][index];
+  const removedUid = removed?._uid;
   scene[kind].splice(index, 1);
+  if (DATA_ENTRY_KINDS.includes(kind) && removedUid) {
+    scene.dataOrder = (scene.dataOrder ?? []).filter((ref) => !(ref.kind === kind && ref.uid === removedUid));
+  }
   if (isCommentEntry(removed)) return;
   if (kind === "functions") {
     const replacement = firstDataId(scene.functions);
@@ -5921,6 +6128,7 @@ function setSceneSetting(target, key, value) {
 }
 
 function exportScene() {
+  ensureSceneDataOrder(scene);
   return [
     ...settingsCommentEntries().map((entry) => exportStandaloneComment(entry, "settings")),
     exportSettingLine("x_min", scene.settings.xMin),
@@ -5934,10 +6142,7 @@ function exportScene() {
     exportSettingLine("aspect_ratio", scene.settings.aspectRatio ?? "1:1"),
     exportSettingLine("draw_only_inside_boundary", formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))),
     exportSettingLine("unbounded_decimal_places", clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)),
-    ...scene.functions.map((entry) => exportFunctionEntry(entry, "functions")),
-    ...scene.colors.map((entry) => exportColorEntry(entry, "colors")),
-    ...scene.restrictions.map((entry) => exportRestrictionEntry(entry, "restrictions")),
-    ...scene.draws.map((entry) => exportDrawEntry(entry, "draws"))
+    ...orderedDataEntries(scene).map(({ kind, entry }) => exportOrderedDataEntry(kind, entry)).filter(Boolean)
   ].join("\n");
 }
 
@@ -5954,7 +6159,7 @@ function exportFunctionEntry(rawEntry, section = "functions") {
     const range = entry.time && normalizeTimeMode(entry.timeMode) === "unbounded" ? "" : ` range ${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`;
     line = entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${range}` : `slider ${entry.id} = ${expression}${range}`;
   } else if (entry.kind === "function") {
-    line = `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
+    line = `map ${entry.id}(${entry.params.join(",")}) = ${expression}`;
   } else {
     line = `expression ${entry.id} = ${expression}`;
   }
@@ -6125,6 +6330,7 @@ function importScene(raw) {
   next.colors = [];
   next.restrictions = [];
   next.draws = [];
+  next.dataOrder = [];
   next.settingsComments = [];
   next.settingLineComments = {};
   let currentCommentSection = "functions";
@@ -6139,7 +6345,7 @@ function importScene(raw) {
       if (targetSection === "settings") {
         next.settingsComments.push(createCommentEntry(pending.text));
       } else {
-        next[targetSection].push(createCommentEntry(pending.text));
+        pushDataEntry(next, targetSection, createCommentEntry(pending.text));
       }
       currentCommentSection = targetSection;
     }
@@ -6157,24 +6363,24 @@ function importScene(raw) {
       const [id, expression] = splitFirst(line.slice(2), "~");
       flushPendingComments("functions");
       currentCommentSection = "functions";
-      next.functions.push(withInlineComment({ id, kind: "variable", expression: convertDivisionsToFrac(expression) }, comment));
+      pushDataEntry(next, "functions", withInlineComment({ id, kind: "variable", expression: convertDivisionsToFrac(expression) }, comment));
     } else if (line.startsWith("C:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [red = "0", green = "0", blue = "0"] = rest.split("~");
       flushPendingComments("colors");
       currentCommentSection = "colors";
-      next.colors.push(withInlineComment({ id, red, green, blue }, comment));
+      pushDataEntry(next, "colors", withInlineComment({ id, red, green, blue }, comment));
     } else if (line.startsWith("R:")) {
       const [id, rest] = splitFirst(line.slice(2), "~");
       const [expression = "1", flag = "0"] = rest.split("~");
       flushPendingComments("restrictions");
       currentCommentSection = "restrictions";
-      next.restrictions.push(withInlineComment({ id, expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
+      pushDataEntry(next, "restrictions", withInlineComment({ id, expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
     } else if (line.startsWith("D~")) {
       const [, equationId, colorId, restrictionId, hidden = "0"] = line.split("~");
       flushPendingComments("draws");
       currentCommentSection = "draws";
-      next.draws.push(withInlineComment({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) }, comment));
+      pushDataEntry(next, "draws", withInlineComment({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) }, comment));
     } else if (line.startsWith("S:")) {
       const [key, value] = splitFirst(line.slice(2), "~");
       flushPendingComments("settings");
@@ -6194,7 +6400,7 @@ function importScene(raw) {
       if (assignment) {
         flushPendingComments("functions");
         currentCommentSection = "functions";
-        next.functions.push(withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
+        pushDataEntry(next, "functions", withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
       }
     } else if (/^(slider|time)\s+/i.test(line)) {
       const assignment = line.match(/^(slider|time)(?:\s+(bounded_looped|bounded looped|bounded|unbounded))?\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
@@ -6204,7 +6410,7 @@ function importScene(raw) {
         const range = splitSliderRange(assignment[4]);
         flushPendingComments("functions");
         currentCommentSection = "functions";
-        next.functions.push(withInlineComment({
+        pushDataEntry(next, "functions", withInlineComment({
           id: assignment[3],
           kind: "slider",
           expression: convertDivisionsToFrac(range.expression),
@@ -6214,23 +6420,23 @@ function importScene(raw) {
           timeMode
         }, comment));
       }
-    } else if (/^function\s+/i.test(line)) {
-      const callAssignment = line.match(/^function\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=\s*(.+)$/i);
+    } else if (/^(function|map)\s+/i.test(line)) {
+      const callAssignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=\s*(.+)$/i);
       if (callAssignment) {
         flushPendingComments("functions");
         currentCommentSection = "functions";
-        next.functions.push(withInlineComment({
+        pushDataEntry(next, "functions", withInlineComment({
           id: callAssignment[1],
           kind: "function",
           params: parseFunctionParams(callAssignment[2]),
           expression: convertDivisionsToFrac(callAssignment[3].trim())
         }, comment));
       } else {
-        const assignment = line.match(/^function\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+        const assignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
         if (assignment) {
           flushPendingComments("functions");
           currentCommentSection = "functions";
-          next.functions.push(withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
+          pushDataEntry(next, "functions", withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
         }
       }
     } else if (/^(colour|color)\s+/i.test(line)) {
@@ -6239,7 +6445,7 @@ function importScene(raw) {
         const [red = "0", green = "0", blue = "0"] = assignment[2].split("~").map((part) => part.trim());
         flushPendingComments("colors");
         currentCommentSection = "colors";
-        next.colors.push(withInlineComment({ id: assignment[1], red, green, blue }, comment));
+        pushDataEntry(next, "colors", withInlineComment({ id: assignment[1], red, green, blue }, comment));
       }
     } else if (/^(boundary|restriction)\s+/i.test(line)) {
       const assignment = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
@@ -6247,7 +6453,7 @@ function importScene(raw) {
         const [expression = "1", flag = "False"] = assignment[2].split("~").map((part) => part.trim());
         flushPendingComments("restrictions");
         currentCommentSection = "restrictions";
-        next.restrictions.push(withInlineComment({ id: assignment[1], expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
+        pushDataEntry(next, "restrictions", withInlineComment({ id: assignment[1], expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
       }
     } else if (/^draw\s*\(/i.test(line)) {
       const call = line.match(/^draw\s*\((.*)\)\s*$/i);
@@ -6255,7 +6461,7 @@ function importScene(raw) {
         const [equationId = "", colorId = "", restrictionId = "", hidden = "False"] = splitFunctionArgs(call[1]).map((part) => part.trim());
         flushPendingComments("draws");
         currentCommentSection = "draws";
-        next.draws.push(withInlineComment({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) }, comment));
+        pushDataEntry(next, "draws", withInlineComment({ equationId, colorId, restrictionId, hidden: parseLeptonBoolean(hidden) }, comment));
       }
     }
   }
@@ -6275,7 +6481,7 @@ function normalizeSceneReferences(next) {
       id = `${preferredId}${suffix}`;
       suffix += 1;
     }
-    next.functions.push({ id, kind: "variable", expression: trimmed || "0" });
+    pushDataEntry(next, "functions", { id, kind: "variable", expression: trimmed || "0" });
     return id;
   };
 
@@ -6292,6 +6498,7 @@ function normalizeSceneReferences(next) {
   if (next.settings.backgroundColor !== "0" && !dataEntries(next.colors).some((color) => color.id === next.settings.backgroundColor)) {
     next.settings.backgroundColor = "0";
   }
+  ensureSceneDataOrder(next);
   return next;
 }
 
@@ -6602,7 +6809,7 @@ function collectTextDeclaredIdentifiers(source) {
   const ids = new Set();
   String(source ?? "").split("\n").forEach((line) => {
     const { code } = splitLeptonComment(line);
-    const declaration = code.match(/^\s*(?:variable|expression|slider|function|colour|color|boundary|restriction)\s+([A-Za-z_]\w*)/i);
+    const declaration = code.match(/^\s*(?:variable|expression|slider|function|map|colour|color|boundary|restriction)\s+([A-Za-z_]\w*)/i);
     if (declaration) ids.add(declaration[1]);
     const time = code.match(/^\s*time\s+(?:bounded|unbounded|bounded_looped)\s+([A-Za-z_]\w*)/i);
     if (time) ids.add(time[1]);
@@ -6616,16 +6823,16 @@ function highlightLeptonLine(line, context = { declaredIds: new Set() }) {
 }
 
 function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
-  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|colour|color|boundary|restriction)(\b)/i);
+  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|map|colour|color|boundary|restriction)(\b)/i);
   if (declaration) {
     const prefix = escapeHtml(declaration[1]);
     const keyword = declaration[2].toLowerCase();
     const rest = line.slice(declaration[1].length + keyword.length);
-    const functionParams = keyword === "function" ? parseFunctionParams(line.match(/^\s*function\s+[A-Za-z_]\w*\s*\(([^)]*)\)/i)?.[1] ?? "") : [];
+    const functionParams = ["function", "map"].includes(keyword) ? parseFunctionParams(line.match(/^\s*(?:function|map)\s+[A-Za-z_]\w*\s*\(([^)]*)\)/i)?.[1] ?? "") : [];
     return `${prefix}<span class="syntax-keyword">${declaration[2]}</span>${highlightLeptonTokens(rest, {
       ...context,
       markFirstNameAsSetting: keyword === "set",
-      mathDefinition: ["variable", "expression", "slider", "time", "function"].includes(keyword),
+      mathDefinition: ["variable", "expression", "slider", "time", "function", "map"].includes(keyword),
       localIds: new Set(functionParams)
     })}`;
   }
@@ -6878,6 +7085,7 @@ window.__leptonDebug = {
   serializeMathField,
   exportCanvasSizeForViewport,
   exportViewportForImage,
+  moveMixedDataEntry,
   scene: () => structuredClone(scene)
 };
 
