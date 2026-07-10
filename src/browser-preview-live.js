@@ -24,7 +24,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260710-unified-data";
+const APP_VERSION = "20260710-data-refine";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -187,7 +187,7 @@ const HELP_TEXT = {
   restrictions: "Boundaries draw only where their referenced value is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
   draws: "Draw layers connect a value, colour, and boundary. Layers are drawn in the order you place them and can be hidden.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
-  textLanguage: "Lepton text is the same graph in one copyable script. Use set, expression, slider, time, map, colour/color, boundary/restriction, and draw(...).",
+  textLanguage: "Lepton text is the same graph in one copyable script. Use set, expression, slider, time, function, colour/color, boundary/restriction, and draw(...).",
   applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
   refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
   backgroundColor: "Default uses the grid background. Custom uses a colour ID from the Data workspace as a solid canvas background.",
@@ -206,7 +206,7 @@ const HELP_TEXT = {
   boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
   variableType: "Expression entries are named formulas over x and y. Use them for equations, constants, color channels, and helper math that other entries can reference.",
   sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
-  functionType: "Map entries accept named inputs such as wave(x,y). Inside the map body, input names take priority over outer values with the same name.",
+  functionType: "Function entries accept named inputs such as wave(x,y). Inside the function body, input names take priority over outer values with the same name.",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
 };
 
@@ -225,13 +225,13 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 1: Create data",
-    body: "The Data workspace holds everything except settings. Use New to create a value, colour, boundary, draw layer, or comment. Values can be expressions, sliders, or maps."
+    body: "The Data workspace holds everything except settings. Use New line to create a value, colour, boundary, draw layer, or comment. Values can be expressions, sliders, or functions."
   },
   {
     mode: "standard",
     tab: "functions",
-    title: "Step 2: Use expressions, sliders, and maps",
-    body: "Expressions reference x, y, and other IDs. Sliders expose an adjustable value. Maps accept inputs like wave(a,b); inside a map, input names override outer values with the same names."
+    title: "Step 2: Use expressions, sliders, and functions",
+    body: "Expressions reference x, y, and other IDs. Sliders expose an adjustable value. Functions accept inputs like wave(a,b); inside a function, input names override outer values with the same names."
   },
   {
     mode: "standard",
@@ -255,7 +255,7 @@ const TUTORIAL_STEPS = [
     mode: "text",
     tab: "draws",
     title: "Step 6: Share or bulk edit",
-    body: "Text mode is the same graph as script. Settings appear first, followed by expression, slider, time, map, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
+    body: "Text mode is the same graph as script. Settings appear first, followed by expression, slider, time, function, colour, boundary, and draw(...) lines. Apply reads text back into the visual editor."
   }
 ];
 const listControls = {
@@ -442,12 +442,18 @@ function dataSubtype(entry, kind) {
   return kind;
 }
 
+function matchesDataTypeFilter(kind, entry, type) {
+  if (type === "all") return true;
+  if (type === "values") return kind === "functions" && !isCommentEntry(entry);
+  return dataSubtype(entry, kind) === type;
+}
+
 function dataTypeLabel(kind, entry) {
   if (isCommentEntry(entry)) return "comment";
   if (kind === "functions") {
     const subtype = normalizeFunctionEntry(entry).kind;
     if (subtype === "slider") return "value · slider";
-    if (subtype === "function") return "value · map";
+    if (subtype === "function") return "value · function";
     return "value · expression";
   }
   return DATA_TYPE_LABELS[kind] ?? kind;
@@ -1000,6 +1006,9 @@ function renderPanel() {
           <span class="text-action-wrap"><button class="toolbar-button primary" data-action="apply-text">Apply</button>${helpMark("applyText")}</span>
           <span class="text-action-wrap"><button class="toolbar-button" data-action="refresh-text">Refresh text</button>${helpMark("refreshText")}</span>
         </div>
+        <div class="text-mode-time-controls">
+          ${timePlaybackControls()}
+        </div>
       </div>
     `;
   }
@@ -1051,9 +1060,9 @@ function dataRowContent(kind, entry, index) {
       <div class="draw-layer-toolbar">
         <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
       </div>
-      ${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}
-      ${searchableReference(`draws.${index}.colorId`, drawColorEntries(), entry.colorId, "Draw color")}
-      ${searchableReference(`draws.${index}.restrictionId`, drawBoundaryEntries(), entry.restrictionId, "Draw boundary")}
+      <label class="draw-reference-row"><span>value</span>${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}</label>
+      <label class="draw-reference-row"><span>colour</span>${searchableReference(`draws.${index}.colorId`, drawColorEntries(), entry.colorId, "Draw color")}</label>
+      <label class="draw-reference-row"><span>boundary</span>${searchableReference(`draws.${index}.restrictionId`, drawBoundaryEntries(), entry.restrictionId, "Draw boundary")}</label>
     `;
   }
   return "";
@@ -1219,9 +1228,10 @@ function listControlBar(kind, label) {
         <select class="list-type-filter compact-field" data-entry-type-filter="data" aria-label="Filter data type">
           ${[
             ["all", "All data"],
+            ["values", "Values"],
             ["variable", "Expressions"],
             ["slider", "Sliders"],
-            ["function", "Maps"],
+            ["function", "Functions"],
             ["colors", "Colours"],
             ["restrictions", "Boundaries"],
             ["draws", "Draw layers"],
@@ -1247,7 +1257,7 @@ function visibleDataEntries() {
   const type = state.type ?? "all";
   let indexed = orderedDataEntries(scene);
   if (type !== "all") {
-    indexed = indexed.filter(({ kind, entry }) => dataSubtype(entry, kind) === type);
+    indexed = indexed.filter(({ kind, entry }) => matchesDataTypeFilter(kind, entry, type));
   }
   if (query) {
     indexed = indexed.filter(({ entry }) => {
@@ -1317,7 +1327,7 @@ function functionKindSelector(kind, index) {
   const labels = {
     variable: "expression",
     slider: "slider",
-    function: "map"
+    function: "function"
   };
   return `
     <div class="function-kind-selector" data-help="${escapeHtml(HELP_TEXT[helpKeys[kind] ?? "variableType"])}" title="${escapeHtml(HELP_TEXT[helpKeys[kind] ?? "variableType"])}">
@@ -1418,7 +1428,7 @@ function expressionRow(status, message, content, kind = null, index = null, opti
   const inlineComment = kind && !options.noInlineComment && hasInlineComment
     ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="line comment" aria-label="Line comment" />`
     : "";
-  const typeLabel = options.typeLabel ? `<span class="entry-type-label">${escapeHtml(options.typeLabel)}</span>` : "";
+  const typeLabel = options.typeLabel && kind && index != null ? entryTypeMenu(kind, index, options.typeLabel) : "";
   return `
     <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
       ${kind ? `
@@ -1439,20 +1449,41 @@ function expressionRow(status, message, content, kind = null, index = null, opti
   `;
 }
 
+function entryTypeMenu(kind, index, label) {
+  const base = `${kind}.${index}`;
+  return `
+    <details class="entry-type-menu" data-type-menu="${base}">
+      <summary class="entry-type-label" aria-label="Change data type">${escapeHtml(label)}</summary>
+      <div class="entry-type-popover">
+        <div class="new-entry-group">
+          <span class="new-entry-heading">Value</span>
+          <button data-change-entry-kind="${base}.variable" type="button">Expression</button>
+          <button data-change-entry-kind="${base}.slider" type="button">Slider</button>
+          <button data-change-entry-kind="${base}.function" type="button">Function</button>
+        </div>
+        <button data-change-entry-kind="${base}.colors" type="button">Colour</button>
+        <button data-change-entry-kind="${base}.restrictions" type="button">Boundary</button>
+        <button data-change-entry-kind="${base}.draws" type="button">Draw layer</button>
+      </div>
+    </details>
+  `;
+}
+
 function addDataRow() {
   return `
     <div class="add-row-wrap add-data-row-wrap">
+      <button class="add-row add-row-default" data-add="functions" data-add-default="functions" data-entry-kind-choice="variable" type="button">
+        <span class="entry-status"></span>
+        <span>New line</span>
+      </button>
       <details class="new-entry-menu" data-new-entry-menu>
-        <summary class="add-row">
-          <span class="entry-status"></span>
-          <span>New</span>
-        </summary>
+        <summary class="new-entry-ellipsis" aria-label="Choose line type">...</summary>
         <div class="new-entry-popover">
           <div class="new-entry-group">
             <span class="new-entry-heading">Value</span>
             <button data-add="functions" data-entry-kind-choice="variable" type="button">Expression</button>
             <button data-add="functions" data-entry-kind-choice="slider" type="button">Slider</button>
-            <button data-add="functions" data-entry-kind-choice="function" type="button">Map</button>
+            <button data-add="functions" data-entry-kind-choice="function" type="button">Function</button>
           </div>
           <button data-add="colors" type="button">Colour</button>
           <button data-add="restrictions" type="button">Boundary</button>
@@ -1784,6 +1815,18 @@ function bindEvents() {
       entry.kind = kind;
       scene.functions[index] = entry;
       recordSceneHistory(before);
+      renderApp();
+    });
+  });
+  root.querySelectorAll("[data-change-entry-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      const [fromKind, rawIndex, target] = button.dataset.changeEntryKind.split(".");
+      const before = sceneSnapshot();
+      const changed = changeDataEntryKind(fromKind, Number(rawIndex), target);
+      if (!changed) return;
+      recordSceneHistory(before);
+      pendingScrollTarget = changed;
       renderApp();
     });
   });
@@ -2937,6 +2980,59 @@ function defaultEntryForKind(kind) {
     };
   }
   return null;
+}
+
+function convertedEntryForKind(targetKind, sourceEntry, targetSubtype = "variable") {
+  const sourceId = String(sourceEntry?.id ?? "").trim();
+  const expression = String(sourceEntry?.expression ?? sourceEntry?.equationId ?? firstDataId(scene.functions) ?? "");
+  const comment = Object.prototype.hasOwnProperty.call(sourceEntry ?? {}, "comment") ? { comment: sourceEntry.comment ?? "" } : {};
+  if (targetKind === "functions") {
+    const next = functionEntryForScene({ id: sourceId || nextEntryId(scene.functions, "f"), kind: targetSubtype, expression });
+    next.kind = FUNCTION_ENTRY_KINDS.has(targetSubtype) ? targetSubtype : "variable";
+    return { ...next, ...comment };
+  }
+  if (targetKind === "colors") {
+    const first = firstDataId(scene.functions);
+    return { id: sourceId || nextEntryId(scene.colors, "c"), red: first, green: first, blue: first, ...comment };
+  }
+  if (targetKind === "restrictions") {
+    return { id: sourceId || nextEntryId(scene.restrictions, "r"), expression: expression || firstDataId(scene.functions), checkSmaller: false, ...comment };
+  }
+  if (targetKind === "draws") {
+    return {
+      equationId: sourceId || drawFunctionEntries()[0]?.id || "",
+      colorId: drawColorEntries()[0]?.id ?? "",
+      restrictionId: drawBoundaryEntries()[0]?.id ?? "",
+      hidden: false,
+      ...comment
+    };
+  }
+  return null;
+}
+
+function changeDataEntryKind(fromKind, fromIndex, target) {
+  if (!DATA_ENTRY_KINDS.includes(fromKind) || !scene[fromKind]?.[fromIndex]) return null;
+  const targetKind = DATA_ENTRY_KINDS.includes(target) ? target : "functions";
+  const targetSubtype = DATA_ENTRY_KINDS.includes(target) ? "variable" : target;
+  if (fromKind === "functions" && targetKind === "functions") {
+    if (!FUNCTION_ENTRY_KINDS.has(targetSubtype)) return null;
+    const entry = functionEntryForScene(scene.functions[fromIndex]);
+    entry.kind = targetSubtype;
+    scene.functions[fromIndex] = entry;
+    return { kind: "functions", index: fromIndex };
+  }
+  const sourceEntry = scene[fromKind][fromIndex];
+  const uid = ensureEntryUid(sourceEntry, fromKind);
+  const converted = convertedEntryForKind(targetKind, sourceEntry, targetSubtype);
+  if (!converted) return null;
+  converted._uid = uid;
+  const ref = scene.dataOrder?.find((item) => item.kind === fromKind && item.uid === uid);
+  scene[fromKind].splice(fromIndex, 1);
+  if (!Array.isArray(scene[targetKind])) scene[targetKind] = [];
+  scene[targetKind].push(converted);
+  if (ref) ref.kind = targetKind;
+  ensureSceneDataOrder(scene);
+  return { kind: targetKind, index: scene[targetKind].length - 1 };
 }
 
 function addEntry(kind, type = "data") {
@@ -6159,7 +6255,7 @@ function exportFunctionEntry(rawEntry, section = "functions") {
     const range = entry.time && normalizeTimeMode(entry.timeMode) === "unbounded" ? "" : ` range ${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`;
     line = entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${range}` : `slider ${entry.id} = ${expression}${range}`;
   } else if (entry.kind === "function") {
-    line = `map ${entry.id}(${entry.params.join(",")}) = ${expression}`;
+    line = `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
   } else {
     line = `expression ${entry.id} = ${expression}`;
   }

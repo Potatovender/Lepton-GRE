@@ -57,7 +57,7 @@ vm.createContext(sandbox);
 vm.runInContext(
   source.replace(
     /loadSceneFromUrl\(\);\s*sceneHistory\.last = sceneSnapshot\(\);\s*renderApp\(\);/,
-    "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; }; globalThis.__debugPlayTime = (id) => { playingTimeIds.add(id); timeVariableDirections.set(id, 1); };"
+    "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; }; globalThis.__debugSetDisplayMode = (mode) => { displayMode = mode; }; globalThis.__debugPlayTime = (id) => { playingTimeIds.add(id); timeVariableDirections.set(id, 1); };"
   ),
   sandbox
 );
@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-unified-data")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-data-refine")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -384,7 +384,7 @@ draw(f,c1,r1,False)`);
   assert(exported.includes("\nslider speed = 5 range -2~8"), exported);
   assert(exported.includes("\ntime unbounded t = 0"), exported);
   assert(!exported.includes("\ntime unbounded t = 0 range"), exported);
-  assert(exported.includes("\nmap f(x,y) = x+y"), exported);
+  assert(exported.includes("\nfunction f(x,y) = x+y"), exported);
 
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
   const value = sandbox.compileExpression("f(2,3)")(0, 0, env);
@@ -466,7 +466,7 @@ variable f2 = 2*x+y
 variable f3 = f1\\left(f2,3\\right)`);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("\nmap f1(x,y) = x^2+y^2"), exported);
+  assert(exported.includes("\nfunction f1(x,y) = x^2+y^2"), exported);
   assert(exported.includes("\nexpression f3 = f1(f2,3)"), exported);
   assert(!exported.includes("\\left") && !exported.includes("\\right"), exported);
 });
@@ -585,9 +585,20 @@ draw(eq,rgb,rest,False)`));
   assert(html.includes('data-list-controls="data"'), html);
   assert(html.includes('data-new-entry-menu'), html);
   assert(html.includes('data-add="functions" data-entry-kind-choice="variable"'), html);
+  assert(html.includes('data-add-default="functions"'), html);
+  assert(html.includes(">Values<"), html);
   assert(html.includes('data-entry-kind="colors"'), html);
   assert(html.includes('data-entry-kind="restrictions"'), html);
   assert(html.includes('data-entry-kind="draws"'), html);
+});
+
+check("data type label is a row-scoped selector", () => {
+  const html = sandbox.expressionRow("valid", "ok", sandbox.functionRowContent({ id: "eq", kind: "variable", expression: "x+y" }, 0), "functions", 0, { typeLabel: "value · expression" });
+  assert(html.includes('data-type-menu="functions.0"'), html);
+  assert(html.includes('data-change-entry-kind="functions.0.slider"'), html);
+  assert(html.includes('data-change-entry-kind="functions.0.colors"'), html);
+  assert(html.includes('data-add-inline-comment="functions.0"'), html);
+  assert(!html.includes('data-add-inline-comment="colors.0"'), html);
 });
 
 check("mixed data order round-trips through text export", () => {
@@ -614,11 +625,11 @@ check("new data entries append after imported entries", () => {
   const target = sandbox.addEntry("functions", "data");
   sandbox.__debugScene.functions[target.index].kind = "function";
   const exported = sandbox.exportScene();
-  assert(exported.indexOf("expression eq = x") < exported.indexOf("map f"), exported);
+  assert(exported.indexOf("expression eq = x") < exported.indexOf("function f"), exported);
 });
 
-check("map text imports as a parameterized value", () => {
-  const imported = sandbox.importScene(`map wave(a,b)=sqrt(a^2+b^2)
+check("function text imports as a parameterized value", () => {
+  const imported = sandbox.importScene(`function wave(a,b)=sqrt(a^2+b^2)
 expression eq = wave(x,y)`);
   sandbox.__debugSetScene(imported);
   const mapEntry = sandbox.__debugScene.functions[0];
@@ -626,7 +637,17 @@ expression eq = wave(x,y)`);
   assert(mapEntry.id === "wave", JSON.stringify(mapEntry));
   assert(mapEntry.params.join(",") === "a,b", JSON.stringify(mapEntry));
   const exported = sandbox.exportScene();
-  assert(exported.includes("map wave(a,b) = sqrt(a^2+b^2)"), exported);
+  assert(exported.includes("function wave(a,b) = sqrt(a^2+b^2)"), exported);
+});
+
+check("text mode includes time playback controls", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`time bounded_looped t = 0 range 0~1
+expression eq = sin(t+x)`));
+  sandbox.__debugSetDisplayMode("text");
+  const html = sandbox.renderPanel();
+  assert(html.includes('data-action="toggle-global-time"'), html);
+  assert(html.includes("Play time") || html.includes("Stop time"), html);
+  sandbox.__debugSetDisplayMode("standard");
 });
 
 check("updated water sample imports an unbounded time variable", () => {
