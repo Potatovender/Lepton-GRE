@@ -3,6 +3,7 @@ const DEFAULT_SCENE = {
   colors: [],
   restrictions: [],
   draws: [],
+  folders: [],
   dataOrder: [],
   settingsComments: [],
   settingLineComments: {},
@@ -24,7 +25,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260710-data-refine";
+const APP_VERSION = "20260710-folders";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -41,7 +42,8 @@ function ensureLeptonFavicon() {
   }
 }
 
-const DATA_ENTRY_KINDS = ["functions", "colors", "restrictions", "draws"];
+const DATA_ENTRY_KINDS = ["functions", "colors", "restrictions", "draws", "folders"];
+let dropdownDismissBound = false;
 
 const BUILTIN_NAMES = new Set([
   "x",
@@ -377,6 +379,7 @@ function panelScrollKey() {
 function sortLabel(sort) {
   if (sort === "az") return "ID A-Z";
   if (sort === "za") return "ID Z-A";
+  if (sort === "group") return "In group";
   return "In order";
 }
 
@@ -431,7 +434,7 @@ function orderedDataEntries(target = scene) {
     if (!Array.isArray(list)) continue;
     const index = list.findIndex((entry) => ensureEntryUid(entry, ref.kind) === ref.uid);
     if (index === -1) continue;
-    entries.push({ kind: ref.kind, index, entry: list[index] });
+    entries.push({ kind: ref.kind, index, entry: list[index], parentUid: ref.parentUid ?? "" });
   }
   return entries;
 }
@@ -439,6 +442,7 @@ function orderedDataEntries(target = scene) {
 function dataSubtype(entry, kind) {
   if (isCommentEntry(entry)) return "comment";
   if (kind === "functions") return normalizeFunctionEntry(entry).kind;
+  if (kind === "folders") return "folder";
   return kind;
 }
 
@@ -456,6 +460,7 @@ function dataTypeLabel(kind, entry) {
     if (subtype === "function") return "value · function";
     return "value · expression";
   }
+  if (kind === "folders") return "folder";
   return DATA_TYPE_LABELS[kind] ?? kind;
 }
 
@@ -471,7 +476,7 @@ function pushDataEntry(target, kind, entry) {
   ensureEntryUid(entry, kind);
   target[kind].push(entry);
   if (!Array.isArray(target.dataOrder)) target.dataOrder = [];
-  target.dataOrder.push({ kind, uid: entry._uid });
+  target.dataOrder.push({ kind, uid: entry._uid, parentUid: target._importParentUid ?? "" });
   return entry;
 }
 
@@ -585,6 +590,7 @@ function envFunctionDefinitions(env) {
 function nextSort(sort) {
   if (sort === "custom") return "az";
   if (sort === "az") return "za";
+  if (sort === "za") return "group";
   return "custom";
 }
 
@@ -1018,7 +1024,8 @@ function renderPanel() {
 }
 
 function renderDataPanel(diagnostics) {
-  const rows = visibleDataEntries().map(({ kind, index, entry }) => {
+  const rows = visibleDataEntries().map(({ kind, index, entry, depth = 0 }) => {
+    if (kind === "folders") return folderRow(entry, index, depth);
     if (isCommentEntry(entry)) return commentRow(kind, index, entry, dataTypeLabel(kind, entry));
     return expressionRow(
       diagnostics[kind]?.[index]?.status ?? "invalid",
@@ -1026,7 +1033,7 @@ function renderDataPanel(diagnostics) {
       dataRowContent(kind, entry, index),
       kind,
       index,
-      { rowClass: kind === "draws" && entry.hidden ? "expression-row-hidden" : "", typeLabel: dataTypeLabel(kind, entry) }
+      { rowClass: kind === "draws" && entry.hidden ? "expression-row-hidden" : "", typeLabel: dataTypeLabel(kind, entry), attrs: `style="padding-left:${8 + Math.min(depth, 5) * 14}px"` }
     );
   });
   return [
@@ -1036,6 +1043,17 @@ function renderDataPanel(diagnostics) {
     ...rows,
     addDataRow()
   ].join("");
+}
+
+function folderRow(entry, index, depth = 0) {
+  const uid = ensureEntryUid(entry, "folders");
+  const childCount = (scene.dataOrder ?? []).filter((ref) => ref.parentUid === uid).length;
+  return expressionRow("valid", `${childCount} item${childCount === 1 ? "" : "s"}`, `
+    <div class="folder-content">
+      <input class="entry-id folder-id" data-field="folders.${index}.id" value="${escapeHtml(entry.id ?? "")}" placeholder="Folder ID" aria-label="Folder ID" />
+      <span class="folder-count">${childCount} item${childCount === 1 ? "" : "s"}</span>
+    </div>
+  `, "folders", index, { rowClass: "expression-row-folder", noInlineComment: true, staticTypeLabel: "folder", attrs: `data-folder-uid="${escapeHtml(uid)}" style="padding-left:${8 + Math.min(depth, 5) * 14}px"` });
 }
 
 function dataRowContent(kind, entry, index) {
@@ -1235,6 +1253,7 @@ function listControlBar(kind, label) {
             ["colors", "Colours"],
             ["restrictions", "Boundaries"],
             ["draws", "Draw layers"],
+            ["folder", "Folders"],
             ["comment", "Comments"]
           ].map(([value, optionLabel]) => `<option value="${value}" ${state.type === value ? "selected" : ""}>${optionLabel}</option>`).join("")}
         </select>
@@ -1265,7 +1284,10 @@ function visibleDataEntries() {
       return String(entry.id ?? "").toLowerCase().includes(query);
     });
   }
-  if (state.sort !== "custom") {
+  if (state.sort === "group") {
+    const groups = { variable: 0, slider: 1, function: 2, colors: 3, restrictions: 4, draws: 5, folder: 6, comment: 7 };
+    indexed.sort((left, right) => (groups[dataSubtype(left.entry, left.kind)] ?? 9) - (groups[dataSubtype(right.entry, right.kind)] ?? 9));
+  } else if (state.sort !== "custom") {
     indexed.sort((left, right) => {
       if (isCommentEntry(left.entry) && isCommentEntry(right.entry)) return 0;
       if (isCommentEntry(left.entry)) return 1;
@@ -1274,7 +1296,29 @@ function visibleDataEntries() {
       return state.sort === "az" ? order : -order;
     });
   }
+  if (state.sort === "custom" && !query && type === "all") indexed = nestOrderedEntries(indexed);
   return indexed;
+}
+
+function nestOrderedEntries(entries) {
+  const byParent = new Map();
+  for (const item of entries) {
+    const key = item.parentUid || "";
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(item);
+  }
+  const output = [];
+  const visit = (parentUid, depth, ancestry = new Set()) => {
+    for (const item of byParent.get(parentUid) ?? []) {
+      output.push({ ...item, depth });
+      if (item.kind !== "folders") continue;
+      const uid = ensureEntryUid(item.entry, "folders");
+      if (ancestry.has(uid)) continue;
+      visit(uid, depth + 1, new Set([...ancestry, uid]));
+    }
+  };
+  visit("", 0);
+  return output;
 }
 
 function visibleEntries(entries, kind) {
@@ -1428,7 +1472,9 @@ function expressionRow(status, message, content, kind = null, index = null, opti
   const inlineComment = kind && !options.noInlineComment && hasInlineComment
     ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="line comment" aria-label="Line comment" />`
     : "";
-  const typeLabel = options.typeLabel && kind && index != null ? entryTypeMenu(kind, index, options.typeLabel) : "";
+  const typeLabel = options.staticTypeLabel
+    ? `<span class="entry-type-label entry-type-static">${escapeHtml(options.staticTypeLabel)}</span>`
+    : options.typeLabel && kind && index != null ? entryTypeMenu(kind, index, options.typeLabel) : "";
   return `
     <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
       ${kind ? `
@@ -1461,8 +1507,10 @@ function entryTypeMenu(kind, index, label) {
           <button data-change-entry-kind="${base}.slider" type="button">Slider</button>
           <button data-change-entry-kind="${base}.function" type="button">Function</button>
         </div>
+        <div class="new-entry-divider" role="separator"></div>
         <button data-change-entry-kind="${base}.colors" type="button">Colour</button>
         <button data-change-entry-kind="${base}.restrictions" type="button">Boundary</button>
+        <div class="new-entry-divider" role="separator"></div>
         <button data-change-entry-kind="${base}.draws" type="button">Draw layer</button>
       </div>
     </details>
@@ -1485,9 +1533,12 @@ function addDataRow() {
             <button data-add="functions" data-entry-kind-choice="slider" type="button">Slider</button>
             <button data-add="functions" data-entry-kind-choice="function" type="button">Function</button>
           </div>
+          <div class="new-entry-divider" role="separator"></div>
           <button data-add="colors" type="button">Colour</button>
           <button data-add="restrictions" type="button">Boundary</button>
+          <div class="new-entry-divider" role="separator"></div>
           <button data-add="draws" type="button">Draw layer</button>
+          <button data-add="folders" type="button">Folder</button>
           <button data-add-comment="functions" data-comment-target="data" type="button">${commentIcon()} Comment</button>
         </div>
       </details>
@@ -2180,7 +2231,6 @@ function bindEvents() {
 
   root.querySelectorAll("[data-add-inline-comment]").forEach((button) => {
     button.addEventListener("click", () => {
-      syncFields();
       const before = sceneSnapshot();
       const [kind, rawIndex] = button.dataset.addInlineComment.split(".");
       const entry = scene[kind]?.[Number(rawIndex)];
@@ -2278,12 +2328,41 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       const to = Number(row.dataset.entryIndex);
-      moveMixedDataEntry(state.kind, state.index, row.dataset.entryKind, to);
+      if (row.dataset.entryKind === "folders") moveEntryIntoFolder(state.kind, state.index, to);
+      else moveMixedDataEntry(state.kind, state.index, row.dataset.entryKind, to);
       recordSceneHistory(before);
       pendingScrollTarget = { kind: row.dataset.entryKind, index: to };
       entryDragState = null;
       renderApp();
     });
+  });
+
+  const rootDropTarget = root.querySelector("[data-add-default]");
+  rootDropTarget?.addEventListener("dragover", (event) => {
+    if (!entryDragState) return;
+    event.preventDefault();
+    rootDropTarget.classList.add("root-drop-target");
+  });
+  rootDropTarget?.addEventListener("dragleave", () => rootDropTarget.classList.remove("root-drop-target"));
+  rootDropTarget?.addEventListener("drop", (event) => {
+    if (!entryDragState) return;
+    event.preventDefault();
+    const before = sceneSnapshot();
+    moveEntryToRoot(entryDragState.kind, entryDragState.index);
+    recordSceneHistory(before);
+    entryDragState = null;
+    renderApp();
+  });
+
+  if (!dropdownDismissBound) {
+    document.addEventListener("click", closeUnrelatedDropdowns);
+    dropdownDismissBound = true;
+  }
+}
+
+function closeUnrelatedDropdowns(event) {
+  root.querySelectorAll("details[open]").forEach((details) => {
+    if (!details.contains(event.target)) details.open = false;
   });
 }
 
@@ -2686,7 +2765,7 @@ function updateField(field) {
   if (collection === "functions" && property === "expression") {
     const assignment = parseAssignment(value);
     if (assignment) {
-      const entry = normalizeFunctionEntry(scene.functions[Number(rawIndex)]);
+      const entry = functionEntryForScene(scene.functions[Number(rawIndex)]);
       entry.id = assignment.id;
       entry.expression = assignment.expression;
       scene.functions[Number(rawIndex)] = entry;
@@ -2695,7 +2774,7 @@ function updateField(field) {
   }
 
   if (collection === "functions") {
-    const entry = normalizeFunctionEntry(scene.functions[Number(rawIndex)]);
+    const entry = functionEntryForScene(scene.functions[Number(rawIndex)]);
     entry[property] = property === "params" ? parseFunctionParams(value) : value;
     scene.functions[Number(rawIndex)] = entry;
     if (["expression", "sliderMin", "sliderMax"].includes(property)) {
@@ -2979,6 +3058,7 @@ function defaultEntryForKind(kind) {
       hidden: false
     };
   }
+  if (kind === "folders") return { id: nextEntryId(scene.folders, "folder") };
   return null;
 }
 
@@ -3085,10 +3165,46 @@ function moveMixedDataEntry(fromKind, fromIndex, toKind, toIndex) {
   const fromOrderIndex = scene.dataOrder.findIndex((ref) => ref.kind === fromKind && ref.uid === fromUid);
   const toOrderIndex = scene.dataOrder.findIndex((ref) => ref.kind === toKind && ref.uid === toUid);
   if (fromOrderIndex < 0 || toOrderIndex < 0 || fromOrderIndex === toOrderIndex) return false;
+  const targetParentUid = scene.dataOrder[toOrderIndex]?.parentUid ?? "";
   const [ref] = scene.dataOrder.splice(fromOrderIndex, 1);
   const adjustedTo = fromOrderIndex < toOrderIndex ? toOrderIndex - 1 : toOrderIndex;
+  ref.parentUid = targetParentUid;
   scene.dataOrder.splice(adjustedTo, 0, ref);
   return true;
+}
+
+function moveEntryIntoFolder(fromKind, fromIndex, folderIndex) {
+  if (!DATA_ENTRY_KINDS.includes(fromKind) || !scene[fromKind]?.[fromIndex] || !scene.folders?.[folderIndex]) return false;
+  const entry = scene[fromKind][fromIndex];
+  const folder = scene.folders[folderIndex];
+  const entryUid = ensureEntryUid(entry, fromKind);
+  const folderUid = ensureEntryUid(folder, "folders");
+  if (entryUid === folderUid || folderHasAncestor(folderUid, entryUid)) return false;
+  const ref = scene.dataOrder.find((item) => item.kind === fromKind && item.uid === entryUid);
+  if (!ref) return false;
+  ref.parentUid = folderUid;
+  return true;
+}
+
+function moveEntryToRoot(kind, index) {
+  const entry = scene[kind]?.[index];
+  if (!entry) return false;
+  const uid = ensureEntryUid(entry, kind);
+  const ref = scene.dataOrder.find((item) => item.kind === kind && item.uid === uid);
+  if (!ref) return false;
+  ref.parentUid = "";
+  return true;
+}
+
+function folderHasAncestor(folderUid, possibleAncestorUid) {
+  let cursor = folderUid;
+  const seen = new Set();
+  while (cursor && !seen.has(cursor)) {
+    if (cursor === possibleAncestorUid) return true;
+    seen.add(cursor);
+    cursor = scene.dataOrder.find((ref) => ref.kind === "folders" && ref.uid === cursor)?.parentUid ?? "";
+  }
+  return false;
 }
 
 function toggleDrawHidden(index) {
@@ -3107,6 +3223,12 @@ function deleteEntry(kind, index) {
   if (!Array.isArray(scene[kind]) || !scene[kind][index]) return;
   const removed = scene[kind][index];
   const removedUid = removed?._uid;
+  const removedRef = scene.dataOrder?.find((ref) => ref.kind === kind && ref.uid === removedUid);
+  if (kind === "folders" && removedUid) {
+    for (const ref of scene.dataOrder ?? []) {
+      if (ref.parentUid === removedUid) ref.parentUid = removedRef?.parentUid ?? "";
+    }
+  }
   scene[kind].splice(index, 1);
   if (DATA_ENTRY_KINDS.includes(kind) && removedUid) {
     scene.dataOrder = (scene.dataOrder ?? []).filter((ref) => !(ref.kind === kind && ref.uid === removedUid));
@@ -4011,13 +4133,15 @@ function validateScene() {
   const duplicateIds = {
     functions: duplicateEntryIds(scene.functions),
     colors: duplicateEntryIds(scene.colors),
-    restrictions: duplicateEntryIds(scene.restrictions)
+    restrictions: duplicateEntryIds(scene.restrictions),
+    folders: duplicateEntryIds(scene.folders ?? [])
   };
   const diagnostics = {
     functions: [],
     colors: [],
     restrictions: [],
     draws: [],
+    folders: [],
     settings: [],
     hasErrors: false,
     summary: "GLSL ready"
@@ -4104,8 +4228,12 @@ function validateScene() {
         ? affected
       : { status: "valid", message: "Draw layer is valid" };
   });
+  diagnostics.folders = (scene.folders ?? []).map((entry) => combineDiagnostics([
+    duplicateIdDiagnostic(entry.id ?? "", "Folder", duplicateIds.folders),
+    validateEntryId(entry.id ?? "", "Folder", env)
+  ]));
 
-  const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.draws, ...diagnostics.settings];
+  const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.draws, ...diagnostics.folders, ...diagnostics.settings];
   const firstError = all.find((item) => item.status === "invalid");
   const firstInfo = all.find((item) => item.status === "info");
   const firstWarning = all.find((item) => item.status === "warning");
@@ -6238,8 +6366,25 @@ function exportScene() {
     exportSettingLine("aspect_ratio", scene.settings.aspectRatio ?? "1:1"),
     exportSettingLine("draw_only_inside_boundary", formatLeptonBoolean(Boolean(scene.settings.drawOnlyInsideBoundary))),
     exportSettingLine("unbounded_decimal_places", clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)),
-    ...orderedDataEntries(scene).map(({ kind, entry }) => exportOrderedDataEntry(kind, entry)).filter(Boolean)
+    ...exportDataTree()
   ].join("\n");
+}
+
+function exportDataTree(parentUid = "", depth = 0) {
+  const lines = [];
+  for (const item of orderedDataEntries(scene).filter((entry) => (entry.parentUid || "") === parentUid)) {
+    const indent = "  ".repeat(depth);
+    if (item.kind === "folders") {
+      const uid = ensureEntryUid(item.entry, "folders");
+      lines.push(`${indent}folder ${item.entry.id || "folder"} = {`);
+      lines.push(...exportDataTree(uid, depth + 1));
+      lines.push(`${indent}}`);
+    } else {
+      const line = exportOrderedDataEntry(item.kind, item.entry);
+      if (line) lines.push(`${indent}${line}`);
+    }
+  }
+  return lines;
 }
 
 function exportSettingLine(key, value) {
@@ -6426,11 +6571,13 @@ function importScene(raw) {
   next.colors = [];
   next.restrictions = [];
   next.draws = [];
+  next.folders = [];
   next.dataOrder = [];
   next.settingsComments = [];
   next.settingLineComments = {};
   let currentCommentSection = "functions";
   const pendingComments = [];
+  const folderStack = [];
   const queueStandaloneComment = (comment) => {
     if (!String(comment ?? "").trim()) return;
     pendingComments.push(parseStandaloneComment(comment, null));
@@ -6455,6 +6602,19 @@ function importScene(raw) {
       continue;
     }
     if (line === "~~~~~") continue;
+    const folderOpen = line.match(/^folder\s+([A-Za-z_]\w*)\s*=\s*\{$/i);
+    if (folderOpen) {
+      next._importParentUid = folderStack.at(-1) ?? "";
+      const folder = pushDataEntry(next, "folders", { id: folderOpen[1] });
+      folderStack.push(folder._uid);
+      next._importParentUid = folder._uid;
+      continue;
+    }
+    if (line === "}") {
+      folderStack.pop();
+      next._importParentUid = folderStack.at(-1) ?? "";
+      continue;
+    }
     if (line.startsWith("F:")) {
       const [id, expression] = splitFirst(line.slice(2), "~");
       flushPendingComments("functions");
@@ -6562,6 +6722,8 @@ function importScene(raw) {
     }
   }
   flushPendingComments(currentCommentSection);
+
+  delete next._importParentUid;
 
   return normalizeSceneReferences(next);
 }
@@ -6919,6 +7081,10 @@ function highlightLeptonLine(line, context = { declaredIds: new Set() }) {
 }
 
 function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
+  const folder = line.match(/^(\s*)(folder)(\s+)([A-Za-z_]\w*)(\s*=\s*\{)(.*)$/i);
+  if (folder) {
+    return `${escapeHtml(folder[1])}<span class="syntax-keyword">${folder[2]}</span>${escapeHtml(folder[3])}<span class="syntax-variable">${escapeHtml(folder[4])}</span><span class="syntax-operator">${escapeHtml(folder[5])}</span>${escapeHtml(folder[6])}`;
+  }
   const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|map|colour|color|boundary|restriction)(\b)/i);
   if (declaration) {
     const prefix = escapeHtml(declaration[1]);

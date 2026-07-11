@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-data-refine")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-folders")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -576,6 +576,13 @@ check("function rows use an expression dropdown and icon actions", () => {
   assert(!row.includes("Move up"), row);
 });
 
+check("ordinary value edits do not create comments on every row", () => {
+  const plain = sandbox.functionEntryForScene({ id: "eq", kind: "variable", expression: "x" });
+  const commented = sandbox.functionEntryForScene({ id: "eq", kind: "variable", expression: "x", comment: "note" });
+  assert(!Object.prototype.hasOwnProperty.call(plain, "comment"), JSON.stringify(plain));
+  assert(commented.comment === "note", JSON.stringify(commented));
+});
+
 check("standard panel renders a unified data workspace", () => {
   sandbox.__debugSetScene(sandbox.importScene(`expression eq = x
 colour rgb = eq~eq~eq
@@ -617,6 +624,44 @@ expression later = y`);
   assert(colorIndex !== -1 && eqIndex !== -1 && laterIndex !== -1, exported);
   assert(colorIndex < eqIndex, exported);
   assert(exported.includes("// note before boundary\nboundary rest = rest_fn~False"), exported);
+});
+
+check("nested folders round-trip without changing contained data", () => {
+  const source = `folder shapes = {
+  expression eq = x+y
+  folder styling = {
+    colour rgb = eq~eq~eq
+  }
+  boundary rest = 1~False
+}
+draw(eq,rgb,rest,False)`;
+  const imported = sandbox.importScene(source);
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("folder shapes = {"), exported);
+  assert(exported.includes("  expression eq = x+y"), exported);
+  assert(exported.includes("  folder styling = {\n    colour rgb = eq~eq~eq\n  }"), exported);
+  const second = sandbox.importScene(exported);
+  assert(second.folders.length === 2, JSON.stringify(second.folders));
+  assert(second.dataOrder.filter((ref) => ref.parentUid).length >= 3, JSON.stringify(second.dataOrder));
+});
+
+check("entries can move into nested folders and back to the root", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`expression eq = x\nfolder shapes = {\n}`));
+  assert(sandbox.moveEntryIntoFolder("functions", 0, 0) === true);
+  const functionRef = sandbox.__debugScene.dataOrder.find((ref) => ref.kind === "functions");
+  const folderRef = sandbox.__debugScene.dataOrder.find((ref) => ref.kind === "folders");
+  assert(functionRef.parentUid === folderRef.uid, JSON.stringify(sandbox.__debugScene.dataOrder));
+  assert(sandbox.moveEntryToRoot("functions", 0) === true);
+  assert(functionRef.parentUid === "", JSON.stringify(sandbox.__debugScene.dataOrder));
+});
+
+check("sort control cycles through grouped order", () => {
+  assert(sandbox.nextSort("custom") === "az");
+  assert(sandbox.nextSort("az") === "za");
+  assert(sandbox.nextSort("za") === "group");
+  assert(sandbox.nextSort("group") === "custom");
+  assert(sandbox.sortLabel("group") === "In group");
 });
 
 check("new data entries append after imported entries", () => {

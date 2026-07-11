@@ -1,4 +1,4 @@
-const APP_VERSION = "20260710-data-refine";
+const APP_VERSION = "20260710-folders";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
