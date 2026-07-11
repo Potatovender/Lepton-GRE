@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-folder-ui")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260711-order-live")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -577,9 +577,10 @@ check("function rows use an expression dropdown and icon actions", () => {
 });
 
 check("ordinary value edits do not create comments on every row", () => {
-  const plain = sandbox.functionEntryForScene({ id: "eq", kind: "variable", expression: "x" });
+  const plain = sandbox.functionEntryForScene({ id: "eq", kind: "variable", expression: "x", _uid: "stable-id" });
   const commented = sandbox.functionEntryForScene({ id: "eq", kind: "variable", expression: "x", comment: "note" });
   assert(!Object.prototype.hasOwnProperty.call(plain, "comment"), JSON.stringify(plain));
+  assert(plain._uid === "stable-id", JSON.stringify(plain));
   assert(commented.comment === "note", JSON.stringify(commented));
 });
 
@@ -663,6 +664,13 @@ draw(eq,rgb,rest,False)`;
   assert(second.dataOrder.filter((ref) => ref.parentUid).length >= 3, JSON.stringify(second.dataOrder));
 });
 
+check("folder comments round-trip on the folder declaration", () => {
+  const imported = sandbox.importScene(`folder notes = { // group note\n expression eq = x\n}`);
+  sandbox.__debugSetScene(imported);
+  assert(imported.folders[0].comment === "group note", JSON.stringify(imported.folders[0]));
+  assert(sandbox.exportScene().includes("folder notes = { // group note"), sandbox.exportScene());
+});
+
 check("folder names allow spaces but reject grammar delimiters", () => {
   assert(sandbox.validateFolderName("main shapes").status === "valid");
   assert(sandbox.validateFolderName("bad=name").status === "invalid");
@@ -697,6 +705,40 @@ check("entries can move into nested folders and back to the root", () => {
   assert(functionRef.parentUid === folderRef.uid, JSON.stringify(sandbox.__debugScene.dataOrder));
   assert(sandbox.moveEntryToRoot("functions", 0) === true);
   assert(functionRef.parentUid === "", JSON.stringify(sandbox.__debugScene.dataOrder));
+});
+
+check("rows can move downward and insert after the target", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`expression a = x\nexpression b = y\nexpression c = x+y`));
+  assert(sandbox.moveMixedDataEntry("functions", 0, "functions", 2, "after") === true);
+  const order = sandbox.orderedDataEntries(sandbox.__debugScene).map(({ entry }) => entry.id).join(",");
+  assert(order === "b,c,a", order);
+});
+
+check("status indicators expose diagnostic reasons as hover text", () => {
+  sandbox.__debugSetScene(sandbox.importScene("expression eq = x"));
+  const html = sandbox.expressionRow("warning", "Equation may be slow", "", "functions", 0, { typeLabel: "value · expression" });
+  assert(html.includes('title="Equation may be slow"'), html);
+  assert(html.includes('aria-label="Equation may be slow"'), html);
+});
+
+check("synchronizing values never reconstructs or groups mixed data order", () => {
+  const imported = sandbox.importScene(`expression first = x\ncolour tone = first~first~first\nfolder group = {\n boundary rest = 1~False\n}\ndraw(first,tone,rest,False)`);
+  sandbox.__debugSetScene(imported);
+  const before = imported.dataOrder.map((ref) => `${ref.kind}:${ref.uid}`).join("|");
+  imported.functions = imported.functions.map((entry) => sandbox.functionEntryForScene(entry));
+  sandbox.ensureSceneDataOrder(imported);
+  const after = imported.dataOrder.map((ref) => `${ref.kind}:${ref.uid}`).join("|");
+  assert(after === before, `${before}\n${after}`);
+});
+
+check("deleted default IDs are reused without creating extra rows", () => {
+  sandbox.__debugSetScene(sandbox.importScene("expression f1 = x"));
+  const made = sandbox.addEntry("functions");
+  assert(sandbox.__debugScene.functions[made.index].id === "f2");
+  sandbox.deleteEntry("functions", made.index);
+  assert(sandbox.__debugScene.functions.length === 1);
+  const remade = sandbox.addEntry("functions");
+  assert(sandbox.__debugScene.functions[remade.index].id === "f2");
 });
 
 check("sort control cycles through grouped order", () => {

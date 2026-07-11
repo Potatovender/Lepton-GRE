@@ -25,7 +25,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260710-folder-ui";
+const APP_VERSION = "20260711-order-live";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -1053,7 +1053,7 @@ function folderRow(entry, index, depth = 0, diagnostic = { status: "valid", mess
   const childCount = (scene.dataOrder ?? []).filter((ref) => ref.parentUid === uid).length;
   return expressionRow(diagnostic.status, diagnostic.message, "", "folders", index, {
     rowClass: `expression-row-folder ${depth > 0 ? "expression-row-nested" : ""}`,
-    noInlineComment: true,
+    noInlineComment: false,
     staticTypeHtml: folderIcon(),
     headingActionHtml: `<button class="folder-toggle" data-toggle-folder="${index}" type="button" aria-expanded="${!entry.collapsed}" aria-label="${entry.collapsed ? "Open" : "Close"} folder">${entry.collapsed ? "›" : "⌄"}</button>`,
     headingSuffixHtml: `<span class="folder-count">${childCount} item${childCount === 1 ? "" : "s"}</span>`,
@@ -1403,6 +1403,7 @@ function functionEntryForScene(entry) {
     time: normalized.time,
     timeMode: normalized.timeMode
   };
+  if (entry?._uid) next._uid = entry._uid;
   if (Object.prototype.hasOwnProperty.call(entry ?? {}, "comment")) {
     next.comment = normalized.comment;
   }
@@ -1480,7 +1481,7 @@ function expressionRow(status, message, content, kind = null, index = null, opti
     ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="line comment" aria-label="Line comment" />`
     : "";
   const typeLabel = options.staticTypeHtml
-    ? `<span class="entry-type-label entry-type-static ${status}">${options.staticTypeHtml}</span>`
+    ? `<span class="entry-type-label entry-type-static ${status}" title="${escapeHtml(statusLabel)}">${options.staticTypeHtml}</span>`
     : options.typeLabel && kind && index != null ? entryTypeMenu(kind, index, options.typeLabel) : "";
   const headingId = entryHeadingId(kind, index);
   return `
@@ -2062,19 +2063,19 @@ function bindEvents() {
           } else if (collection === "functions" && property === "expression") {
             const assignment = parseAssignment(cleanExpr);
             if (assignment) {
-              const entry = normalizeFunctionEntry(scene.functions[index]);
+              const entry = functionEntryForScene(scene.functions[index]);
               entry.id = assignment.id;
               entry.expression = assignment.expression;
               scene.functions[index] = entry;
               const idInput = root.querySelector(`[data-field="functions.${index}.id"]`);
               if (idInput) idInput.value = assignment.id;
             } else {
-              const entry = normalizeFunctionEntry(scene.functions[index]);
+              const entry = functionEntryForScene(scene.functions[index]);
               entry.expression = cleanExpr;
               scene.functions[index] = entry;
             }
           } else if (collection === "functions") {
-            const entry = normalizeFunctionEntry(scene.functions[index]);
+            const entry = functionEntryForScene(scene.functions[index]);
             entry[property] = cleanExpr;
             scene.functions[index] = entry;
             if (["expression", "sliderMin", "sliderMax"].includes(property)) {
@@ -2126,6 +2127,9 @@ function bindEvents() {
         event.preventDefault();
         syncFields();
         const before = sceneSnapshot();
+        listControls.data.query = "";
+        listControls.data.sort = "custom";
+        listControls.data.type = "all";
         const target = addEntry("functions");
         recordSceneHistory(before);
         pendingScrollTarget = target ? { ...target, bottom: true } : null;
@@ -2223,10 +2227,9 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       const kind = button.dataset.add;
-      if (listControls[kind]) {
-        listControls[kind].query = "";
-        listControls[kind].sort = "custom";
-      }
+      listControls.data.query = "";
+      listControls.data.sort = "custom";
+      listControls.data.type = "all";
       const target = addEntry(kind, kind === "settingsComments" ? "comment" : "data");
       if (target && kind === "functions" && button.dataset.entryKindChoice) {
         scene.functions[target.index].kind = button.dataset.entryKindChoice;
@@ -2242,6 +2245,9 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       const kind = button.dataset.addComment;
+      listControls.data.query = "";
+      listControls.data.sort = "custom";
+      listControls.data.type = "all";
       const target = addEntry(kind, "comment");
       recordSceneHistory(before);
       pendingScrollTarget = target ? { ...target, bottom: true } : null;
@@ -2324,6 +2330,7 @@ function bindEvents() {
   });
 
   root.querySelectorAll("[data-entry-drag-handle]").forEach((handle) => {
+    handle.addEventListener("pointerdown", (event) => startEntryPointerDrag(handle, event));
     handle.addEventListener("dragstart", (event) => {
       const [kind, rawIndex] = handle.dataset.entryDragHandle.split(".");
       entryDragState = { kind, index: Number(rawIndex) };
@@ -2340,6 +2347,7 @@ function bindEvents() {
       entryDragImage?.remove();
       entryDragImage = null;
       root.querySelectorAll(".expression-row-drop-target").forEach((row) => row.classList.remove("expression-row-drop-target"));
+      root.querySelectorAll(".expression-row-drop-after").forEach((row) => row.classList.remove("expression-row-drop-after"));
       root.querySelectorAll(".folder-drop-target").forEach((row) => row.classList.remove("folder-drop-target"));
     });
   });
@@ -2349,10 +2357,11 @@ function bindEvents() {
       const state = entryDragState;
       if (!state) return;
       event.preventDefault();
-      row.classList.add(row.dataset.entryKind === "folders" ? "folder-drop-target" : "expression-row-drop-target");
+      applyRowDropIndicator(row, event.clientY);
     });
     row.addEventListener("dragleave", () => {
       row.classList.remove("expression-row-drop-target");
+      row.classList.remove("expression-row-drop-after");
       row.classList.remove("folder-drop-target");
     });
     row.addEventListener("drop", (event) => {
@@ -2360,12 +2369,14 @@ function bindEvents() {
       if (!state) return;
       event.preventDefault();
       row.classList.remove("expression-row-drop-target");
+      const dropPosition = dropPositionForRow(row, event.clientY);
+      row.classList.remove("expression-row-drop-after");
       row.classList.remove("folder-drop-target");
       syncFields();
       const before = sceneSnapshot();
       const to = Number(row.dataset.entryIndex);
       if (row.dataset.entryKind === "folders") moveEntryIntoFolder(state.kind, state.index, to);
-      else moveMixedDataEntry(state.kind, state.index, row.dataset.entryKind, to);
+      else moveMixedDataEntry(state.kind, state.index, row.dataset.entryKind, to, dropPosition);
       recordSceneHistory(before);
       if (entryDragScrollTop != null) entryScrollTops.set("data", entryDragScrollTop);
       entryDragState = null;
@@ -2643,6 +2654,99 @@ function startDrawPointerDrag(from, event) {
   document.addEventListener("pointerup", onUp);
 }
 
+function startEntryPointerDrag(handle, event) {
+  const [kind, rawIndex] = String(handle.dataset.entryDragHandle ?? "").split(".");
+  const index = Number(rawIndex);
+  if (!DATA_ENTRY_KINDS.includes(kind) || !Number.isInteger(index)) return;
+  event.preventDefault();
+  const originalScrollTop = root.querySelector(".entry-list")?.scrollTop ?? 0;
+  const dragImage = createEntryDragImage(handle);
+  let targetRow = null;
+  let rootTarget = null;
+  let targetPosition = "before";
+
+  const clearTarget = () => {
+    targetRow?.classList.remove("expression-row-drop-target", "expression-row-drop-after", "folder-drop-target");
+    rootTarget?.classList.remove("root-drop-target");
+    targetRow = null;
+    rootTarget = null;
+  };
+
+  const positionImage = (pointerEvent) => {
+    if (!dragImage) return;
+    dragImage.style.left = `${pointerEvent.clientX + 12}px`;
+    dragImage.style.top = `${pointerEvent.clientY + 12}px`;
+  };
+
+  const onMove = (moveEvent) => {
+    positionImage(moveEvent);
+    const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+    const row = element?.closest?.("[data-entry-kind][data-entry-index]");
+    const addTarget = element?.closest?.("[data-add-default]");
+    if (row === targetRow && addTarget === rootTarget) {
+      if (row) {
+        const nextPosition = dropPositionForRow(row, moveEvent.clientY);
+        if (nextPosition !== targetPosition) {
+          targetPosition = nextPosition;
+          applyRowDropIndicator(row, moveEvent.clientY);
+        }
+      }
+      return;
+    }
+    clearTarget();
+    if (row) {
+      targetRow = row;
+      targetPosition = dropPositionForRow(row, moveEvent.clientY);
+      applyRowDropIndicator(row, moveEvent.clientY);
+    } else if (addTarget) {
+      rootTarget = addTarget;
+      rootTarget.classList.add("root-drop-target");
+    }
+  };
+
+  const onUp = (upEvent) => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    const element = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+    const row = element?.closest?.("[data-entry-kind][data-entry-index]") ?? targetRow;
+    const dropAtRoot = Boolean(element?.closest?.("[data-add-default]") ?? rootTarget);
+    clearTarget();
+    dragImage?.remove();
+    syncFields();
+    const before = sceneSnapshot();
+    let moved = false;
+    if (row?.dataset.entryKind === "folders") {
+      moved = moveEntryIntoFolder(kind, index, Number(row.dataset.entryIndex));
+    } else if (row) {
+      const position = row === targetRow ? targetPosition : dropPositionForRow(row, upEvent.clientY);
+      moved = moveMixedDataEntry(kind, index, row.dataset.entryKind, Number(row.dataset.entryIndex), position);
+    } else if (dropAtRoot) {
+      moved = moveEntryToRoot(kind, index);
+    }
+    if (!moved) return;
+    recordSceneHistory(before);
+    entryScrollTops.set("data", originalScrollTop);
+    renderApp();
+  };
+
+  positionImage(event);
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
+
+function dropPositionForRow(row, clientY) {
+  if (!row || row.dataset.entryKind === "folders") return "inside";
+  const rect = row.getBoundingClientRect();
+  return clientY >= rect.top + rect.height / 2 ? "after" : "before";
+}
+
+function applyRowDropIndicator(row, clientY) {
+  row.classList.remove("expression-row-drop-target", "expression-row-drop-after", "folder-drop-target");
+  const position = dropPositionForRow(row, clientY);
+  if (position === "inside") row.classList.add("folder-drop-target");
+  else row.classList.add(position === "after" ? "expression-row-drop-after" : "expression-row-drop-target");
+}
+
 function bindSidebarResize() {
   const resizer = root.querySelector(".sidebar-resizer");
   if (!resizer) return;
@@ -2850,7 +2954,7 @@ function updateSliderValue(index, value) {
 
 function setSliderExpression(index, value, syncField = false) {
   if (!scene.functions[index]) return;
-  const entry = normalizeFunctionEntry(scene.functions[index]);
+  const entry = functionEntryForScene(scene.functions[index]);
   entry.expression = formatSliderValue(value, entry);
   scene.functions[index] = entry;
   markUnsavedChange();
@@ -3191,7 +3295,7 @@ function moveEntryTo(kind, from, to) {
   return true;
 }
 
-function moveMixedDataEntry(fromKind, fromIndex, toKind, toIndex) {
+function moveMixedDataEntry(fromKind, fromIndex, toKind, toIndex, position = "before") {
   if (!DATA_ENTRY_KINDS.includes(fromKind) || !DATA_ENTRY_KINDS.includes(toKind)) return false;
   const fromEntry = scene[fromKind]?.[fromIndex];
   const toEntry = scene[toKind]?.[toIndex];
@@ -3204,7 +3308,8 @@ function moveMixedDataEntry(fromKind, fromIndex, toKind, toIndex) {
   if (fromOrderIndex < 0 || toOrderIndex < 0 || fromOrderIndex === toOrderIndex) return false;
   const targetParentUid = scene.dataOrder[toOrderIndex]?.parentUid ?? "";
   const [ref] = scene.dataOrder.splice(fromOrderIndex, 1);
-  const adjustedTo = fromOrderIndex < toOrderIndex ? toOrderIndex - 1 : toOrderIndex;
+  const targetAfterRemoval = scene.dataOrder.findIndex((item) => item.kind === toKind && item.uid === toUid);
+  const adjustedTo = targetAfterRemoval + (position === "after" ? 1 : 0);
   ref.parentUid = targetParentUid;
   scene.dataOrder.splice(adjustedTo, 0, ref);
   return true;
@@ -4515,7 +4620,6 @@ function assertCompleteExpression(source) {
 }
 
 function updateStatusLights(diagnostics) {
-  const group = diagnostics[activeTab] ?? [];
   if (activeTab === "settings") {
     const gridStatus = diagnostics.settings?.[0];
     const status = root.querySelector(".settings-section-title .entry-status");
@@ -4528,16 +4632,24 @@ function updateStatusLights(diagnostics) {
       status.setAttribute("aria-label", gridStatus.message);
     }
   }
-  root.querySelectorAll(".expression-row").forEach((row, index) => {
+  root.querySelectorAll(".expression-row[data-entry-kind][data-entry-index]").forEach((row) => {
     const status = row.querySelector(".entry-status");
-    const item = group[index];
+    const kind = row.dataset.entryKind;
+    const index = Number(row.dataset.entryIndex);
+    const item = diagnostics[kind]?.[index];
     if (!status || !item) return;
     status.classList.toggle("valid", item.status === "valid");
     status.classList.toggle("invalid", item.status === "invalid");
     status.classList.toggle("info", item.status === "info");
     status.classList.toggle("warning", item.status === "warning");
+    status.setAttribute("title", item.message);
     status.setAttribute("aria-label", item.message);
     row.setAttribute("title", item.message);
+    const typeIcon = row.querySelector(".entry-type-static");
+    if (typeIcon) {
+      for (const state of ["valid", "invalid", "info", "warning"]) typeIcon.classList.toggle(state, item.status === state);
+      typeIcon.setAttribute("title", item.message);
+    }
   });
 
   const overlay = root.querySelector(".render-overlay");
@@ -6447,7 +6559,7 @@ function exportDataTree(parentUid = "", depth = 0) {
     const indent = "  ".repeat(depth);
     if (item.kind === "folders") {
       const uid = ensureEntryUid(item.entry, "folders");
-      lines.push(`${indent}folder ${item.entry.id || "folder"} = {`);
+      lines.push(`${indent}${appendInlineComment(`folder ${item.entry.id || "folder"} = {`, item.entry.comment)}`);
       lines.push(...exportDataTree(uid, depth + 1));
       lines.push(`${indent}}`);
     } else {
@@ -6676,7 +6788,7 @@ function importScene(raw) {
     const folderOpen = line.match(/^folder\s+(.+?)\s*=\s*\{$/i);
     if (folderOpen) {
       next._importParentUid = folderStack.at(-1) ?? "";
-      const folder = pushDataEntry(next, "folders", { id: folderOpen[1].trim(), collapsed: false });
+      const folder = pushDataEntry(next, "folders", withInlineComment({ id: folderOpen[1].trim(), collapsed: false }, comment));
       folderStack.push(folder._uid);
       next._importParentUid = folder._uid;
       continue;
