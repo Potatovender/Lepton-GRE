@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-folders")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260710-folder-ui")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -599,6 +599,23 @@ draw(eq,rgb,rest,False)`));
   assert(html.includes('data-entry-kind="draws"'), html);
 });
 
+check("new-line menu leads with folders and comments in their own group", () => {
+  const html = sandbox.addDataRow();
+  const folder = html.indexOf('data-add="folders"');
+  const comment = html.indexOf('data-add-comment="functions"');
+  const expression = html.indexOf('data-entry-kind-choice="variable"', html.indexOf("new-entry-popover"));
+  const draw = html.indexOf('data-add="draws"');
+  assert(folder !== -1 && comment > folder && expression > comment && draw > expression, html);
+});
+
+check("data type and ID share the row heading", () => {
+  sandbox.__debugSetScene(sandbox.importScene("expression eq = x"));
+  const html = sandbox.renderPanel();
+  assert(html.includes('class="entry-heading"'), html);
+  assert(html.includes('data-type-menu="functions.0"'), html);
+  assert(html.includes('data-field="functions.0.id"'), html);
+});
+
 check("data type label is a row-scoped selector", () => {
   const html = sandbox.expressionRow("valid", "ok", sandbox.functionRowContent({ id: "eq", kind: "variable", expression: "x+y" }, 0), "functions", 0, { typeLabel: "value · expression" });
   assert(html.includes('data-type-menu="functions.0"'), html);
@@ -627,7 +644,7 @@ expression later = y`);
 });
 
 check("nested folders round-trip without changing contained data", () => {
-  const source = `folder shapes = {
+  const source = `folder main shapes = {
   expression eq = x+y
   folder styling = {
     colour rgb = eq~eq~eq
@@ -638,12 +655,38 @@ draw(eq,rgb,rest,False)`;
   const imported = sandbox.importScene(source);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("folder shapes = {"), exported);
+  assert(exported.includes("folder main shapes = {"), exported);
   assert(exported.includes("  expression eq = x+y"), exported);
   assert(exported.includes("  folder styling = {\n    colour rgb = eq~eq~eq\n  }"), exported);
   const second = sandbox.importScene(exported);
   assert(second.folders.length === 2, JSON.stringify(second.folders));
   assert(second.dataOrder.filter((ref) => ref.parentUid).length >= 3, JSON.stringify(second.dataOrder));
+});
+
+check("folder names allow spaces but reject grammar delimiters", () => {
+  assert(sandbox.validateFolderName("main shapes").status === "valid");
+  assert(sandbox.validateFolderName("bad=name").status === "invalid");
+  assert(sandbox.validateFolderName("bad{name").status === "invalid");
+});
+
+check("collapsed folders hide descendants without deleting them", () => {
+  const imported = sandbox.importScene(`folder group one = {\n expression eq = x\n}`);
+  sandbox.__debugSetScene(imported);
+  assert(sandbox.visibleDataEntries().length === 2);
+  sandbox.__debugScene.folders[0].collapsed = true;
+  assert(sandbox.visibleDataEntries().length === 1);
+  assert(sandbox.__debugScene.functions.length === 1);
+});
+
+check("folder status prioritizes red then blue then yellow then green", () => {
+  const imported = sandbox.importScene(`folder group = {\n expression eq = x\n}`);
+  sandbox.__debugSetScene(imported);
+  const base = { folders: [{ status: "valid", message: "ok" }], functions: [{ status: "warning", message: "warn" }], colors: [], restrictions: [], draws: [] };
+  assert(sandbox.aggregateFolderDiagnostics(base)[0].status === "warning");
+  base.functions[0] = { status: "info", message: "large" };
+  assert(sandbox.aggregateFolderDiagnostics(base)[0].status === "info");
+  base.functions[0] = { status: "invalid", message: "bad" };
+  assert(sandbox.aggregateFolderDiagnostics(base)[0].status === "invalid");
 });
 
 check("entries can move into nested folders and back to the root", () => {

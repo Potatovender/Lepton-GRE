@@ -25,7 +25,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260710-folders";
+const APP_VERSION = "20260710-folder-ui";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -274,6 +274,7 @@ const timeVariableDirections = new Map();
 const entryScrollTops = new Map();
 let pendingScrollTarget = null;
 let entryDragState = null;
+let entryDragScrollTop = null;
 let entryDragImage = null;
 let keyboardOpen = false;
 let keyboardTab = "pad";
@@ -692,13 +693,15 @@ function restoreEntryScroll() {
   if (!list) return;
 
   if (pendingScrollTarget) {
-    const { kind, index } = pendingScrollTarget;
+    const { kind, index, bottom } = pendingScrollTarget;
     pendingScrollTarget = null;
-    const addButton = root.querySelector(`[data-add="${cssEscape(kind)}"]`);
+    if (bottom) {
+      list.scrollTop = list.scrollHeight;
+      return;
+    }
     const row = root.querySelector(`[data-entry-kind="${cssEscape(kind)}"][data-entry-index="${index}"]`);
-    const target = addButton ?? row;
-    if (target) {
-      target.scrollIntoView({ block: "nearest" });
+    if (row) {
+      row.scrollIntoView({ block: "nearest" });
       return;
     }
   }
@@ -1025,7 +1028,7 @@ function renderPanel() {
 
 function renderDataPanel(diagnostics) {
   const rows = visibleDataEntries().map(({ kind, index, entry, depth = 0 }) => {
-    if (kind === "folders") return folderRow(entry, index, depth);
+    if (kind === "folders") return folderRow(entry, index, depth, diagnostics.folders?.[index]);
     if (isCommentEntry(entry)) return commentRow(kind, index, entry, dataTypeLabel(kind, entry));
     return expressionRow(
       diagnostics[kind]?.[index]?.status ?? "invalid",
@@ -1033,7 +1036,7 @@ function renderDataPanel(diagnostics) {
       dataRowContent(kind, entry, index),
       kind,
       index,
-      { rowClass: kind === "draws" && entry.hidden ? "expression-row-hidden" : "", typeLabel: dataTypeLabel(kind, entry), attrs: `style="padding-left:${8 + Math.min(depth, 5) * 14}px"` }
+      { rowClass: `${kind === "draws" && entry.hidden ? "expression-row-hidden " : ""}${depth > 0 ? "expression-row-nested" : ""}`, typeLabel: dataTypeLabel(kind, entry), attrs: `style="padding-left:${8 + Math.min(depth, 5) * 14}px"` }
     );
   });
   return [
@@ -1045,22 +1048,27 @@ function renderDataPanel(diagnostics) {
   ].join("");
 }
 
-function folderRow(entry, index, depth = 0) {
+function folderRow(entry, index, depth = 0, diagnostic = { status: "valid", message: "Folder is valid" }) {
   const uid = ensureEntryUid(entry, "folders");
   const childCount = (scene.dataOrder ?? []).filter((ref) => ref.parentUid === uid).length;
-  return expressionRow("valid", `${childCount} item${childCount === 1 ? "" : "s"}`, `
-    <div class="folder-content">
-      <input class="entry-id folder-id" data-field="folders.${index}.id" value="${escapeHtml(entry.id ?? "")}" placeholder="Folder ID" aria-label="Folder ID" />
-      <span class="folder-count">${childCount} item${childCount === 1 ? "" : "s"}</span>
-    </div>
-  `, "folders", index, { rowClass: "expression-row-folder", noInlineComment: true, staticTypeLabel: "folder", attrs: `data-folder-uid="${escapeHtml(uid)}" style="padding-left:${8 + Math.min(depth, 5) * 14}px"` });
+  return expressionRow(diagnostic.status, diagnostic.message, "", "folders", index, {
+    rowClass: `expression-row-folder ${depth > 0 ? "expression-row-nested" : ""}`,
+    noInlineComment: true,
+    staticTypeHtml: folderIcon(),
+    headingActionHtml: `<button class="folder-toggle" data-toggle-folder="${index}" type="button" aria-expanded="${!entry.collapsed}" aria-label="${entry.collapsed ? "Open" : "Close"} folder">${entry.collapsed ? "›" : "⌄"}</button>`,
+    headingSuffixHtml: `<span class="folder-count">${childCount} item${childCount === 1 ? "" : "s"}</span>`,
+    attrs: `data-folder-uid="${escapeHtml(uid)}" style="padding-left:${8 + Math.min(depth, 5) * 14}px"`
+  });
+}
+
+function folderIcon() {
+  return `<svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v9.5h-17z"/></svg>`;
 }
 
 function dataRowContent(kind, entry, index) {
   if (kind === "functions") return functionRowContent(entry, index);
   if (kind === "colors") {
     return `
-      <input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Colour id" />
       <label class="channel-row"><span class="channel-label">red channel</span>${searchableReference(`colors.${index}.red`, dataEntries(scene.functions), entry.red, "Red function")}</label>
       <label class="channel-row"><span class="channel-label">green channel</span>${searchableReference(`colors.${index}.green`, dataEntries(scene.functions), entry.green, "Green function")}</label>
       <label class="channel-row"><span class="channel-label">blue channel</span>${searchableReference(`colors.${index}.blue`, dataEntries(scene.functions), entry.blue, "Blue function")}</label>
@@ -1068,7 +1076,6 @@ function dataRowContent(kind, entry, index) {
   }
   if (kind === "restrictions") {
     return `
-      <input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(entry.id)}" placeholder="ID" aria-label="Boundary id" />
       <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, dataEntries(scene.functions), entry.expression, "Boundary function")}</label>
       <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> draw when less than or equal to 0 ${helpMark("boundaryDirection")}</label>
     `;
@@ -1312,6 +1319,7 @@ function nestOrderedEntries(entries) {
     for (const item of byParent.get(parentUid) ?? []) {
       output.push({ ...item, depth });
       if (item.kind !== "folders") continue;
+      if (item.entry.collapsed) continue;
       const uid = ensureEntryUid(item.entry, "folders");
       if (ancestry.has(uid)) continue;
       visit(uid, depth + 1, new Set([...ancestry, uid]));
@@ -1353,7 +1361,6 @@ function functionRowContent(entry, index) {
   const normalized = normalizeFunctionEntry(entry);
   return `
     <div class="function-row-head">
-      <input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(normalized.id)}" placeholder="ID" aria-label="Function id" />
       ${functionKindSelector(normalized.kind, index)}
     </div>
     ${normalized.kind === "slider" ? sliderRowContent(normalized, index) : ""}
@@ -1472,9 +1479,10 @@ function expressionRow(status, message, content, kind = null, index = null, opti
   const inlineComment = kind && !options.noInlineComment && hasInlineComment
     ? `<input class="entry-comment-inline" data-field="${kind}.${index}.comment" value="${escapeHtml(scene[kind]?.[index]?.comment ?? "")}" placeholder="line comment" aria-label="Line comment" />`
     : "";
-  const typeLabel = options.staticTypeLabel
-    ? `<span class="entry-type-label entry-type-static">${escapeHtml(options.staticTypeLabel)}</span>`
+  const typeLabel = options.staticTypeHtml
+    ? `<span class="entry-type-label entry-type-static ${status}">${options.staticTypeHtml}</span>`
     : options.typeLabel && kind && index != null ? entryTypeMenu(kind, index, options.typeLabel) : "";
+  const headingId = entryHeadingId(kind, index);
   return `
     <div class="expression-row ${options.rowClass ?? ""}" title="${escapeHtml(message)}" ${entryAttrs} ${options.attrs ?? ""}>
       ${kind ? `
@@ -1484,7 +1492,10 @@ function expressionRow(status, message, content, kind = null, index = null, opti
           <span class="entry-grip-dot"></span>
         </div>
       ` : `<span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>`}
-      <div class="entry-content">${typeLabel}${content}${inlineComment}</div>
+      <div class="entry-content">
+        ${typeLabel || headingId ? `<div class="entry-heading">${options.headingActionHtml ?? ""}${typeLabel}${headingId}${options.headingSuffixHtml ?? ""}</div>` : ""}
+        ${content}${inlineComment}
+      </div>
       ${kind ? `
         <div class="row-actions">
           ${options.noInlineComment || hasInlineComment ? "" : `<button class="row-action row-action-comment" data-add-inline-comment="${kind}.${index}" title="Add comment" aria-label="Add comment">${commentIcon()}</button>`}
@@ -1493,6 +1504,14 @@ function expressionRow(status, message, content, kind = null, index = null, opti
       ` : `<button class="row-action" title="More options" aria-label="More options">⋯</button>`}
     </div>
   `;
+}
+
+function entryHeadingId(kind, index) {
+  if (kind === "functions") return `<input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(scene.functions[index]?.id ?? "")}" placeholder="ID" aria-label="Function id" />`;
+  if (kind === "colors") return `<input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(scene.colors[index]?.id ?? "")}" placeholder="ID" aria-label="Colour id" />`;
+  if (kind === "restrictions") return `<input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(scene.restrictions[index]?.id ?? "")}" placeholder="ID" aria-label="Boundary id" />`;
+  if (kind === "folders") return `<input class="entry-id folder-id" data-field="folders.${index}.id" value="${escapeHtml(scene.folders[index]?.id ?? "")}" placeholder="Folder name" aria-label="Folder name" />`;
+  return "";
 }
 
 function entryTypeMenu(kind, index, label) {
@@ -1527,6 +1546,9 @@ function addDataRow() {
       <details class="new-entry-menu" data-new-entry-menu>
         <summary class="new-entry-ellipsis" aria-label="Choose line type">...</summary>
         <div class="new-entry-popover">
+          <button data-add="folders" type="button">${folderIcon()} Folder</button>
+          <button data-add-comment="functions" data-comment-target="data" type="button">${commentIcon()} Comment</button>
+          <div class="new-entry-divider" role="separator"></div>
           <div class="new-entry-group">
             <span class="new-entry-heading">Value</span>
             <button data-add="functions" data-entry-kind-choice="variable" type="button">Expression</button>
@@ -1538,8 +1560,6 @@ function addDataRow() {
           <button data-add="restrictions" type="button">Boundary</button>
           <div class="new-entry-divider" role="separator"></div>
           <button data-add="draws" type="button">Draw layer</button>
-          <button data-add="folders" type="button">Folder</button>
-          <button data-add-comment="functions" data-comment-target="data" type="button">${commentIcon()} Comment</button>
         </div>
       </details>
     </div>
@@ -2108,7 +2128,7 @@ function bindEvents() {
         const before = sceneSnapshot();
         const target = addEntry("functions");
         recordSceneHistory(before);
-        pendingScrollTarget = target;
+        pendingScrollTarget = target ? { ...target, bottom: true } : null;
         renderApp();
         return;
       }
@@ -2212,7 +2232,7 @@ function bindEvents() {
         scene.functions[target.index].kind = button.dataset.entryKindChoice;
       }
       recordSceneHistory(before);
-      pendingScrollTarget = target;
+      pendingScrollTarget = target ? { ...target, bottom: true } : null;
       renderApp();
     });
   });
@@ -2224,7 +2244,7 @@ function bindEvents() {
       const kind = button.dataset.addComment;
       const target = addEntry(kind, "comment");
       recordSceneHistory(before);
-      pendingScrollTarget = target;
+      pendingScrollTarget = target ? { ...target, bottom: true } : null;
       renderApp();
     });
   });
@@ -2255,6 +2275,17 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       toggleDrawHidden(Number(button.dataset.toggleDraw));
+      recordSceneHistory(before);
+      renderApp();
+    });
+  });
+
+  root.querySelectorAll("[data-toggle-folder]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const before = sceneSnapshot();
+      const folder = scene.folders?.[Number(button.dataset.toggleFolder)];
+      if (!folder) return;
+      folder.collapsed = !folder.collapsed;
       recordSceneHistory(before);
       renderApp();
     });
@@ -2296,6 +2327,7 @@ function bindEvents() {
     handle.addEventListener("dragstart", (event) => {
       const [kind, rawIndex] = handle.dataset.entryDragHandle.split(".");
       entryDragState = { kind, index: Number(rawIndex) };
+      entryDragScrollTop = root.querySelector(".entry-list")?.scrollTop ?? null;
       event.dataTransfer?.setData("text/plain", handle.dataset.entryDragHandle);
       entryDragImage = createEntryDragImage(handle);
       if (entryDragImage) {
@@ -2304,9 +2336,11 @@ function bindEvents() {
     });
     handle.addEventListener("dragend", () => {
       entryDragState = null;
+      entryDragScrollTop = null;
       entryDragImage?.remove();
       entryDragImage = null;
       root.querySelectorAll(".expression-row-drop-target").forEach((row) => row.classList.remove("expression-row-drop-target"));
+      root.querySelectorAll(".folder-drop-target").forEach((row) => row.classList.remove("folder-drop-target"));
     });
   });
 
@@ -2315,23 +2349,25 @@ function bindEvents() {
       const state = entryDragState;
       if (!state) return;
       event.preventDefault();
-      row.classList.add("expression-row-drop-target");
+      row.classList.add(row.dataset.entryKind === "folders" ? "folder-drop-target" : "expression-row-drop-target");
     });
     row.addEventListener("dragleave", () => {
       row.classList.remove("expression-row-drop-target");
+      row.classList.remove("folder-drop-target");
     });
     row.addEventListener("drop", (event) => {
       const state = entryDragState;
       if (!state) return;
       event.preventDefault();
       row.classList.remove("expression-row-drop-target");
+      row.classList.remove("folder-drop-target");
       syncFields();
       const before = sceneSnapshot();
       const to = Number(row.dataset.entryIndex);
       if (row.dataset.entryKind === "folders") moveEntryIntoFolder(state.kind, state.index, to);
       else moveMixedDataEntry(state.kind, state.index, row.dataset.entryKind, to);
       recordSceneHistory(before);
-      pendingScrollTarget = { kind: row.dataset.entryKind, index: to };
+      if (entryDragScrollTop != null) entryScrollTops.set("data", entryDragScrollTop);
       entryDragState = null;
       renderApp();
     });
@@ -2350,6 +2386,7 @@ function bindEvents() {
     const before = sceneSnapshot();
     moveEntryToRoot(entryDragState.kind, entryDragState.index);
     recordSceneHistory(before);
+    if (entryDragScrollTop != null) entryScrollTops.set("data", entryDragScrollTop);
     entryDragState = null;
     renderApp();
   });
@@ -3058,7 +3095,7 @@ function defaultEntryForKind(kind) {
       hidden: false
     };
   }
-  if (kind === "folders") return { id: nextEntryId(scene.folders, "folder") };
+  if (kind === "folders") return { id: nextEntryId(scene.folders, "folder"), collapsed: false };
   return null;
 }
 
@@ -4230,8 +4267,9 @@ function validateScene() {
   });
   diagnostics.folders = (scene.folders ?? []).map((entry) => combineDiagnostics([
     duplicateIdDiagnostic(entry.id ?? "", "Folder", duplicateIds.folders),
-    validateEntryId(entry.id ?? "", "Folder", env)
+    validateFolderName(entry.id ?? "")
   ]));
+  diagnostics.folders = aggregateFolderDiagnostics(diagnostics);
 
   const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.draws, ...diagnostics.folders, ...diagnostics.settings];
   const firstError = all.find((item) => item.status === "invalid");
@@ -4240,6 +4278,39 @@ function validateScene() {
   diagnostics.hasErrors = Boolean(firstError);
   diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   return diagnostics;
+}
+
+function validateFolderName(name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return { status: "invalid", message: "Folder name cannot be blank" };
+  if (/[={}\n\r]/.test(trimmed)) return { status: "invalid", message: "Folder names cannot contain =, {, or }" };
+  return { status: "valid", message: "Folder name is valid" };
+}
+
+function aggregateFolderDiagnostics(diagnostics) {
+  const memo = new Map();
+  const visiting = new Set();
+  const priority = { valid: 0, warning: 1, info: 2, invalid: 3 };
+  const visit = (index) => {
+    if (memo.has(index)) return memo.get(index);
+    if (visiting.has(index)) return { status: "invalid", message: "Folder nesting cannot contain a cycle" };
+    visiting.add(index);
+    const folder = scene.folders[index];
+    const uid = ensureEntryUid(folder, "folders");
+    const candidates = [diagnostics.folders[index]];
+    for (const ref of scene.dataOrder ?? []) {
+      if (ref.parentUid !== uid) continue;
+      const childIndex = scene[ref.kind]?.findIndex((entry) => ensureEntryUid(entry, ref.kind) === ref.uid) ?? -1;
+      if (childIndex < 0) continue;
+      candidates.push(ref.kind === "folders" ? visit(childIndex) : diagnostics[ref.kind]?.[childIndex]);
+    }
+    visiting.delete(index);
+    const result = candidates.filter(Boolean).reduce((best, item) => (priority[item.status] > priority[best.status] ? item : best), { status: "valid", message: "Folder and contents are valid" });
+    const wrapped = result.status === "valid" ? result : { status: result.status, message: `Folder contains: ${result.message}` };
+    memo.set(index, wrapped);
+    return wrapped;
+  };
+  return (scene.folders ?? []).map((_, index) => visit(index));
 }
 
 function sliderRangeDiagnostic(entry) {
@@ -6602,10 +6673,10 @@ function importScene(raw) {
       continue;
     }
     if (line === "~~~~~") continue;
-    const folderOpen = line.match(/^folder\s+([A-Za-z_]\w*)\s*=\s*\{$/i);
+    const folderOpen = line.match(/^folder\s+(.+?)\s*=\s*\{$/i);
     if (folderOpen) {
       next._importParentUid = folderStack.at(-1) ?? "";
-      const folder = pushDataEntry(next, "folders", { id: folderOpen[1] });
+      const folder = pushDataEntry(next, "folders", { id: folderOpen[1].trim(), collapsed: false });
       folderStack.push(folder._uid);
       next._importParentUid = folder._uid;
       continue;
@@ -7081,7 +7152,7 @@ function highlightLeptonLine(line, context = { declaredIds: new Set() }) {
 }
 
 function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
-  const folder = line.match(/^(\s*)(folder)(\s+)([A-Za-z_]\w*)(\s*=\s*\{)(.*)$/i);
+  const folder = line.match(/^(\s*)(folder)(\s+)(.+?)(\s*=\s*\{)(.*)$/i);
   if (folder) {
     return `${escapeHtml(folder[1])}<span class="syntax-keyword">${folder[2]}</span>${escapeHtml(folder[3])}<span class="syntax-variable">${escapeHtml(folder[4])}</span><span class="syntax-operator">${escapeHtml(folder[5])}</span>${escapeHtml(folder[6])}`;
   }
