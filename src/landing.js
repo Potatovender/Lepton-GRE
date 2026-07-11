@@ -1,4 +1,4 @@
-const APP_VERSION = "20260711-order-live";
+const APP_VERSION = "20260711-conditions-points-grid";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

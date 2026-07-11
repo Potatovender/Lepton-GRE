@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260711-order-live")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260711-conditions-points-grid")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -719,6 +719,30 @@ check("status indicators expose diagnostic reasons as hover text", () => {
   const html = sandbox.expressionRow("warning", "Equation may be slow", "", "functions", 0, { typeLabel: "value · expression" });
   assert(html.includes('title="Equation may be slow"'), html);
   assert(html.includes('aria-label="Equation may be slow"'), html);
+});
+
+check("piecewise expressions support boolean and boundary conditions", () => {
+  sandbox.__debugSetScene(sandbox.importScene("boundary positive = x~False"));
+  const env=sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  const fn=sandbox.compileExpression("{x>0:1,x<0:-1,0}");
+  assert(fn(2,0,env)===1 && fn(-2,0,env)===-1 && fn(0,0,env)===0);
+  assert(sandbox.compileExpression("{positive:7}")(2,0,env)===7);
+  assert(Number.isNaN(sandbox.compileExpression("{x>0:1}")(-1,0,env)));
+  assert(sandbox.expressionToGlsl("{x>0:1,0}",sandbox.sceneFunctionEnv(true)).includes("?"));
+});
+
+check("points and grid settings round-trip through text", () => {
+  const imported=sandbox.importScene("set show_grid = False\npoint p1 = (2,3)~True");
+  sandbox.__debugSetScene(imported);
+  assert(imported.points[0].x==="2" && imported.points[0].draggable===true);
+  assert(imported.settings.showGrid===false);
+  const text=sandbox.exportScene(); assert(text.includes("point p1 = (2,3)~True"),text); assert(text.includes("set show_grid = False"),text);
+});
+
+check("function reference menus can create a selected function", () => {
+  const html=sandbox.searchableReference("draws.0.equationId",[{id:"eq"}],"eq","Draw function");
+  assert(html.includes('data-new-reference-function="draws.0.equationId"'),html);
+  assert(html.includes("New function"),html);
 });
 
 check("synchronizing values never reconstructs or groups mixed data order", () => {
