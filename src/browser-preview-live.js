@@ -32,7 +32,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260711-release-matrix-fix";
+const APP_VERSION = "20260712-editor-rename-frac-folders3";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -821,7 +821,7 @@ function keepHorizontalCaretVisible(field) {
   if (!target) return;
   const fieldRect = field.getBoundingClientRect();
   const cursorRect = target.getBoundingClientRect();
-  const inset = 18;
+  const inset = 2;
   if (cursorRect.right > fieldRect.right - inset) {
     field.scrollLeft += cursorRect.right - fieldRect.right + inset;
   } else if (cursorRect.left < fieldRect.left + inset) {
@@ -857,12 +857,8 @@ function keepTextInputCaretVisible(field, event = null) {
   if (field.selectionStart == null || field.selectionEnd == null) return;
   if (field.selectionStart !== field.selectionEnd) return;
   const caretIndex = textInputVisibleCaretIndex(field, event);
-  if (caretIndex === field.value.length) {
-    field.scrollLeft = field.scrollWidth;
-    return;
-  }
   const caretLeft = textWidthForInput(field, field.value.slice(0, caretIndex));
-  const inset = 20;
+  const inset = 2;
   const visibleLeft = field.scrollLeft;
   const visibleRight = field.scrollLeft + field.clientWidth;
   if (caretLeft < visibleLeft + inset) {
@@ -897,6 +893,25 @@ function insertIntoTextField(field, text) {
   field.setRangeText(text, start, end, "end");
   field.dispatchEvent(new Event("input", { bubbles: true }));
   keepTextInputCaretVisible(field);
+}
+
+function addDataLineFromEnter(event, field) {
+  if (event.key !== "Enter" || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false;
+  if (displayMode !== "standard" || settingsPanelOpen || field.closest?.(".reference-picker, .new-entry-menu, .entry-type-menu")) return false;
+  if (field.tagName === "TEXTAREA" || isCommentEntry(scene[field.dataset.field?.split(".")[0]]?.[Number(field.dataset.field?.split(".")[1])])) return false;
+  const collection = field.dataset.field?.split(".")[0];
+  if (!DATA_ENTRY_KINDS.includes(collection) || collection === "draws") return false;
+  event.preventDefault();
+  syncFields();
+  const before = sceneSnapshot();
+  listControls.data.query = "";
+  listControls.data.sort = "custom";
+  listControls.data.type = "all";
+  const target = addEntry("functions");
+  recordSceneHistory(before);
+  pendingScrollTarget = target ? { ...target, bottom: true } : null;
+  renderApp();
+  return true;
 }
 
 function activateKeyboardTarget(target) {
@@ -1714,8 +1729,8 @@ function searchableReference(field, entries, selected, label) {
       <div class="reference-menu">
         <input class="compact-field reference-filter" data-reference-filter="${escapeHtml(field)}" value="" placeholder="Search ${escapeHtml(label.toLowerCase())}" aria-label="Search ${escapeHtml(label)}" />
         <div class="reference-options" role="listbox">
-          ${referenceMenuOptions(entries, selected, field)}
           <button class="reference-option reference-new" type="button" data-new-reference-function="${escapeHtml(field)}">+ New function</button>
+          ${referenceMenuOptions(entries, selected, field)}
         </div>
       </div>
     </details>
@@ -1830,6 +1845,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       syncFields();
       displayMode = button.dataset.displayMode;
+      if (displayMode === "standard") settingsPanelOpen = false;
       if (displayMode === "text") settingsPanelOpen = false;
       renderApp();
     });
@@ -2103,9 +2119,11 @@ function bindEvents() {
             const assignment = parseAssignment(cleanExpr);
             if (assignment) {
               const entry = functionEntryForScene(scene.functions[index]);
+              const oldId = entry.id;
               entry.id = assignment.id;
               entry.expression = assignment.expression;
               scene.functions[index] = entry;
+              renameSceneReferences("functions", oldId, assignment.id);
               const idInput = root.querySelector(`[data-field="functions.${index}.id"]`);
               if (idInput) idInput.value = assignment.id;
             } else {
@@ -2162,19 +2180,7 @@ function bindEvents() {
         event.preventDefault();
         return;
       }
-      if (event.key === "Enter" && field.dataset.field?.startsWith("functions.") && field.dataset.field?.endsWith(".expression")) {
-        event.preventDefault();
-        syncFields();
-        const before = sceneSnapshot();
-        listControls.data.query = "";
-        listControls.data.sort = "custom";
-        listControls.data.type = "all";
-        const target = addEntry("functions");
-        recordSceneHistory(before);
-        pendingScrollTarget = target ? { ...target, bottom: true } : null;
-        renderApp();
-        return;
-      }
+      if (addDataLineFromEnter(event, field)) return;
       requestAnimationFrame(() => keepHorizontalCaretVisible(field));
     });
     field.addEventListener("keyup", () => requestAnimationFrame(() => keepHorizontalCaretVisible(field)));
@@ -2212,6 +2218,9 @@ function bindEvents() {
     field.addEventListener("input", () => {
       if (!isSceneText) keepTextInputCaretVisible(field);
     });
+    field.addEventListener("keydown", (event) => {
+      if (!isSceneText) addDataLineFromEnter(event, field);
+    });
     field.addEventListener("keyup", () => {
       if (!isSceneText) keepTextInputCaretVisible(field);
     });
@@ -2235,20 +2244,36 @@ function bindEvents() {
     field.addEventListener(
       "wheel",
       (event) => {
-        if (scrollFieldHorizontally(field, event)) event.preventDefault();
+        if (!isSceneText && scrollFieldHorizontally(field, event)) event.preventDefault();
       },
       { passive: false }
     );
   });
 
   root.querySelectorAll("input.entry-id[data-field]").forEach((field) => {
+    field.addEventListener("focusin", () => {
+      const [collection, rawIndex] = field.dataset.field.split(".");
+      const currentId = scene[collection]?.[Number(rawIndex)]?.id ?? field.value;
+      field.dataset.renameFrom = currentId;
+      field.dataset.lastValidId = /^[A-Za-z_]\w*$/.test(currentId) ? currentId : "";
+    });
     field.addEventListener("input", () => {
       const before = sceneSnapshot();
+      const previousValidId = field.dataset.lastValidId ?? "";
       updateField(field);
+      const [collection, rawIndex] = field.dataset.field.split(".");
+      const newId = scene[collection]?.[Number(rawIndex)]?.id ?? field.value;
+      if (/^[A-Za-z_]\w*$/.test(newId)) {
+        if (previousValidId && previousValidId !== newId) renameSceneReferences(collection, previousValidId, newId);
+        field.dataset.lastValidId = newId;
+      }
       recordSceneHistory(before);
       const diagnostics = validateScene();
       updateStatusLights(diagnostics);
       renderScene(diagnostics);
+    });
+    field.addEventListener("change", () => {
+      field.dataset.renameFrom = field.dataset.lastValidId ?? field.value;
     });
   });
 
@@ -2436,7 +2461,7 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       const to = Number(row.dataset.entryIndex);
-      if (row.dataset.entryKind === "folders") moveEntryIntoFolder(state.kind, state.index, to);
+      if (row.dataset.entryKind === "folders" && dropPosition === "inside") moveEntryIntoFolder(state.kind, state.index, to);
       else moveMixedDataEntry(state.kind, state.index, row.dataset.entryKind, to, dropPosition);
       recordSceneHistory(before);
       if (entryDragScrollTop != null) entryScrollTops.set("data", entryDragScrollTop);
@@ -2776,7 +2801,7 @@ function startEntryPointerDrag(handle, event) {
     syncFields();
     const before = sceneSnapshot();
     let moved = false;
-    if (row?.dataset.entryKind === "folders") {
+    if (row?.dataset.entryKind === "folders" && targetPosition === "inside") {
       moved = moveEntryIntoFolder(kind, index, Number(row.dataset.entryIndex));
     } else if (row) {
       const position = row === targetRow ? targetPosition : dropPositionForRow(row, upEvent.clientY);
@@ -2796,8 +2821,14 @@ function startEntryPointerDrag(handle, event) {
 }
 
 function dropPositionForRow(row, clientY) {
-  if (!row || row.dataset.entryKind === "folders") return "inside";
+  if (!row) return "before";
   const rect = row.getBoundingClientRect();
+  if (row.dataset.entryKind === "folders") {
+    const ratio = (clientY - rect.top) / Math.max(1, rect.height);
+    if (ratio < 0.28) return "before";
+    if (ratio > 0.72) return "after";
+    return "inside";
+  }
   return clientY >= rect.top + rect.height / 2 ? "after" : "before";
 }
 
@@ -2992,9 +3023,11 @@ function updateField(field) {
     const assignment = parseAssignment(value);
     if (assignment) {
       const entry = functionEntryForScene(scene.functions[Number(rawIndex)]);
+      const oldId = entry.id;
       entry.id = assignment.id;
       entry.expression = assignment.expression;
       scene.functions[Number(rawIndex)] = entry;
+      renameSceneReferences("functions", oldId, assignment.id);
       return;
     }
   }
@@ -3012,6 +3045,69 @@ function updateField(field) {
   if (field.classList?.contains("mathquill-field")) {
     field.dataset.value = latexSourceFromExpression(value);
   }
+}
+
+function renameSceneReferences(collection, oldId, newId) {
+  const oldName = String(oldId ?? "").trim();
+  const newName = String(newId ?? "").trim();
+  if (!oldName || !newName || oldName === newName || !/^[A-Za-z_]\w*$/.test(newName)) return false;
+  const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const replace = (source) => String(source ?? "").replaceAll(new RegExp(`\\b${escaped}\\b`, "g"), newName);
+
+  if (["functions", "restrictions", "points"].includes(collection)) {
+    scene.functions = scene.functions.map((rawEntry) => {
+      if (isCommentEntry(rawEntry)) return rawEntry;
+      const entry = functionEntryForScene(rawEntry);
+      if (entry.kind === "function" && entry.params.includes(oldName)) return entry;
+      entry.expression = replace(entry.expression);
+      if (entry.kind === "slider") {
+        entry.sliderMin = replace(entry.sliderMin);
+        entry.sliderMax = replace(entry.sliderMax);
+      }
+      return entry;
+    });
+  }
+  if (collection === "functions") {
+    scene.colors.forEach((entry) => {
+      if (isCommentEntry(entry)) return;
+      entry.red = replace(entry.red); entry.green = replace(entry.green); entry.blue = replace(entry.blue);
+    });
+    scene.restrictions.forEach((entry) => { if (!isCommentEntry(entry)) entry.expression = replace(entry.expression); });
+    scene.draws.forEach((entry) => { if (!isCommentEntry(entry) && entry.equationId === oldName) entry.equationId = newName; });
+    scene.points.forEach((entry) => { if (!isCommentEntry(entry)) { entry.x = replace(entry.x); entry.y = replace(entry.y); } });
+  } else if (collection === "colors") {
+    scene.draws.forEach((entry) => { if (!isCommentEntry(entry) && entry.colorId === oldName) entry.colorId = newName; });
+    scene.points.forEach((entry) => { if (!isCommentEntry(entry) && entry.colorId === oldName) entry.colorId = newName; });
+    if (scene.settings.backgroundColor === oldName) scene.settings.backgroundColor = newName;
+  } else if (collection === "restrictions") {
+    scene.draws.forEach((entry) => { if (!isCommentEntry(entry) && entry.restrictionId === oldName) entry.restrictionId = newName; });
+  }
+  refreshMountedFieldsAfterRename();
+  return true;
+}
+
+function refreshMountedFieldsAfterRename() {
+  root.querySelectorAll?.(".mathquill-field[data-field]").forEach((field) => {
+    const [collection, rawIndex, property] = field.dataset.field.split(".");
+    if (collection === "settings") return;
+    const entry = scene[collection]?.[Number(rawIndex)];
+    if (!entry || isCommentEntry(entry) || !(property in entry)) return;
+    const value = Array.isArray(entry[property]) ? entry[property].join(",") : entry[property];
+    const latex = latexSourceFromExpression(String(value ?? ""));
+    field.dataset.value = latex;
+    const mathField = field.mathquillInstance ?? field.__mathField;
+    if (!mathField) return;
+    field.dataset.initializing = "true";
+    mathField.latex(latex);
+    mathField.reflow?.();
+    delete field.dataset.initializing;
+  });
+  root.querySelectorAll?.("[data-reference-picker]").forEach((picker) => {
+    const [collection, rawIndex, property] = picker.dataset.referencePicker.split(".");
+    const value = collection === "settings" ? scene.settings?.[rawIndex] : scene[collection]?.[Number(rawIndex)]?.[property];
+    const label = picker.querySelector(".reference-summary span");
+    if (label && value != null) label.textContent = String(value || "default");
+  });
 }
 
 function parseFunctionParams(value) {
@@ -3413,7 +3509,14 @@ function moveEntryIntoFolder(fromKind, fromIndex, folderIndex) {
   if (entryUid === folderUid || folderHasAncestor(folderUid, entryUid)) return false;
   const ref = scene.dataOrder.find((item) => item.kind === fromKind && item.uid === entryUid);
   if (!ref) return false;
+  const refIndex = scene.dataOrder.indexOf(ref);
+  scene.dataOrder.splice(refIndex, 1);
   ref.parentUid = folderUid;
+  let insertionIndex = scene.dataOrder.findIndex((item) => item.kind === "folders" && item.uid === folderUid) + 1;
+  for (let index = 0; index < scene.dataOrder.length; index += 1) {
+    if (scene.dataOrder[index].parentUid === folderUid) insertionIndex = index + 1;
+  }
+  scene.dataOrder.splice(Math.max(0, insertionIndex), 0, ref);
   return true;
 }
 
@@ -4414,7 +4517,13 @@ function findLeftOperand(source, index) {
     for (let j = i; j >= 0; j -= 1) {
       if (source[j] === ")") depth += 1;
       if (source[j] === "(") depth -= 1;
-      if (depth === 0) return { start: j, end: i + 1, value: source.slice(j, i + 1) };
+      if (depth === 0) {
+        let start = j;
+        let nameIndex = j - 1;
+        while (nameIndex >= 0 && /[A-Za-z0-9_]/.test(source[nameIndex])) nameIndex -= 1;
+        if (nameIndex < j - 1 && /[A-Za-z_]/.test(source[nameIndex + 1])) start = nameIndex + 1;
+        return { start, end: i + 1, value: source.slice(start, i + 1) };
+      }
     }
     return null;
   }
@@ -4479,7 +4588,7 @@ function validateScene() {
     if (isCommentEntry(rawEntry)) return { status: "valid", message: "Comment" };
     const entry = normalizeFunctionEntry(rawEntry);
     const label = entry.kind === "slider" ? "Slider" : entry.kind === "function" ? "Function" : "Expression";
-    const idResult = validateEntryId(entry.id, label, env);
+    const idResult = validateEntryId(entry.id, label, env, entry.kind === "slider" || entry.kind === "variable");
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, label, duplicateIds.functions);
     if (entry.kind === "slider") {
@@ -4507,7 +4616,7 @@ function validateScene() {
   });
   diagnostics.colors = scene.colors.map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
-    const idResult = validateEntryId(entry.id, "Color", env);
+    const idResult = validateEntryId(entry.id, "Color", env, false);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Color", duplicateIds.colors);
     return combineDiagnostics([
@@ -4520,7 +4629,7 @@ function validateScene() {
   });
   diagnostics.restrictions = scene.restrictions.map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
-    const idResult = validateEntryId(entry.id, "Boundary", env);
+    const idResult = validateEntryId(entry.id, "Boundary", env, false);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Boundary", duplicateIds.restrictions);
     return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, env)]);
@@ -4558,7 +4667,7 @@ function validateScene() {
   diagnostics.folders = aggregateFolderDiagnostics(diagnostics);
   diagnostics.points = (scene.points ?? []).map((entry) => combineDiagnostics([
     duplicateIdDiagnostic(entry.id ?? "", "Point", duplicateIds.points),
-    validateEntryId(entry.id ?? "", "Point", env),
+    validateEntryId(entry.id ?? "", "Point", env, false),
     validateExpression(entry.x, env),
     validateExpression(entry.y, env),
     resolveColorEntry(entry.colorId ?? "default")
@@ -4687,7 +4796,7 @@ function duplicateIdDiagnostic(id, label, duplicates) {
     : null;
 }
 
-function validateEntryId(id, label, env = {}) {
+function validateEntryId(id, label, env = {}, warnForReservedSubstring = true) {
   const trimmed = id.trim();
   if (!trimmed) {
     return { status: "invalid", message: `${label} name cannot be blank` };
@@ -4698,11 +4807,13 @@ function validateEntryId(id, label, env = {}) {
   if (EXACT_RESERVED_NAMES.has(trimmed)) {
     return { status: "invalid", message: `${label} name "${trimmed}" shadows a built-in name` };
   }
-  const substring = [...SUBSTRING_RESERVED_NAMES]
-    .sort((left, right) => right.length - left.length)
-    .find((name) => trimmed !== name && trimmed.includes(name));
-  if (substring) {
-    return { status: "warning", message: `${label} name "${trimmed}" contains reserved name "${substring}"` };
+  if (warnForReservedSubstring) {
+    const substring = [...SUBSTRING_RESERVED_NAMES]
+      .sort((left, right) => right.length - left.length)
+      .find((name) => trimmed !== name && trimmed.includes(name));
+    if (substring) {
+      return { status: "warning", message: `${label} name "${trimmed}" contains reserved name "${substring}"` };
+    }
   }
   return { status: "valid", message: `${label} name is valid` };
 }

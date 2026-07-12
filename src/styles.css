@@ -1872,7 +1872,10 @@ textarea.compact-field,
 .reference-options {
   display: grid;
   gap: 3px;
+  min-height: 0;
+  max-height: 210px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 2px;
 }
 

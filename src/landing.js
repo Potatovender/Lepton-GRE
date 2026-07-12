@@ -1,4 +1,4 @@
-const APP_VERSION = "20260711-release-matrix-fix";
+const APP_VERSION = "20260712-editor-rename-frac-folders3";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260711-release-matrix-fix")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260712-editor-rename-frac-folders3")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -107,6 +107,16 @@ check("fractions normalize from all supported text and LaTeX forms", () => {
     assert(sandbox.compileExpression(input)(1, 1, {}) === 1, `${input} should compile to 1`);
     assert(sandbox.expressionToGlsl(input, {}) === "frac(1.0,1.0)", `${input} should convert to GLSL frac`);
   }
+});
+
+check("nested fractions remain a complete operand when exponentiated", () => {
+  const source = "frac{x^2+frac{y}{10}^2}{100}";
+  const normalized = sandbox.normalizeExpressionText(source);
+  assert(!normalized.includes("fracpow"), normalized);
+  const value = sandbox.compileExpression(source)(3, 20, sandbox.buildRuntimeEnv({}));
+  assert(Math.abs(value - 0.13) < 1e-10, `${normalized} -> ${value}`);
+  const glsl = sandbox.expressionToGlsl(source, {});
+  assert(glsl.includes("pow(frac(y,10.0),2.0)"), glsl);
 });
 
 check("multiplication round-trips as cdot in LaTeX and star in compiler text", () => {
@@ -718,6 +728,44 @@ check("rows can move downward and insert after the target", () => {
   assert(order === "b,c,a", order);
 });
 
+check("renaming IDs updates exact references but preserves local parameters", () => {
+  const imported = sandbox.importScene(`expression old = x
+expression use = old+1
+function scoped(old) = old+1
+colour shade = old~old~old
+boundary edge = old~False
+point p1 = (old,2)~True~shade
+draw(old,shade,edge,False)`);
+  sandbox.__debugSetScene(imported);
+  imported.functions.find((entry) => entry.id === "old").id = "renamed";
+  assert(sandbox.renameSceneReferences("functions", "old", "renamed") === true);
+  assert(imported.functions.find((entry) => entry.id === "use").expression === "renamed+1");
+  assert(imported.functions.find((entry) => entry.id === "scoped").expression === "old+1");
+  assert(imported.colors[0].red === "renamed" && imported.restrictions[0].expression === "renamed");
+  assert(imported.points[0].x === "renamed" && imported.draws[0].equationId === "renamed");
+});
+
+check("reserved-substring warnings apply only to expressions and sliders", () => {
+  assert(sandbox.validateEntryId("pixel", "Expression", {}, true).status === "warning");
+  assert(sandbox.validateEntryId("pixel", "Function", {}, false).status === "valid");
+  assert(sandbox.validateEntryId("pixel", "Color", {}, false).status === "valid");
+});
+
+check("folders accept before inside and after drop zones", () => {
+  const row = { dataset: { entryKind: "folders" }, getBoundingClientRect: () => ({ top: 100, height: 90 }) };
+  assert(sandbox.dropPositionForRow(row, 105) === "before");
+  assert(sandbox.dropPositionForRow(row, 145) === "inside");
+  assert(sandbox.dropPositionForRow(row, 185) === "after");
+  const imported = sandbox.importScene(`folder Group = {
+ expression first = x
+}
+expression outside = y`);
+  sandbox.__debugSetScene(imported);
+  assert(sandbox.moveEntryIntoFolder("functions", 1, 0));
+  const nested = sandbox.orderedDataEntries(imported).filter((item) => item.parentUid === imported.folders[0]._uid).map((item) => item.entry.id);
+  assert(nested.join(",") === "first,outside", nested.join(","));
+});
+
 check("status indicators expose diagnostic reasons as hover text", () => {
   sandbox.__debugSetScene(sandbox.importScene("expression eq = x"));
   const html = sandbox.expressionRow("warning", "Equation may be slow", "", "functions", 0, { typeLabel: "value · expression" });
@@ -767,6 +815,7 @@ check("function reference menus can create a selected function", () => {
   const html=sandbox.searchableReference("draws.0.equationId",[{id:"eq"}],"eq","Draw function");
   assert(html.includes('data-new-reference-function="draws.0.equationId"'),html);
   assert(html.includes("New function"),html);
+  assert(html.indexOf("New function") < html.indexOf('data-value="eq"'), html);
   assert(sandbox.searchableReference("draws.0.colorId",[{id:"default"}],"default","Draw color").includes("New function"));
   assert(sandbox.searchableReference("draws.0.restrictionId",[{id:"default"}],"default","Draw boundary").includes("New function"));
 });
