@@ -66,7 +66,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260711-conditions-points-grid")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260711-release-matrix-fix")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -115,6 +115,10 @@ check("multiplication round-trips as cdot in LaTeX and star in compiler text", (
   const latex = sandbox.latexSourceFromExpression("sin(x)*cos(y)");
   assert(latex === "\\sin\\left(x\\right)\\cdot \\cos\\left(y\\right)", latex);
   assert(sandbox.expressionToGlsl("\\sin(x)\\cdot\\cos(y)", {}) === "sin(x)*cos(y)", "\\cdot should convert to GLSL *");
+  sandbox.__debugSetScene(sandbox.importScene("function radial(a,b) = sqrt(a^2+b^2)"));
+  const customLatex = "140+60\\cdot \\cos(\\operatorname{radial}(x,y))";
+  assert(sandbox.normalizeExpressionText(customLatex) === "140+60*cos(radial(x,y))", sandbox.normalizeExpressionText(customLatex));
+  assert(sandbox.validateExpression(customLatex, sandbox.sceneFunctionEnv(true)).status === "valid", "combined cdot/operatorname expression should validate");
 });
 
 check("GLSL trig respects degree angle mode", () => {
@@ -729,20 +733,42 @@ check("piecewise expressions support boolean and boundary conditions", () => {
   assert(sandbox.compileExpression("{positive:7}")(2,0,env)===7);
   assert(Number.isNaN(sandbox.compileExpression("{x>0:1}")(-1,0,env)));
   assert(sandbox.expressionToGlsl("{x>0:1,0}",sandbox.sceneFunctionEnv(true)).includes("?"));
+  assert(sandbox.textModeExpression("\\left\\{x=1:0,1\\right\\}")==="{x=1:0,1}");
 });
 
 check("points and grid settings round-trip through text", () => {
-  const imported=sandbox.importScene("set show_grid = False\npoint p1 = (2,3)~True");
+  const imported=sandbox.importScene("set show_coordinate_grid = False\nset show_grid = False\npoint p1 = (2,3)~True~default");
   sandbox.__debugSetScene(imported);
-  assert(imported.points[0].x==="2" && imported.points[0].draggable===true);
+  assert(imported.points[0].x==="2" && imported.points[0].draggable===true && imported.points[0].colorId==="default");
+  assert(imported.settings.showCoordinateGrid===false);
   assert(imported.settings.showGrid===false);
-  const text=sandbox.exportScene(); assert(text.includes("point p1 = (2,3)~True"),text); assert(text.includes("set show_grid = False"),text);
+  const text=sandbox.exportScene(); assert(text.includes("point p1 = (2,3)~True~default"),text); assert(text.includes("set show_coordinate_grid = False"),text);
+});
+
+check("point coordinates compile through property and index selectors", () => {
+  sandbox.__debugSetScene(sandbox.importScene("point p1 = (2,3)~True~default"));
+  const env=sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  assert(sandbox.normalizeExpressionText("p1[0]*p1[1]")==="p1.x*p1.y",sandbox.normalizeExpressionText("p1[0]*p1[1]"));
+  const propertyValue=sandbox.compileExpression("p1.x+p1.y")(0,0,env);
+  const indexValue=sandbox.compileExpression("p1[0]*p1[1]")(0,0,env);
+  assert(propertyValue===5,`property selector returned ${propertyValue}`);
+  assert(indexValue===6,`index selector returned ${indexValue}`);
+  const glsl=sandbox.expressionToGlsl("p1.x+p1[1]",sandbox.sceneFunctionEnv(true));
+  assert(glsl.includes("2.0"),glsl);
+});
+
+check("point dragging keeps the live canvas and commits after release", () => {
+  const dragSource=source.slice(source.indexOf("function startPointDrag"),source.indexOf("function schedulePanRender"));
+  assert(dragSource.includes("renderScene(validateScene())"),dragSource);
+  assert(!dragSource.includes("renderApp();};const"),dragSource);
 });
 
 check("function reference menus can create a selected function", () => {
   const html=sandbox.searchableReference("draws.0.equationId",[{id:"eq"}],"eq","Draw function");
   assert(html.includes('data-new-reference-function="draws.0.equationId"'),html);
   assert(html.includes("New function"),html);
+  assert(sandbox.searchableReference("draws.0.colorId",[{id:"default"}],"default","Draw color").includes("New function"));
+  assert(sandbox.searchableReference("draws.0.restrictionId",[{id:"default"}],"default","Draw boundary").includes("New function"));
 });
 
 check("synchronizing values never reconstructs or groups mixed data order", () => {
