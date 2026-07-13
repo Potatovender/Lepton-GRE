@@ -72,7 +72,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260713-inline-colour-transparency")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260714-channel-seed-shader3")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -143,6 +143,15 @@ check("nested fractions remain a complete operand when exponentiated", () => {
   assert(Math.abs(value - 0.13) < 1e-10, `${normalized} -> ${value}`);
   const glsl = sandbox.expressionToGlsl(source, {});
   assert(glsl.includes("pow(frac(y,10.0),2.0)"), glsl);
+});
+
+check("negative fractional exponents remain one power operand", () => {
+  for (const source of ["e^(-(y/8))", "e^-frac{y}{8}", "e^(-frac{y}{8})"]) {
+    const compiled = sandbox.compileExpression(source)(0, 2, {});
+    assert(Math.abs(compiled - Math.exp(-0.25)) < 1e-9, `${source}: ${compiled}`);
+    const glsl = sandbox.expressionToGlsl(source, {});
+    assert(glsl.includes("pow(2.718281828459045"), `${source}: ${glsl}`);
+  }
 });
 
 check("multiplication round-trips as cdot in LaTeX and star in compiler text", () => {
@@ -879,6 +888,31 @@ draw(eq,colour=sky)`);
   const html = sandbox.dataRowContent("colors", imported.colors[0], 0);
   assert(html.includes('data-field="colors.0.red"') && !html.includes('data-reference-picker="colors.0.red"'), html);
   assert(sandbox.validateScene().draws[0].status === "valid", JSON.stringify(sandbox.validateScene().draws[0]));
+});
+
+check("color channels expose independent diagnostics", () => {
+  const imported = sandbox.importScene(`expression eq = x
+colour mixed = eq~missing+~255
+draw(eq,colour=mixed)`);
+  sandbox.__debugSetScene(imported);
+  const diagnostic = sandbox.validateScene().colors[0];
+  assert(diagnostic.channels.red.status === "valid", JSON.stringify(diagnostic));
+  assert(diagnostic.channels.green.status === "invalid", JSON.stringify(diagnostic));
+  assert(diagnostic.channels.blue.status === "valid", JSON.stringify(diagnostic));
+  const html = sandbox.dataRowContent("colors", imported.colors[0], 0, diagnostic);
+  assert((html.match(/channel-status/g) ?? []).length === 3, html);
+});
+
+check("random is deterministic per seed and rejects direct seed arguments", () => {
+  const imported = sandbox.importScene(`set random_seed = 42
+expression noise = random()`);
+  sandbox.__debugSetScene(imported);
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  const evaluate = sandbox.compileExpression("random()");
+  assert(evaluate(2, 3, env) === evaluate(2, 3, env));
+  assert(sandbox.validateExpression("random(42)", {}).status === "invalid");
+  assert(sandbox.exportScene().includes("set random_seed = 42"));
+  assert(sandbox.buildFragmentShader().includes("u_random_seed"));
 });
 
 check("transparency and ordered optional draw components round-trip", () => {

@@ -35,7 +35,8 @@ export const defaultSettings = (): GridSettings => ({
   ensureSquareGrid: true,
   aspectRatio: "1:1",
   drawOnlyInsideBoundary: false,
-  unboundedDecimalPlaces: 3
+  unboundedDecimalPlaces: 3,
+  randomSeed: 1
 });
 
 export const createDefaultScene = (): SceneState => ({

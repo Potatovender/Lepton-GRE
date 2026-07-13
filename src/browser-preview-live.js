@@ -28,12 +28,13 @@ const DEFAULT_SCENE = {
     showXAxis: true,
     showYAxis: true,
     showXNumbers: true,
-    showYNumbers: true
+    showYNumbers: true,
+    randomSeed: 1
   }
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260713-inline-colour-transparency";
+const APP_VERSION = "20260714-channel-seed-shader3";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -251,7 +252,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 2: Use expressions, sliders, and functions",
-    body: "Expressions reference x, y, and other IDs. Sliders expose an adjustable value. Functions accept inputs like wave(a,b); inside a function, input names override outer values with the same names."
+    body: "Expressions reference x, y, and other IDs. Sliders expose an adjustable value. Functions accept inputs like wave(a,b). random() uses the scene seed; use the shuffle button below Settings to generate a new pattern."
   },
   {
     mode: "standard",
@@ -348,7 +349,8 @@ function renderApp() {
         <button class="sidebar-toggle" data-action="toggle-sidebar" aria-label="${sidebarCollapsed ? "Show expression panel" : "Hide expression panel"}" aria-pressed="${sidebarCollapsed}">
           <span aria-hidden="true"></span>
         </button>
-        ${displayMode === "standard" ? `<button class="graph-settings-toggle ${settingsPanelOpen ? "active" : ""}" data-action="toggle-settings-panel" aria-label="${settingsPanelOpen ? "Hide settings" : "Show settings"}" aria-pressed="${settingsPanelOpen}" type="button">${gearIcon()}</button>` : ""}
+        ${displayMode === "standard" ? `<button class="graph-settings-toggle ${settingsPanelOpen ? "active" : ""}" data-action="toggle-settings-panel" aria-label="${settingsPanelOpen ? "Hide settings" : "Show settings"}" aria-pressed="${settingsPanelOpen}" type="button">${gearIcon()}</button>
+        <button class="graph-randomize-toggle" data-action="randomize-seed" aria-label="Change random seed" title="Change random seed" type="button">${shuffleIcon()}</button>` : ""}
         ${keyboardOpen ? renderKeyboardPanel() : ""}
         <canvas class="grid-canvas"></canvas>
         <canvas class="graph-overlay-canvas" aria-hidden="true"></canvas>
@@ -372,6 +374,7 @@ function ensureSceneCollections(target) {
   for (const kind of DATA_ENTRY_KINDS) if (!Array.isArray(target[kind])) target[kind] = [];
   for (const draw of dataEntries(target.draws)) draw.components = normalizeDrawEntry(draw).components;
   for (const entry of dataEntries(target.functions)) if (entry.kind === "slider" && entry.timeRate == null) entry.timeRate = "1";
+  if (!Number.isFinite(Number(target.settings.randomSeed))) target.settings.randomSeed = 1;
   return target;
 }
 
@@ -393,6 +396,10 @@ function renderGraphActionsMenu() {
 
 function gearIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6z"/><path d="M19 12a7.4 7.4 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.8-1L14.4 3h-4.8l-.3 3.1a8 8 0 0 0-1.8 1l-2.4-1-2 3.4 2 1.5A7.4 7.4 0 0 0 5 12c0 .3 0 .7.1 1l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.8 1l.3 3.1h4.8l.3-3.1a8 8 0 0 0 1.8-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></svg>`;
+}
+
+function shuffleIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3.5c4.5 0 4.5 10 9 10H20"/><path d="m17 14 3 3-3 3"/><path d="M4 17h3.5c1.7 0 2.8-1.4 3.8-3.1M13.2 9.8C14.2 8.3 15.2 7 16.5 7H20"/><path d="m17 4 3 3-3 3"/></svg>`;
 }
 
 function commentIcon() {
@@ -1080,7 +1087,7 @@ function renderDataPanel(diagnostics) {
     return expressionRow(
       diagnostics[kind]?.[index]?.status ?? "invalid",
       diagnostics[kind]?.[index]?.message ?? "",
-      dataRowContent(kind, entry, index),
+      dataRowContent(kind, entry, index, diagnostics[kind]?.[index]),
       kind,
       index,
       { rowClass: `${kind === "draws" && entry.hidden ? "expression-row-hidden " : ""}${depth > 0 ? "expression-row-nested" : ""}`, typeLabel: dataTypeLabel(kind, entry), attrs: `style="padding-left:${8 + Math.min(depth, 5) * 14}px"` }
@@ -1112,13 +1119,13 @@ function folderIcon() {
   return `<svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v9.5h-17z"/></svg>`;
 }
 
-function dataRowContent(kind, entry, index) {
+function dataRowContent(kind, entry, index, diagnostic = null) {
   if (kind === "functions") return functionRowContent(entry, index);
   if (kind === "colors") {
     return `
-      <label class="channel-row"><span class="channel-label">red channel</span>${mathEditor(`colors.${index}.red`, entry.red, "Red channel", true, "red expression")}</label>
-      <label class="channel-row"><span class="channel-label">green channel</span>${mathEditor(`colors.${index}.green`, entry.green, "Green channel", true, "green expression")}</label>
-      <label class="channel-row"><span class="channel-label">blue channel</span>${mathEditor(`colors.${index}.blue`, entry.blue, "Blue channel", true, "blue expression")}</label>
+      ${colorChannelRow(index, "red", "red channel", entry.red, diagnostic?.channels?.red)}
+      ${colorChannelRow(index, "green", "green channel", entry.green, diagnostic?.channels?.green)}
+      ${colorChannelRow(index, "blue", "blue channel", entry.blue, diagnostic?.channels?.blue)}
     `;
   }
   if (kind === "restrictions") {
@@ -1158,6 +1165,15 @@ function dataRowContent(kind, entry, index) {
     </div>`;
   }
   return "";
+}
+
+function colorChannelRow(index, property, label, value, diagnostic = { status: "valid", message: `${label} is valid` }) {
+  const statusLabel = diagnostic.status === "valid" ? `status: valid` : diagnostic.message;
+  return `<label class="channel-row" data-color-channel="${index}.${property}">
+    <span class="channel-label">${label}</span>
+    ${mathEditor(`colors.${index}.${property}`, value, label, true, `${property} expression`)}
+    <span class="channel-status entry-status ${diagnostic.status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>
+  </label>`;
 }
 
 function drawComponentControl(drawIndex, component, componentIndex) {
@@ -1910,6 +1926,15 @@ function bindEvents() {
       settingsPanelOpen = !settingsPanelOpen;
       renderApp();
     });
+  });
+  root.querySelector('[data-action="randomize-seed"]')?.addEventListener("click", () => {
+    const before = sceneSnapshot();
+    const previous = Number(scene.settings.randomSeed) || 0;
+    let next = Math.floor(Math.random() * 2147483646) + 1;
+    if (next === previous) next = next % 2147483647 + 1;
+    scene.settings.randomSeed = next;
+    recordSceneHistory(before);
+    renderApp();
   });
   root.querySelector('[data-action="toggle-coordinate-grid"]')?.addEventListener("click", () => {
     const before = sceneSnapshot();
@@ -3936,8 +3961,10 @@ function renderSceneWebGlInto(canvas, options = {}) {
     window.__leptonGlError = gl.getError();
     gl.clearColor(0.98, 0.94, 0.94, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    showShaderError(window.__leptonShaderLog || "The generated shader could not be compiled.", fragmentSource.length);
     return options.fallbackOnFailure === true ? false : true;
   }
+  clearShaderError();
 
   const buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -3949,6 +3976,7 @@ function renderSceneWebGlInto(canvas, options = {}) {
   gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
 
   gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
+  gl.uniform1f(gl.getUniformLocation(program, "u_random_seed"), Number(scene.settings.randomSeed) || 1);
   gl.uniform4f(
     gl.getUniformLocation(program, "u_bounds"),
     visibleViewport.xMin,
@@ -3973,6 +4001,22 @@ function renderSceneWebGlInto(canvas, options = {}) {
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   gl.finish();
   return true;
+}
+
+function showShaderError(log, sourceLength) {
+  let overlay = root.querySelector(".render-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "render-overlay render-overlay-error";
+    root.querySelector(".renderer-pane")?.append(overlay);
+  }
+  const summary = String(log ?? "").replace(/\s+/g, " ").trim();
+  overlay.textContent = `Shader error (${sourceLength.toLocaleString()} characters): ${summary || "compilation failed"}`;
+}
+
+function clearShaderError() {
+  const overlay = root.querySelector(".render-overlay");
+  if (overlay && !validateScene().hasErrors) overlay.remove();
 }
 
 function resolveBackgroundColor() {
@@ -4069,6 +4113,7 @@ function buildFragmentShader() {
       uniform vec4 u_bounds;
       uniform vec4 u_clip_bounds;
       uniform bool u_clip_enabled;
+      uniform float u_random_seed;
 
     float frac(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
     float ln(float value) { return value > 0.0 ? log(value) : 0.0; }
@@ -4093,10 +4138,10 @@ function buildFragmentShader() {
     float arccoth(float value) { return arctanh(1.0 / value); }
     float round1(float value) { return floor(value + 0.5); }
     float clamp3(float value, float low, float high) { return clamp(value, low, high); }
-    float union2(float a, float b) { return min(a, b); }
-    float intersect2(float a, float b) { return max(a, b); }
-    float subtract2(float a, float b) { return max(-a, b); }
-    float random2(vec2 value) { return fract(sin(dot(value, vec2(12.9898, 78.233))) * 43758.5453123); }
+    float leptonUnion(float a, float b) { return min(a, b); }
+    float leptonIntersect(float a, float b) { return max(a, b); }
+    float leptonSubtract(float a, float b) { return max(-a, b); }
+    float random2(vec2 value) { return fract(sin(dot(value, vec2(12.9898, 78.233)) + u_random_seed * 0.000173) * 43758.5453123); }
 
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
@@ -4258,6 +4303,7 @@ function createProgram(gl, vertexSource, fragmentSource) {
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     window.__leptonShaderLog = gl.getProgramInfoLog(program);
+    window.__leptonFailedShaderSource = fragmentSource;
     console.warn(window.__leptonShaderLog);
     return null;
   }
@@ -4272,6 +4318,7 @@ function createShader(gl, type, source) {
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
     window.__leptonShaderLog = gl.getShaderInfoLog(shader);
+    window.__leptonFailedShaderSource = source;
     console.warn(window.__leptonShaderLog);
     return null;
   }
@@ -4324,7 +4371,11 @@ function compileExpression(source, localNames = new Set()) {
       const union = (a, b) => Math.min(a, b);
       const intersect = (a, b) => Math.max(a, b);
       const subtract = (a, b) => Math.max(-a, b);
-      const random = () => Math.random();
+      const random = () => {
+        const seed = Number(env.__randomSeed ?? 1);
+        const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.000173) * 43758.5453123;
+        return value - Math.floor(value);
+      };
       const frac = (a, b) => b === 0 ? NaN : a / b;
       const ln = (value) => value > 0 ? Math.log(value) : NaN;
       const sec = (value) => 1 / Math.cos(value);
@@ -4385,6 +4436,7 @@ function buildRuntimeEnv(expressions) {
     };
   }
   Object.defineProperty(runtimeEnv, "__defs", { value: definitions, enumerable: false, configurable: true });
+  Object.defineProperty(runtimeEnv, "__randomSeed", { value: Number(scene.settings.randomSeed) || 1, enumerable: false, configurable: true });
   Object.defineProperty(runtimeEnv, "__call", {
     value: (name, values, x, y, env) => {
       const definition = definitions[name];
@@ -4492,9 +4544,9 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
     .replaceAll(/\bmin\b/g, "min")
     .replaceAll(/\bmax\b/g, "max")
     .replaceAll(/\bclamp\b/g, "clamp3")
-    .replaceAll(/\bunion\b/g, "union2")
-    .replaceAll(/\bintersect\b/g, "intersect2")
-    .replaceAll(/\bsubtract\b/g, "subtract2")
+    .replaceAll(/\bunion\b/g, "leptonUnion")
+    .replaceAll(/\bintersect\b/g, "leptonIntersect")
+    .replaceAll(/\bsubtract\b/g, "leptonSubtract")
     .replaceAll(/\brandom\s*\(\s*\)/g, "random2(vec2(x,y))")
     .replaceAll(/\bpi\b/g, "3.141592653589793")
     .replaceAll(/\be\b/g, "2.718281828459045");
@@ -4692,13 +4744,22 @@ function findLeftOperand(source, index) {
 function findRightOperand(source, index) {
   let i = skipSpacesRight(source, index);
   if (i >= source.length) return null;
+  const start = i;
+  if (source[i] === "+" || source[i] === "-") i = skipSpacesRight(source, i + 1);
   if (source[i] === "(") {
     const end = matchingParen(source, i);
-    return end === -1 ? null : { start: i, end: end + 1, value: source.slice(i, end + 1) };
+    return end === -1 ? null : { start, end: end + 1, value: source.slice(start, end + 1) };
   }
-  const start = i;
-  if (source[i] === "-") i += 1;
-  while (i < source.length && /[\w.]/.test(source[i])) i += 1;
+  const identifier = source.slice(i).match(/^[A-Za-z_]\w*/)?.[0];
+  if (identifier) {
+    i += identifier.length;
+    if (source[i] === "(") {
+      const end = matchingParen(source, i);
+      return end === -1 ? null : { start, end: end + 1, value: source.slice(start, end + 1) };
+    }
+    return { start, end: i, value: source.slice(start, i) };
+  }
+  while (i < source.length && /[\d.]/.test(source[i])) i += 1;
   return i === start ? null : { start, end: i, value: source.slice(start, i) };
 }
 
@@ -4777,15 +4838,20 @@ function validateScene() {
   diagnostics.colors = scene.colors.map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     const idResult = validateEntryId(entry.id, "Color", env, false);
-    if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Color", duplicateIds.colors);
-    return combineDiagnostics([
+    const channels = {
+      red: validateExpression(entry.red, env),
+      green: validateExpression(entry.green, env),
+      blue: validateExpression(entry.blue, env)
+    };
+    const combined = combineDiagnostics([
       duplicateDiagnostic,
       idResult,
-      validateExpression(entry.red, env),
-      validateExpression(entry.green, env),
-      validateExpression(entry.blue, env)
+      channels.red,
+      channels.green,
+      channels.blue
     ]);
+    return { ...combined, channels };
   });
   diagnostics.restrictions = scene.restrictions.map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
@@ -5040,6 +5106,7 @@ function validateExpression(source, env, stack = [], localNames = new Set()) {
   try {
     const normalized = normalizeExpressionText(source);
     assertCompleteExpression(normalized);
+    if (/\brandom\s*\(\s*[^)]/i.test(normalized)) throw new Error("random() does not accept a seed or other inputs; use the seed button on the graph");
     const emptyCall = [...normalized.matchAll(/\b([A-Za-z]\w*)\(\s*\)/g)].find((match) => match[1] !== "random");
     if (emptyCall) {
       throw new Error("Empty function argument");
@@ -5148,6 +5215,16 @@ function updateStatusLights(diagnostics) {
     if (typeIcon) {
       for (const state of ["valid", "invalid", "info", "warning"]) typeIcon.classList.toggle(state, item.status === state);
       typeIcon.setAttribute("title", item.message);
+    }
+    if (kind === "colors" && item.channels) {
+      for (const [channel, channelDiagnostic] of Object.entries(item.channels)) {
+        const light = row.querySelector(`[data-color-channel="${index}.${channel}"] .channel-status`);
+        if (!light) continue;
+        for (const state of ["valid", "invalid", "info", "warning"]) light.classList.toggle(state, channelDiagnostic.status === state);
+        const label = channelDiagnostic.status === "valid" ? "status: valid" : channelDiagnostic.message;
+        light.setAttribute("title", label);
+        light.setAttribute("aria-label", label);
+      }
     }
   });
 
@@ -7020,6 +7097,7 @@ function setSceneSetting(target, key, value) {
     draw_only_inside_boundary: "drawOnlyInsideBoundary",
     show_coordinate_grid: "showCoordinateGrid", show_grid: "showGrid", show_x_axis: "showXAxis", show_y_axis: "showYAxis", show_x_numbers: "showXNumbers", show_y_numbers: "showYNumbers",
     unbounded_decimal_places: "unboundedDecimalPlaces",
+    random_seed: "randomSeed",
     unbounded_integer_digits: null
   };
   const mapped = settingMap[String(key ?? "").trim()];
@@ -7036,7 +7114,7 @@ function setSceneSetting(target, key, value) {
     if (mapped === "showYNumbers" && target.settings.showYAxis === false) target.settings.showYNumbers = false;
   } else if (mapped === "aspectRatio") {
     target.settings[mapped] = String(value ?? "").trim() || "1:1";
-  } else if (["maxRecursion", "unboundedDecimalPlaces"].includes(mapped)) {
+  } else if (["maxRecursion", "unboundedDecimalPlaces", "randomSeed"].includes(mapped)) {
     const number = Number(value);
     if (Number.isFinite(number)) target.settings[mapped] = number;
   } else {
@@ -7065,6 +7143,7 @@ function exportScene() {
     exportSettingLine("show_x_numbers", formatLeptonBoolean(scene.settings.showXNumbers !== false)),
     exportSettingLine("show_y_numbers", formatLeptonBoolean(scene.settings.showYNumbers !== false)),
     exportSettingLine("unbounded_decimal_places", clampInteger(scene.settings.unboundedDecimalPlaces ?? 3, 0, 12)),
+    exportSettingLine("random_seed", clampInteger(scene.settings.randomSeed ?? 1, 1, 2147483647)),
     ...exportDataTree()
   ].join("\n");
 }

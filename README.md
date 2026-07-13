@@ -67,4 +67,6 @@ draw(eq,colour=rgb,boundary=rest,transparency=glass)
 
 Only the first draw argument is required. Optional named fields are `colour`, `boundary`, `transparency`, and `visible`. Time sliders may include a coordinate-free speed, for example `time unbounded t = 0 speed 1.5`.
 
+`random()` is deterministic for each scene seed and takes no arguments. Use the shuffle control below the graph Settings button to generate and save a new seed.
+
 Legacy `F:`, `C:`, `R:`, `D~`, and `S:` scene text is still imported for compatibility, but new exports use the clearer keyword-based format.

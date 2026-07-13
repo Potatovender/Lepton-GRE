@@ -2229,6 +2229,29 @@ textarea.compact-field,
   box-shadow: 0 8px 18px rgba(29, 78, 216, 0.22);
 }
 
+.graph-randomize-toggle {
+  position: absolute;
+  top: 92px;
+  left: 12px;
+  z-index: 4;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(145, 157, 176, 0.72);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #344054;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.graph-randomize-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.graph-randomize-toggle:hover,
+.graph-randomize-toggle:focus-visible { background: rgba(239, 246, 255, 0.94); color: #1d4ed8; outline: 2px solid rgba(79, 125, 217, 0.45); outline-offset: 1px; }
+
+.channel-row { grid-template-columns: 92px minmax(0, 1fr) 14px; }
+.channel-status { width: 10px; height: 10px; align-self: center; justify-self: center; }
+
 .sidebar-toggle:hover,
 .sidebar-toggle:focus-visible {
   background: rgba(255, 255, 255, 0.92);
@@ -2485,6 +2508,7 @@ textarea.compact-field,
 
 .capture-mode .sidebar-toggle,
 .capture-mode .graph-settings-toggle,
+.capture-mode .graph-randomize-toggle,
 .capture-mode .render-overlay,
 .capture-mode .keyboard-toggle,
 .capture-mode .keyboard-panel {

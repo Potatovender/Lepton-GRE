@@ -1,4 +1,4 @@
-const APP_VERSION = "20260713-inline-colour-transparency";
+const APP_VERSION = "20260714-channel-seed-shader3";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
