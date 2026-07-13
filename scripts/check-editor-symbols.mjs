@@ -2,6 +2,12 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
+const landingSource = await readFile("src/landing.js", "utf8");
+const sampleSources = await Promise.all([
+  readFile("sample code/fire", "utf8"),
+  readFile("sample code/mandelbrot set", "utf8"),
+  readFile("sample code/Lepton Logo", "utf8")
+]);
 const storage = new Map();
 const headLinks = [];
 function createMockElement(tagName) {
@@ -66,8 +72,28 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260712-editor-rename-frac-folders3")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260713-inline-colour-transparency")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
+});
+
+check("bundled sample scripts use named draw fields and time speeds", () => {
+  assert(!/draw\([^\n]*,[^=\n]+,[^=\n]+,(?:False|True)\)/.test(landingSource), "legacy positional draw remains in landing samples");
+  assert(landingSource.includes("draw(eq,colour=rgb,boundary=rest)"), "named sample draw missing");
+  assert(landingSource.includes("time unbounded t = 0 speed 1"), "sample time speed missing");
+});
+
+check("copyable sample files import with the current grammar", () => {
+  for (const sample of sampleSources) {
+    assert(!sample.includes("~~~~~"), sample);
+    assert(!/^D~/m.test(sample), sample);
+    const imported = sandbox.importScene(sample);
+    sandbox.__debugSetScene(imported);
+    const diagnostics = sandbox.validateScene();
+    const entries = ["functions", "colors", "restrictions", "transparencies", "draws", "points", "folders", "settings"]
+      .flatMap((key) => diagnostics[key]);
+    assert(!entries.some((entry) => entry.status === "invalid"), JSON.stringify(entries));
+    assert(imported.draws.length > 0, sample);
+  }
 });
 
 check("graph actions menu exposes New Save Load and Export", () => {
@@ -157,6 +183,15 @@ check("all program functions normalize, compile, validate, and convert to GLSL",
     assert(!glsl.includes("\\"), `${name} GLSL retained LaTeX: ${glsl}`);
     assert(!/\bround\(/.test(glsl), `${name} GLSL should use helper: ${glsl}`);
   }
+});
+
+check("SDF helpers and random compile for CPU and GLSL", () => {
+  assert(sandbox.compileExpression("union(3,-2)")(0,0,{}) === -2);
+  assert(sandbox.compileExpression("intersect(3,-2)")(0,0,{}) === 3);
+  assert(sandbox.compileExpression("subtract(3,-2)")(0,0,{}) === -2);
+  const randomValue = sandbox.compileExpression("random()")(0,0,{});
+  assert(randomValue >= 0 && randomValue <= 1, String(randomValue));
+  assert(sandbox.expressionToGlsl("union(x,y)+intersect(x,y)+subtract(x,y)+random()", {}).includes("random2(vec2(x,y))"));
 });
 
 check("operatorname latex imports program function names", () => {
@@ -345,7 +380,7 @@ S:angle_mode~radians`);
 
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("draw(eq,rgb,rest,True)"), exported);
+  assert(exported.includes("draw(eq,colour=rgb,boundary=rest,visible=False)"), exported);
 });
 
 check("new Lepton language exports settings first without section dividers", () => {
@@ -367,7 +402,7 @@ set background_color = 0`);
   assert(exported.includes("\nexpression f1 = x+y"), exported);
   assert(exported.includes("\ncolour c1 = f1~f1~f1"), exported);
   assert(exported.includes("\nboundary r1 = f1~False"), exported);
-  assert(exported.includes("\ndraw(f1,c1,r1,False)"), exported);
+  assert(exported.includes("\ndraw(f1,colour=c1,boundary=r1)"), exported);
 });
 
 check("new Lepton language accepts expression aliases booleans and invalid angle fallback", () => {
@@ -463,6 +498,20 @@ check("bounded time values bounce instead of stopping at max", () => {
   assert(down.direction === 1, JSON.stringify(down));
 });
 
+check("time variables use configurable coordinate-free units per second", () => {
+  const imported = sandbox.importScene(`expression rate = 2
+time bounded_looped t = 0 range 0~10 speed rate`);
+  sandbox.__debugSetScene(imported);
+  sandbox.__debugPlayTime("t");
+  sandbox.advanceTimeVariables(0.5);
+  assert(Math.abs(Number(imported.functions[1].expression)-1)<1e-9, imported.functions[1].expression);
+  assert(sandbox.exportScene().includes("time bounded_looped t = 1 range 0~10 speed rate"), sandbox.exportScene());
+  const invalid = sandbox.importScene(`expression coordinateRate = x+1
+time unbounded t = 0 speed coordinateRate`);
+  sandbox.__debugSetScene(invalid);
+  assert(sandbox.validateScene().functions[1].status === "invalid", JSON.stringify(sandbox.validateScene().functions[1]));
+});
+
 check("playing bounded time clamps to edited slider bounds", () => {
   const imported = sandbox.importScene(`time bounded t = 9 range 0~10`);
   sandbox.__debugSetScene(imported);
@@ -514,7 +563,7 @@ draw(eq,rgb,rest,False) // inline draw`);
   assert(exported.includes("// helper note\nexpression eq = x+y // inline equation"), exported);
   assert(exported.includes("// palette note\ncolour rgb = eq~eq~eq // inline colour"), exported);
   assert(exported.includes("// gate note\nboundary rest = rest_fn~False // inline boundary"), exported);
-  assert(exported.includes("// layer note\ndraw(eq,rgb,rest,False) // inline draw"), exported);
+  assert(exported.includes("// layer note\ndraw(eq,colour=rgb,boundary=rest) // inline draw"), exported);
   assert(!exported.includes("// functions:"), exported);
   assert(!exported.includes("// colors:"), exported);
   assert(!exported.includes("// bounds:"), exported);
@@ -820,6 +869,36 @@ check("function reference menus can create a selected function", () => {
   assert(sandbox.searchableReference("draws.0.restrictionId",[{id:"default"}],"default","Draw boundary").includes("New function"));
 });
 
+check("colors edit channel expressions directly without helper rows", () => {
+  const imported = sandbox.importScene(`expression eq = x
+colour sky = 100+5*y~150+sin(x)~220
+draw(eq,colour=sky)`);
+  sandbox.__debugSetScene(imported);
+  assert(imported.functions.length === 1, JSON.stringify(imported.functions));
+  assert(imported.colors[0].red === "100+5*y", JSON.stringify(imported.colors[0]));
+  const html = sandbox.dataRowContent("colors", imported.colors[0], 0);
+  assert(html.includes('data-field="colors.0.red"') && !html.includes('data-reference-picker="colors.0.red"'), html);
+  assert(sandbox.validateScene().draws[0].status === "valid", JSON.stringify(sandbox.validateScene().draws[0]));
+});
+
+check("transparency and ordered optional draw components round-trip", () => {
+  const source = `expression eq = x
+colour rgb = 255~80~40
+boundary gate = x~False
+transparency glass = 1.4
+draw(eq,transparency=glass,colour=rgb,boundary=gate)`;
+  const imported = sandbox.importScene(source);
+  sandbox.__debugSetScene(imported);
+  assert(imported.draws[0].components.map((component)=>component.type).join(",") === "transparency,color,boundary", JSON.stringify(imported.draws[0]));
+  assert(imported.draws[0].hidden === false);
+  assert(sandbox.validateScene().transparencies[0].status === "valid", JSON.stringify(sandbox.validateScene().transparencies[0]));
+  const exported = sandbox.exportScene();
+  assert(exported.includes("transparency glass = 1.4"), exported);
+  assert(exported.includes("draw(eq,transparency=glass,colour=rgb,boundary=gate)"), exported);
+  const shader = sandbox.buildFragmentShader();
+  assert(shader.includes("1.0 - clamp(1.4, 0.0, 1.0)") && shader.includes("mix(color, layerColor, opacity)"), shader);
+});
+
 check("synchronizing values never reconstructs or groups mixed data order", () => {
   const imported = sandbox.importScene(`expression first = x\ncolour tone = first~first~first\nfolder group = {\n boundary rest = 1~False\n}\ndraw(first,tone,rest,False)`);
   sandbox.__debugSetScene(imported);
@@ -1109,8 +1188,7 @@ check("new draw layer uses virtual defaults on a blank scene", () => {
   });
   sandbox.addEntry("draws");
   assert(sandbox.__debugScene.draws[0].equationId === "f1", JSON.stringify(sandbox.__debugScene.draws[0]));
-  assert(sandbox.__debugScene.draws[0].colorId === "default", JSON.stringify(sandbox.__debugScene.draws[0]));
-  assert(sandbox.__debugScene.draws[0].restrictionId === "default", JSON.stringify(sandbox.__debugScene.draws[0]));
+  assert(sandbox.__debugScene.draws[0].components.length === 0, JSON.stringify(sandbox.__debugScene.draws[0]));
   const diagnostics = sandbox.validateScene();
   assert(diagnostics.draws[0].status === "valid", JSON.stringify(diagnostics.draws[0]));
 });

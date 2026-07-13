@@ -1,18 +1,14 @@
-F:real~real^2-imaginary^2+x
-F:imaginary~2*real*imaginary+y
-F:one~1
-F:combined~real^2+imaginary^2
-F:rest~combined-4
-~~~~~
-C:rgb~one~one~one
-~~~~~
-R:rest~rest~1
-~~~~~
-D~combined~rgb~rest~0
-~~~~~
-S:x_min~-2
-S:x_max~1
-S:y_min~-2
-S:y_max~2
-S:max_recursion~12
-S:angle_mode~radians
+set x_min = -2
+set x_max = 1
+set y_min = -2
+set y_max = 2
+set max_recursion = 12
+set angle_mode = radians
+expression real = real^2-imaginary^2+x
+expression imaginary = 2*real*imaginary+y
+expression one = 1
+expression combined = real^2+imaginary^2
+expression rest = combined-4
+colour rgb = one~one~one
+boundary rest = rest~True
+draw(combined,colour=rgb,boundary=rest)

@@ -1336,6 +1336,14 @@ select {
   align-items: center;
 }
 
+.draw-components { display: grid; gap: 7px; }
+.draw-component-row { display: grid; grid-template-columns: 74px minmax(0, 1fr) 30px; gap: 8px; align-items: center; }
+.draw-component-row > span { color: #667085; font-size: 12px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.draw-component-remove { width: 30px; height: 30px; }
+.draw-component-adder { display: grid; grid-template-columns: 34px minmax(0, 150px); gap: 6px; align-items: center; }
+.draw-component-add { width: 34px; height: 34px; border: 1px solid #cfd5df; border-radius: 5px; background: #fff; color: #344054; font-size: 20px; cursor: pointer; }
+.time-rate-field { min-width: 118px; display: grid; grid-template-columns: auto minmax(60px, 1fr); gap: 6px; align-items: center; color: #667085; font-size: 11px; }
+
 .draw-reference-row > span {
   color: #667085;
   font-size: 12px;

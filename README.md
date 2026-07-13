@@ -1,6 +1,6 @@
 # Lepton GRE
 
-Lepton GRE, the Lepton Graph Rendering Interface, is a browser-based mathematical field renderer. It lets you define functions, colors, boundaries, draw layers, recursion settings, and text-mode scenes, then renders the result as a dense per-pixel graph.
+Lepton GRE, the Lepton Graph Rendering Interface, is a browser-based mathematical field renderer. It lets you define values, colors, boundaries, transparency, draw layers, recursion settings, and text-mode scenes, then renders the result as a dense per-pixel graph.
 
 Live site: https://potatovender.github.io/Lepton-GRE/
 
@@ -58,10 +58,13 @@ set background_color = 0
 set ensure_square_grid = True
 set aspect_ratio = 1:1
 set draw_only_inside_boundary = False
-function eq = sin(x)+cos(y)
-colour rgb = eq~eq~eq
+expression eq = sin(x)+cos(y)
+colour rgb = 120+80sin(eq)~120+80cos(eq)~210
 boundary rest = 1~False
-draw(eq,rgb,rest,False)
+transparency glass = 0.15
+draw(eq,colour=rgb,boundary=rest,transparency=glass)
 ```
+
+Only the first draw argument is required. Optional named fields are `colour`, `boundary`, `transparency`, and `visible`. Time sliders may include a coordinate-free speed, for example `time unbounded t = 0 speed 1.5`.
 
 Legacy `F:`, `C:`, `R:`, `D~`, and `S:` scene text is still imported for compatibility, but new exports use the clearer keyword-based format.

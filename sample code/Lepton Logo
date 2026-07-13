@@ -1,38 +1,34 @@
-F:black~x^2+(y-0.1)^2-0.0225
-F:spine~abs(2.5*x+y-0.1)-0.15
-F:leg~abs(2.5*abs(x)+y-0.1)-0.15
-F:rad~200*sqrt(x^2+(y-0.1)^2)
-F:r~255*e^(-0.02*x)
-F:g~230*cos({x}/{70})
-F:b~255
-F:f8~x^4+(y-0.1)^4-0.1
-F:one~1
-F:outline1~black-0.01
-F:outline2~spine-0.08
-F:outline3~leg-0.08
-~~~~~
-C:rgb~r~g~b
-C:black~one~one~one
-~~~~~
-R:rest1~spine~1
-R:rest2~leg~1
-R:rest3~black~1
-R:border~f8~0
-R:outline~outline1~1
-R:outline2~outline2~1
-R:outline3~outline3~1
-~~~~~
-D~black~black~outline~0
-D~rad~black~outline2~0
-D~rad~black~outline3~0
-D~rad~rgb~rest1~0
-D~rad~rgb~rest2~0
-D~rad~rgb~rest3~0
-D~f8~black~border~0
-~~~~~
-S:x_min~-1
-S:x_max~1
-S:y_min~-1
-S:y_max~1
-S:max_recursion~100
-S:angle_mode~radians
+set x_min = -1
+set x_max = 1
+set y_min = -1
+set y_max = 1
+set max_recursion = 100
+set angle_mode = radians
+expression black = x^2+(y-0.1)^2-0.0225
+expression spine = abs(2.5*x+y-0.1)-0.15
+expression leg = abs(2.5*abs(x)+y-0.1)-0.15
+expression rad = 200*sqrt(x^2+(y-0.1)^2)
+expression r = 255*e^(-0.02*x)
+expression g = 230*cos({x}/{70})
+expression b = 255
+expression f8 = x^4+(y-0.1)^4-0.1
+expression one = 1
+expression outline1 = black-0.01
+expression outline2 = spine-0.08
+expression outline3 = leg-0.08
+colour rgb = r~g~b
+colour black = one~one~one
+boundary rest1 = spine~True
+boundary rest2 = leg~True
+boundary rest3 = black~True
+boundary border = f8~False
+boundary outline = outline1~True
+boundary outline2 = outline2~True
+boundary outline3 = outline3~True
+draw(black,colour=black,boundary=outline)
+draw(rad,colour=black,boundary=outline2)
+draw(rad,colour=black,boundary=outline3)
+draw(rad,colour=rgb,boundary=rest1)
+draw(rad,colour=rgb,boundary=rest2)
+draw(rad,colour=rgb,boundary=rest3)
+draw(f8,colour=black,boundary=border)

@@ -27,12 +27,39 @@ export interface RegistryEntry {
   sliderMax?: string;
   time?: boolean;
   timeMode?: "bounded" | "unbounded" | "bounded_looped";
+  timeRate?: string;
 }
+
+export interface ColorEntry {
+  id: string;
+  red: string;
+  green: string;
+  blue: string;
+}
+
+export interface BoundaryEntry {
+  id: string;
+  expression: string;
+  lessThan: boolean;
+}
+
+export interface TransparencyEntry {
+  id: string;
+  expression: string;
+}
+
+export type DrawComponent =
+  | { type: "color"; id: string }
+  | { type: "boundary"; id: string }
+  | { type: "transparency"; id: string };
 
 export interface DrawEntry {
   equationId: string;
-  colorId: string;
-  restrictionId: string;
+  components?: DrawComponent[];
+  /** Legacy model fields retained for the older TypeScript scene helpers. */
+  colorId?: string;
+  restrictionId?: string;
+  hidden?: boolean;
 }
 
 export interface RenderStatus {

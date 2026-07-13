@@ -1,4 +1,4 @@
-const APP_VERSION = "20260712-editor-rename-frac-folders3";
+const APP_VERSION = "20260713-inline-colour-transparency";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -35,7 +35,7 @@ variable b = 255(e^(-(3(-x+0.99))^2)/3+x/9+0.1)
 variable rest = 1
 colour rgb = r~g~b
 boundary rest = rest~False
-draw(eq,rgb,rest,False)`,
+draw(eq,colour=rgb,boundary=rest)`,
   mandelbrot: `set x_min = -2
 set x_max = 1
 set y_min = -2
@@ -53,7 +53,7 @@ variable combined = real^2+imaginary^2
 variable rest = combined-4
 colour rgb = one~one~one
 boundary rest = rest~True
-draw(combined,rgb,rest,False)`,
+draw(combined,colour=rgb,boundary=rest)`,
   water: `set x_min = -12
 set x_max = 12
 set y_min = -8
@@ -64,7 +64,7 @@ set background_color = 0
 set ensure_square_grid = True
 set aspect_ratio = 1:1
 set draw_only_inside_boundary = False
-time unbounded t = 0
+time unbounded t = 0 speed 1
 variable eq = sin(sqrt(x^2+y^2)*4-t*2)+0.7*cos(x*2-y*1.5+t)+0.35*sin(y*3+t*1.2)
 variable r = 105+65*sin(eq+t*0.2)
 variable g = 145+85*cos(x/2+t*0.35)
@@ -72,7 +72,7 @@ variable b = 215+35*sin(y/2+t*0.45)
 variable rest = 1
 colour rgb = r~g~b
 boundary rest = rest~False
-draw(eq,rgb,rest,False)`,
+draw(eq,colour=rgb,boundary=rest)`,
   stars: `set x_min = -8
 set x_max = 8
 set y_min = -8
@@ -96,7 +96,7 @@ variable b = 32+180*galaxy*arm+225*core+220*dust*galaxy
 variable rest = 1
 colour rgb = r~g~b
 boundary rest = rest~False
-draw(eq,rgb,rest,False)`
+draw(eq,colour=rgb,boundary=rest)`
 };
 
 for (const link of document.querySelectorAll("[data-sample]")) {
