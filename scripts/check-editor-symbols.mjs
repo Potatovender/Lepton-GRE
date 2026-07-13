@@ -72,7 +72,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260714-channel-seed-shader3")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260714-mapped-transparency-floor-random4")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -200,7 +200,19 @@ check("SDF helpers and random compile for CPU and GLSL", () => {
   assert(sandbox.compileExpression("subtract(3,-2)")(0,0,{}) === -2);
   const randomValue = sandbox.compileExpression("random()")(0,0,{});
   assert(randomValue >= 0 && randomValue <= 1, String(randomValue));
-  assert(sandbox.expressionToGlsl("union(x,y)+intersect(x,y)+subtract(x,y)+random()", {}).includes("random2(vec2(x,y))"));
+  const glsl = sandbox.expressionToGlsl("union(x,y)+intersect(x,y)+subtract(x,y)+random()", {});
+  assert(glsl.includes("leptonRandom(vec2(x,y))"), glsl);
+  assert(!glsl.includes("random2"), glsl);
+});
+
+check("floor and ceil delimiters survive LaTeX and text round-trips", () => {
+  for (const [source, expected] of [["floor(2*x)", "floor(2*x)"], ["ceil(y/3)", "ceil(frac(y,3))"]]) {
+    const latex = sandbox.latexSourceFromExpression(source);
+    const normalized = sandbox.normalizeExpressionText(latex);
+    assert(normalized === expected, `${source} -> ${latex} -> ${normalized}`);
+    assert(!normalized.includes("lfloor") && !normalized.includes("rfloor"), normalized);
+    assert(sandbox.validateExpression(normalized, {}).status === "valid", normalized);
+  }
 });
 
 check("operatorname latex imports program function names", () => {
@@ -931,6 +943,20 @@ draw(eq,transparency=glass,colour=rgb,boundary=gate)`;
   assert(exported.includes("draw(eq,transparency=glass,colour=rgb,boundary=gate)"), exported);
   const shader = sandbox.buildFragmentShader();
   assert(shader.includes("1.0 - clamp(1.4, 0.0, 1.0)") && shader.includes("mix(color, layerColor, opacity)"), shader);
+});
+
+check("transparency maps the draw output to x like colour channels", () => {
+  const imported = sandbox.importScene(`expression distance = x^2+y
+colour rgb = x~x~x
+transparency fade = clamp(abs(x),0,1)
+draw(distance,colour=rgb,transparency=fade)`);
+  sandbox.__debugSetScene(imported);
+  const shader = sandbox.buildFragmentShader();
+  assert(shader.includes("float z = pow(x,2.0)+y;"), shader);
+  assert(shader.includes("clamp3(abs(z),0.0,1.0)"), shader);
+  assert(!shader.includes("clamp3(abs(x),0.0,1.0)"), shader);
+  const transparency = sandbox.compileExpression(imported.transparencies[0].expression);
+  assert(transparency(-0.25, 99, sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true))) === 0.25);
 });
 
 check("synchronizing values never reconstructs or groups mixed data order", () => {

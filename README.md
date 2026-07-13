@@ -61,11 +61,11 @@ set draw_only_inside_boundary = False
 expression eq = sin(x)+cos(y)
 colour rgb = 120+80sin(eq)~120+80cos(eq)~210
 boundary rest = 1~False
-transparency glass = 0.15
+transparency glass = clamp(abs(x),0,1)
 draw(eq,colour=rgb,boundary=rest,transparency=glass)
 ```
 
-Only the first draw argument is required. Optional named fields are `colour`, `boundary`, `transparency`, and `visible`. Time sliders may include a coordinate-free speed, for example `time unbounded t = 0 speed 1.5`.
+Only the first draw argument is required. Optional named fields are `colour`, `boundary`, `transparency`, and `visible`. Transparency is evaluated like a colour channel: its `x` input is the selected draw value and its `y` input is the current vertical coordinate. The result is clamped from `0` (opaque) to `1` (transparent). Time sliders may include a coordinate-free speed, for example `time unbounded t = 0 speed 1.5`.
 
 `random()` is deterministic for each scene seed and takes no arguments. Use the shuffle control below the graph Settings button to generate and save a new seed.
 

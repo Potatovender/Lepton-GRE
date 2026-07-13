@@ -34,7 +34,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260714-channel-seed-shader3";
+const APP_VERSION = "20260714-mapped-transparency-floor-random4";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -246,7 +246,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 1: Create data",
-    body: "The Data workspace holds everything except settings. Use New line to create a value, colour, boundary, transparency, draw layer, or comment. Values can be expressions, sliders, or functions."
+    body: "The Data workspace holds everything except settings. Use New line to create a value, colour, boundary, transparency, draw layer, folder, or comment. Values can be expressions, sliders, or functions, and folders can organize any related entries without changing compilation."
   },
   {
     mode: "standard",
@@ -270,7 +270,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "draws",
     title: "Step 5: Connect a draw layer",
-    body: "Draw always chooses the value to render. Use + to optionally add colour, boundary, and transparency in any order. With none added, Lepton uses its default colour, no boundary restriction, and full opacity."
+    body: "Draw always chooses the value to render. Use + to optionally add colour, boundary, and transparency in any order. Transparency is evaluated like a colour channel: x is the draw value and y is the current vertical coordinate. With none added, Lepton uses its default colour, no boundary restriction, and full opacity."
   },
   {
     mode: "text",
@@ -1135,7 +1135,7 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
     `;
   }
   if (kind === "transparencies") {
-    return `<label class="settings-row"><span>Transparency</span>${mathEditor(`transparencies.${index}.expression`, entry.expression, "Transparency expression", true, "0 to 1")}</label>`;
+    return `<label class="settings-row"><span>function</span>${mathEditor(`transparencies.${index}.expression`, entry.expression, "Transparency function", true, "0 to 1; x is the draw value")}</label>`;
   }
   if (kind === "draws") {
     const draw = normalizeDrawEntry(entry);
@@ -3919,7 +3919,7 @@ function renderSceneCpuInto(canvas, options = {}) {
         if (fn.kind === "function") env.__locals = previousLocals;
         if (!Number.isFinite(z)) continue;
 
-        const opacity = 1 - clampNumber(transparencyValue(x, y, env), 0, 1);
+        const opacity = 1 - clampNumber(transparencyValue(z, y, env), 0, 1);
         if (!Number.isFinite(opacity) || opacity <= 0) continue;
         ctx.globalAlpha = opacity;
         ctx.fillStyle = `rgb(${channel(red(z, y, env))}, ${channel(green(z, y, env))}, ${channel(blue(z, y, env))})`;
@@ -4079,7 +4079,7 @@ function buildFragmentShader() {
           green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode),
           blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode),
           bound: expressionToGlsl(restriction.expression, env, null, [], scene.settings.angleMode),
-          transparency: expressionToGlsl(transparency.expression, env, null, [], scene.settings.angleMode),
+          transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode),
           boundCheck: restriction.checkSmaller ? "boundValue <= 0.0" : "boundValue >= 0.0"
         };
       } catch {
@@ -4141,7 +4141,7 @@ function buildFragmentShader() {
     float leptonUnion(float a, float b) { return min(a, b); }
     float leptonIntersect(float a, float b) { return max(a, b); }
     float leptonSubtract(float a, float b) { return max(-a, b); }
-    float random2(vec2 value) { return fract(sin(dot(value, vec2(12.9898, 78.233)) + u_random_seed * 0.000173) * 43758.5453123); }
+    float leptonRandom(vec2 value) { return fract(sin(dot(value, vec2(12.9898, 78.233)) + u_random_seed * 0.000173) * 43758.5453123); }
 
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
@@ -4547,7 +4547,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
     .replaceAll(/\bunion\b/g, "leptonUnion")
     .replaceAll(/\bintersect\b/g, "leptonIntersect")
     .replaceAll(/\bsubtract\b/g, "leptonSubtract")
-    .replaceAll(/\brandom\s*\(\s*\)/g, "random2(vec2(x,y))")
+    .replaceAll(/\brandom\s*\(\s*\)/g, "leptonRandom(vec2(x,y))")
     .replaceAll(/\bpi\b/g, "3.141592653589793")
     .replaceAll(/\be\b/g, "2.718281828459045");
 
@@ -6082,7 +6082,7 @@ function isPrefixToken(token) {
 
 function isTerminatorToken(token) {
   if (!token) return true;
-  if (token.type === "command" && token.value === "\\right") return true;
+  if (token.type === "command" && ["\\right", "\\rvert", "\\rfloor", "\\rceil"].includes(token.value)) return true;
   return token.type === "operator" && [")", "}", "]", ","].includes(token.value);
 }
 
