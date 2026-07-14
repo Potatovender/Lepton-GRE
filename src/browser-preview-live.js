@@ -34,7 +34,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260714-mapped-transparency-floor-random4";
+const APP_VERSION = "20260714-exponent-hyperbolic-point-drag2";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -2178,7 +2178,7 @@ function bindEvents() {
       autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan",
       handlers: {
         edit: () => {
-          if (el.dataset.initializing === "true") return;
+          if (el.dataset.initializing === "true" || !el.contains(document.activeElement)) return;
           const latex = mathField.latex();
           el.dataset.value = latex;
 
@@ -3067,10 +3067,30 @@ function startPointDrag(index,canvas){
     const py=Math.max(0,Math.min(rect.height,event.clientY-rect.top));
     scene.points[index].x=String(Number((vp.xMin+px/rect.width*(vp.xMax-vp.xMin)).toPrecision(8)));
     scene.points[index].y=String(Number((vp.yMax-py/rect.height*(vp.yMax-vp.yMin)).toPrecision(8)));
+    updatePointDragFields(index);
     renderScene(validateScene());
   };
   const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);recordSceneHistory(before);renderApp();};
   document.addEventListener("pointermove",move,{passive:false}); document.addEventListener("pointerup",up,{once:true});
+}
+
+function updatePointDragFields(index) {
+  const point = scene.points[index];
+  if (!point) return;
+  for (const coordinate of ["x", "y"]) {
+    const fieldName = `points.${index}.${coordinate}`;
+    const field = root.querySelector(`.mathquill-field[data-field="${fieldName}"]`);
+    if (!field) continue;
+    const source = point[coordinate];
+    const latex = latexSourceFromExpression(source);
+    field.dataset.value = latex;
+    const mathField = field.mathquillInstance ?? field.__mathField;
+    if (!mathField) continue;
+    field.dataset.initializing = "true";
+    mathField.latex(latex);
+    mathField.reflow?.();
+    delete field.dataset.initializing;
+  }
 }
 
 function schedulePanRender() {
@@ -6316,6 +6336,8 @@ function createParser(tokens, isLatexMode) {
       
       if (opToken.value === "/") {
         left = { type: "fraction", num: left, den: right };
+      } else if (opToken.value === "^") {
+        left = { type: "power", base: left, exponent: right };
       } else {
         left = { type: "binary", op: opToken.value, left, right };
       }
@@ -6355,10 +6377,12 @@ function astToLatex(node) {
     return `\\frac{${astToLatex(node.num)}}{${astToLatex(node.den)}}`;
   }
   if (node.type === "unary") {
-    return `${node.op}${astToLatex(node.value)}`;
+    const value = astToLatex(node.value);
+    return `${node.op}${node.value.type === "binary" ? `\\left(${value}\\right)` : value}`;
   }
   if (node.type === "power") {
-    return `${astToLatex(node.base)}^{${astToLatex(node.exponent)}}`;
+    const base = astToLatex(node.base);
+    return `${node.base.type === "binary" || node.base.type === "unary" ? `\\left(${base}\\right)` : base}^{${astToLatex(node.exponent)}}`;
   }
   if (node.type === "binary") {
     const op = node.op;
@@ -6404,10 +6428,12 @@ function astToLeptonText(node) {
     return `frac{${astToLeptonText(node.num)}}{${astToLeptonText(node.den)}}`;
   }
   if (node.type === "unary") {
-    return `${node.op}${astToLeptonText(node.value)}`;
+    const value = astToLeptonText(node.value);
+    return `${node.op}${node.value.type === "binary" ? `(${value})` : value}`;
   }
   if (node.type === "power") {
-    const base = astToLeptonText(node.base);
+    const rawBase = astToLeptonText(node.base);
+    const base = node.base.type === "binary" || node.base.type === "unary" ? `(${rawBase})` : rawBase;
     const exponent = astToLeptonText(node.exponent);
     if (node.exponent.type === "number" || node.exponent.type === "identifier") {
       return `${base}^${exponent}`;
@@ -6448,10 +6474,14 @@ function astToMathString(node) {
     return `frac(${astToMathString(node.num)},${astToMathString(node.den)})`;
   }
   if (node.type === "unary") {
-    return `${node.op}${astToMathString(node.value)}`;
+    const value = astToMathString(node.value);
+    return `${node.op}${node.value.type === "binary" ? `(${value})` : value}`;
   }
   if (node.type === "power") {
-    return `pow(${astToMathString(node.base)},${astToMathString(node.exponent)})`;
+    const rawBase = astToMathString(node.base);
+    const base = node.base.type === "binary" || node.base.type === "unary" ? `(${rawBase})` : rawBase;
+    const exponent = astToMathString(node.exponent);
+    return `${base}^${node.exponent.type === "number" || node.exponent.type === "identifier" ? exponent : `(${exponent})`}`;
   }
   if (node.type === "binary") {
     const op = node.op;
@@ -6484,13 +6514,20 @@ function astToEditableHtml(node) {
     return atomEditableHtml("frac", [astToLeptonText(node.num), astToLeptonText(node.den)]);
   }
   if (node.type === "unary") {
-    return `${node.op}${astToEditableHtml(node.value)}`;
+    const value = astToEditableHtml(node.value);
+    return `${node.op}${node.value.type === "binary" ? `(${value})` : value}`;
   }
   if (node.type === "power") {
-    return `<span class="mq-power" data-command="power"><span class="mq-base">${astToEditableHtml(node.base)}</span><span class="mq-exponent">${astToEditableHtml(node.exponent)}</span></span>`;
+    const base = astToEditableHtml(node.base);
+    const groupedBase = node.base.type === "binary" || node.base.type === "unary" ? `(${base})` : base;
+    return `<span class="mq-power" data-command="power"><span class="mq-base">${groupedBase}</span><span class="mq-exponent">${astToEditableHtml(node.exponent)}</span></span>`;
   }
   if (node.type === "binary") {
-    return `${astToEditableHtml(node.left)}${node.op}${astToEditableHtml(node.right)}`;
+    let left = astToEditableHtml(node.left);
+    let right = astToEditableHtml(node.right);
+    if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(node.op)) left = `(${left})`;
+    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(node.op)) right = `(${right})`;
+    return `${left}${node.op}${right}`;
   }
   if (node.type === "call") {
     const name = node.name;
@@ -6931,7 +6968,9 @@ function splitPreviousOperand(source, operatorIndex) {
   }
 
   if (isIdentifierChar(source[cursor])) {
-    return { start: scanIdentifierStart(source, cursor) ?? cursor };
+    let start = scanIdentifierStart(source, cursor) ?? cursor;
+    if (source[start - 1] === "^") start = splitPreviousOperand(source, start - 1).start;
+    return { start };
   }
 
   while (cursor >= 0 && /[\d.]/.test(source[cursor])) cursor -= 1;

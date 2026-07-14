@@ -72,7 +72,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260714-mapped-transparency-floor-random4")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260714-exponent-hyperbolic-point-drag2")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -192,6 +192,49 @@ check("all program functions normalize, compile, validate, and convert to GLSL",
     assert(!glsl.includes("\\"), `${name} GLSL retained LaTeX: ${glsl}`);
     assert(!/\bround\(/.test(glsl), `${name} GLSL should use helper: ${glsl}`);
   }
+});
+
+check("all hyperbolic functions keep bracketed calls through CPU and GLSL", () => {
+  const samples = {
+    sinh: "0.5",
+    cosh: "0.5",
+    tanh: "0.5",
+    sech: "0.5",
+    csch: "0.5",
+    coth: "0.5",
+    arcsinh: "0.5",
+    arccosh: "2",
+    arctanh: "0.5",
+    arcsech: "0.5",
+    arccsch: "0.5",
+    arccoth: "2"
+  };
+  for (const [name, argument] of Object.entries(samples)) {
+    const expression = `${name}(${argument}+x/10)`;
+    assert(sandbox.validateExpression(expression, {}).status === "valid", expression);
+    assert(Number.isFinite(sandbox.compileExpression(expression)(0.25, 0, {})), expression);
+    const glsl = sandbox.expressionToGlsl(expression, {});
+    assert(!glsl.includes("Unknown") && !glsl.includes("\\"), `${expression}: ${glsl}`);
+  }
+});
+
+check("negative exponential grouping survives the editor AST", () => {
+  assert(sandbox.convertDivisionsToFrac("x^2/20") === "frac(x^2)(20)", sandbox.convertDivisionsToFrac("x^2/20"));
+  assert(sandbox.convertDivisionsToFrac("(x-1)^2/2") === "frac((x-1)^2)(2)", sandbox.convertDivisionsToFrac("(x-1)^2/2"));
+  const simplePowerFraction = sandbox.latexSourceFromExpression("x^2/20");
+  assert(simplePowerFraction === "\\frac{x^{2}}{20}", simplePowerFraction);
+  const groupedPowerFraction = sandbox.latexSourceFromExpression("(x-1)^2/2");
+  assert(groupedPowerFraction === "\\frac{\\left(x-1\\right)^{2}}{2}", groupedPowerFraction);
+
+  const source = "e^(-((a-sun_x)^2/95+(b-sun_y)^2/42))";
+  const ast = sandbox.parseLeptonText(source);
+  const recorded = sandbox.astToLeptonText(ast);
+  assert(recorded === "e^(-(frac{(a-sun_x)^2}{95}+frac{(b-sun_y)^2}{42}))", recorded);
+  const html = sandbox.renderEditableLatex(source);
+  assert(html.includes('class="mq-power"') && html.includes('class="mq-exponent"'), html);
+
+  const groupedBase = sandbox.astToLeptonText(sandbox.parseLeptonText("(-x)^2"));
+  assert(groupedBase === "(-x)^2", groupedBase);
 });
 
 check("SDF helpers and random compile for CPU and GLSL", () => {
@@ -878,6 +921,9 @@ check("point coordinates compile through property and index selectors", () => {
 check("point dragging keeps the live canvas and commits after release", () => {
   const dragSource=source.slice(source.indexOf("function startPointDrag"),source.indexOf("function schedulePanRender"));
   assert(dragSource.includes("renderScene(validateScene())"),dragSource);
+  assert(dragSource.includes("updatePointDragFields(index)"),dragSource);
+  assert(dragSource.includes("mathField.latex(latex)"),dragSource);
+  assert(dragSource.includes('field.dataset.initializing = "true"'),dragSource);
   assert(!dragSource.includes("renderApp();};const"),dragSource);
 });
 
