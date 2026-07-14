@@ -32,4 +32,17 @@ describe("Equation", () => {
   test("round-trips a parsed tree into a readable expression string", () => {
     expect(new Equation("2(x+y)").astToString()).toBe("(2*(x+y))");
   });
+
+  test.each([
+    ["sin(cos(0))", Math.sin(Math.cos(0))],
+    ["sqrt(abs(-16))", 4],
+    ["floor(max(2.2,min(8,3.9)))", 3],
+    ["clamp(exp(ln(4)),1,3)", 3],
+    ["tanh(sinh(cosh(0)))", Math.tanh(Math.sinh(Math.cosh(0)))],
+    ["2^3^2", 512],
+    ["-2^2", -4],
+    ["(-2)^2", 4],
+  ])("evaluates nested built-ins and precedence in %s", (source, expected) => {
+    expect(new Equation(source).evaluate(0, 0)).toBeCloseTo(expected);
+  });
 });

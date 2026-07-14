@@ -13,7 +13,7 @@ Live site: https://potatovender.github.io/Lepton-GRE/
 - `src/styles.css`: Shared styling for the landing page, grapher layout, editor controls, MathQuill fields, sample cards, and renderer surface.
 - `src/assets/`: Logo, favicon source image, landing hero image, and sample graph thumbnails.
 - `src/libs/mathquill/`: Vendored MathQuill-compatible editor runtime and CSS used for math entry.
-- `src/math/`: Older TypeScript equation parser/evaluator modules kept for reference and tests.
+- `src/math/`: Equation evaluation plus the shared live-expression syntax helpers for precedence, power lowering, and implicit multiplication.
 - `src/model/`: Older TypeScript scene, color, and boundary model helpers.
 - `src/ui/`: Earlier static UI shell code retained as project history/reference.
 - `src/types.ts`: Shared TypeScript interfaces for scene data.
@@ -65,7 +65,7 @@ transparency glass = clamp(abs(x),0,1)
 draw(eq,colour=rgb,boundary=rest,transparency=glass)
 ```
 
-Only the first draw argument is required. Optional named fields are `colour`, `boundary`, `transparency`, and `visible`. Transparency is evaluated like a colour channel: its `x` input is the selected draw value and its `y` input is the current vertical coordinate. The result is clamped from `0` (opaque) to `1` (transparent). Time sliders may include a coordinate-free speed, for example `time unbounded t = 0 speed 1.5`.
+Only the first draw argument is required. Optional named fields are `colour`, `boundary`, `transparency`, and `visible`. Transparency is evaluated like a colour channel: its `x` input is the selected draw value and its `y` input is the current vertical coordinate. The result is clamped from `0` (opaque) to `1` (transparent). Time sliders may include a coordinate-free speed, for example `time unbounded t = 0 speed 1.5`. While time is playing, the top bar reports the graph's measured rendering FPS.
 
 `random()` is deterministic for each scene seed and takes no arguments. Use the shuffle control below the graph Settings button to generate and save a new seed.
 

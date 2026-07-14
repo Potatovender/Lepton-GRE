@@ -1504,6 +1504,20 @@ select {
   font-size: 12px;
 }
 
+.time-playback-primary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.time-fps {
+  min-width: 48px;
+  color: #536176;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

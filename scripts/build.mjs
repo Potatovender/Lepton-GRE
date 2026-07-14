@@ -6,6 +6,8 @@ const requiredFiles = [
   "app.html",
   "src/landing.js",
   "src/browser-preview-live.js",
+  "src/math/expression-syntax.js",
+  "src/math/expression-syntax.d.ts",
   "src/styles.css",
   "src/assets/lepton-favicon.png",
   "src/assets/lepton-logo.png",
@@ -40,6 +42,7 @@ for (const asset of ["src/browser-preview-live.js", "src/styles.css", "src/asset
 }
 
 await run(process.execPath, ["--check", "src/browser-preview-live.js"]);
+await run(process.execPath, ["--check", "src/math/expression-syntax.js"]);
 await run(process.execPath, ["--check", "src/landing.js"]);
 await run(process.execPath, ["scripts/check-editor-symbols.mjs"]);
 

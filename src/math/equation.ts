@@ -312,7 +312,10 @@ function buildTree(tokens: string[]): Node | null {
         operatorStack.length > 0 &&
         operatorStack.at(-1) !== "(" &&
         isOperator(operatorStack.at(-1) ?? "") &&
-        PRECEDENCE[operatorStack.at(-1) as Operator][0] >= PRECEDENCE[token][0]
+        (
+          PRECEDENCE[operatorStack.at(-1) as Operator][0] > PRECEDENCE[token][0] ||
+          (PRECEDENCE[operatorStack.at(-1) as Operator][0] === PRECEDENCE[token][0] && token !== "^")
+        )
       ) {
         applyOperator();
       }

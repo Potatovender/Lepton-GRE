@@ -1,3 +1,5 @@
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js";
+
 const DEFAULT_SCENE = {
   functions: [],
   colors: [],
@@ -34,7 +36,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260714-exponent-hyperbolic-point-drag2";
+const APP_VERSION = "20260715-nested-functions-fps";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -110,6 +112,18 @@ const BUILTIN_NAMES = new Set([
   "PI",
   "ref",
   "NaN"
+]);
+const GENERATED_GLSL_NAMES = new Set([
+  "clamp3",
+  "leptonRandom",
+  "leptonUnion",
+  "leptonIntersect",
+  "leptonSubtract",
+  "round1",
+  "sinh1",
+  "cosh1",
+  "tanh1",
+  "vec2"
 ]);
 
 const EXACT_RESERVED_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["Math", "PI", "ref", "NaN"].includes(name)));
@@ -252,7 +266,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 2: Use expressions, sliders, and functions",
-    body: "Expressions reference x, y, and other IDs. Sliders expose an adjustable value. Functions accept inputs like wave(a,b). random() uses the scene seed; use the shuffle button below Settings to generate a new pattern."
+    body: "Expressions reference x, y, and other IDs. Sliders expose an adjustable value. Functions accept inputs like wave(a,b). Time sliders can be played locally or together from the top bar, where the FPS readout shows the graph's live rendering rate. random() uses the scene seed; use the shuffle button below Settings to generate a new pattern."
   },
   {
     mode: "standard",
@@ -307,6 +321,9 @@ let boundaryPulseTimer = 0;
 let aspectRatioCustomOpen = false;
 let animationFrameId = 0;
 let animationLastTimestamp = 0;
+let animationFpsWindowStart = 0;
+let animationFpsFrameCount = 0;
+let animationFps = 0;
 const TIME_VARIABLE_RATE = 1;
 let saveDialogOpen = false;
 let libraryDialogOpen = false;
@@ -1276,9 +1293,12 @@ function timePlaybackControls() {
   const anyPlaying = timeVariables.some((entry) => playingTimeIds.has(entry.id));
   return `
     <div class="draw-playbar">
-      <button class="toolbar-button" data-action="toggle-global-time" type="button" ${hasTimeVariables ? "" : "disabled"}>
-        ${anyPlaying ? "Stop time" : "Play time"}
-      </button>
+      <div class="time-playback-primary">
+        <button class="toolbar-button" data-action="toggle-global-time" type="button" ${hasTimeVariables ? "" : "disabled"}>
+          ${anyPlaying ? "Stop time" : "Play time"}
+        </button>
+        <output class="time-fps" data-fps-counter aria-live="off">${anyPlaying ? `${animationFps} FPS` : "-- FPS"}</output>
+      </div>
       <span>${hasTimeVariables ? `${playingTimeIds.size} playing` : "No time variables"}</span>
     </div>
   `;
@@ -3383,6 +3403,10 @@ function toggleTimePlayback(id) {
 function startAnimationLoop() {
   if (animationFrameId) return;
   animationLastTimestamp = 0;
+  animationFpsWindowStart = 0;
+  animationFpsFrameCount = 0;
+  animationFps = 0;
+  updateFpsCounter();
   animationFrameId = requestAnimationFrame(stepTimeAnimation);
 }
 
@@ -3391,6 +3415,10 @@ function stopAnimationLoop() {
   cancelAnimationFrame(animationFrameId);
   animationFrameId = 0;
   animationLastTimestamp = 0;
+  animationFpsWindowStart = 0;
+  animationFpsFrameCount = 0;
+  animationFps = 0;
+  updateFpsCounter();
 }
 
 function stepTimeAnimation(timestamp) {
@@ -3404,8 +3432,25 @@ function stepTimeAnimation(timestamp) {
   if (deltaSeconds > 0) {
     advanceTimeVariables(deltaSeconds);
     refreshAfterSliderChange();
+    recordAnimationFrame(timestamp);
   }
   animationFrameId = requestAnimationFrame(stepTimeAnimation);
+}
+
+function recordAnimationFrame(timestamp) {
+  if (!animationFpsWindowStart) animationFpsWindowStart = timestamp;
+  animationFpsFrameCount += 1;
+  const elapsed = timestamp - animationFpsWindowStart;
+  if (elapsed < 500) return;
+  animationFps = Math.max(0, Math.round((animationFpsFrameCount * 1000) / elapsed));
+  animationFpsWindowStart = timestamp;
+  animationFpsFrameCount = 0;
+  updateFpsCounter();
+}
+
+function updateFpsCounter() {
+  const counter = root?.querySelector?.("[data-fps-counter]");
+  if (counter) counter.textContent = playingTimeIds.size ? `${animationFps} FPS` : "-- FPS";
 }
 
 function advanceTimeVariables(deltaSeconds) {
@@ -4533,7 +4578,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
     for (const branch of [...piecewise.branches].reverse()) result = `((${expressionToGlsl(resolvePiecewiseCondition(branch.condition), env, zName, stack, angleMode, localMap)}) ? (${expressionToGlsl(branch.value, env, zName, stack, angleMode, localMap)}) : (${result}))`;
     return result;
   }
-  let expression = normalizeExpressionText(normalizedSource);
+  let expression = normalizeMathSyntax(normalizeExpressionText(normalizedSource));
   expression = rewritePointSelectors(expression, (point, coordinate) => {
     const pointKey = `point:${point.id}:${coordinate}`;
     if (stack.includes(pointKey) || stack.length >= recursionLimit()) return "(0.0/0.0)";
@@ -4549,7 +4594,6 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
   });
   expression = inlineCustomVariables(expression, env, stack, zName, angleMode, localMap);
   expression = inlineBareVariables(expression, env, stack, zName, angleMode, localMap);
-  expression = normalizeMathSyntax(expression);
   expression = expression
     .replaceAll(/\barcsin\b/g, "asin")
     .replaceAll(/\barccos\b/g, "acos")
@@ -4604,14 +4648,6 @@ function rewritePointSelectors(expression, build) {
 }
 function splitTopLevelText(source, separator){const out=[];let start=0,depth=0;for(let i=0;i<source.length;i++){if("({[".includes(source[i]))depth++;else if(")}]".includes(source[i]))depth--;else if(source[i]===separator&&depth===0){out.push(source.slice(start,i));start=i+1;}}out.push(source.slice(start));return out;}
 function resolvePiecewiseCondition(condition){const boundary=dataEntries(scene.restrictions).find(r=>r.id===condition.trim());if(!boundary)return condition;return `(${boundary.expression})${boundary.checkSmaller?"<=":">="}0`;}
-
-function normalizeMathSyntax(expression) {
-  return String(expression)
-    .replaceAll(/(\d|\))([A-Za-z_])/g, "$1*$2")
-    .replaceAll(/\b([xy])(\d)/g, "$1*$2")
-    .replaceAll(/(\d|\b[xy]\b|\))\(/g, "$1*(")
-    .replaceAll(/\)(\d|[A-Za-z_])/g, ")*$1");
-}
 
 function normalizeGlslNumbers(expression) {
   return expression.replaceAll(/\b\d+(?:\.\d+)?\b/g, (match) => (match.includes(".") ? match : `${match}.0`));
@@ -4698,7 +4734,7 @@ function inlineBareVariables(expression, env, stack, zName, angleMode = "radians
       }
       return `(${expressionToGlsl(entry.expression, env, zName, [...stack, name], angleMode, entry.kind === "function" ? defaultParamGlslMap(entry.params, zName) : {})})`;
     },
-    new Set(),
+    GENERATED_GLSL_NAMES,
     new Set(Object.keys(localMap))
   );
 }
@@ -4722,77 +4758,6 @@ function rewriteBareIdentifiers(expression, replace, extraReserved, overrideName
     if (BUILTIN_NAMES.has(name) || extraReserved.has(name)) return name;
     return replace(name);
   });
-}
-
-function convertPowers(expression) {
-  let output = expression;
-  let guard = 0;
-  while (output.includes("^") && guard < 200) {
-    guard += 1;
-    const index = output.indexOf("^");
-    const left = findLeftOperand(output, index - 1);
-    const right = findRightOperand(output, index + 1);
-    if (!left || !right) break;
-    output = `${output.slice(0, left.start)}pow(${left.value},${right.value})${output.slice(right.end)}`;
-  }
-  return output;
-}
-
-function findLeftOperand(source, index) {
-  let i = skipSpacesLeft(source, index);
-  if (i < 0) return null;
-  if (source[i] === ")") {
-    let depth = 0;
-    for (let j = i; j >= 0; j -= 1) {
-      if (source[j] === ")") depth += 1;
-      if (source[j] === "(") depth -= 1;
-      if (depth === 0) {
-        let start = j;
-        let nameIndex = j - 1;
-        while (nameIndex >= 0 && /[A-Za-z0-9_]/.test(source[nameIndex])) nameIndex -= 1;
-        if (nameIndex < j - 1 && /[A-Za-z_]/.test(source[nameIndex + 1])) start = nameIndex + 1;
-        return { start, end: i + 1, value: source.slice(start, i + 1) };
-      }
-    }
-    return null;
-  }
-  const end = i + 1;
-  while (i >= 0 && /[\w.]/.test(source[i])) i -= 1;
-  return { start: i + 1, end, value: source.slice(i + 1, end) };
-}
-
-function findRightOperand(source, index) {
-  let i = skipSpacesRight(source, index);
-  if (i >= source.length) return null;
-  const start = i;
-  if (source[i] === "+" || source[i] === "-") i = skipSpacesRight(source, i + 1);
-  if (source[i] === "(") {
-    const end = matchingParen(source, i);
-    return end === -1 ? null : { start, end: end + 1, value: source.slice(start, end + 1) };
-  }
-  const identifier = source.slice(i).match(/^[A-Za-z_]\w*/)?.[0];
-  if (identifier) {
-    i += identifier.length;
-    if (source[i] === "(") {
-      const end = matchingParen(source, i);
-      return end === -1 ? null : { start, end: end + 1, value: source.slice(start, end + 1) };
-    }
-    return { start, end: i, value: source.slice(start, i) };
-  }
-  while (i < source.length && /[\d.]/.test(source[i])) i += 1;
-  return i === start ? null : { start, end: i, value: source.slice(start, i) };
-}
-
-function skipSpacesLeft(source, index) {
-  let i = index;
-  while (i >= 0 && /\s/.test(source[i])) i -= 1;
-  return i;
-}
-
-function skipSpacesRight(source, index) {
-  let i = index;
-  while (i < source.length && /\s/.test(source[i])) i += 1;
-  return i;
 }
 
 function validateScene() {
@@ -6106,13 +6071,6 @@ function isTerminatorToken(token) {
   return token.type === "operator" && [")", "}", "]", ","].includes(token.value);
 }
 
-function getOpPrecedence(op) {
-  if (op === "+" || op === "-") return 10;
-  if (op === "*" || op === "/") return 20;
-  if (op === "^") return 30;
-  return 0;
-}
-
 function createParser(tokens, isLatexMode) {
   let index = 0;
   
@@ -6207,7 +6165,7 @@ function createParser(tokens, isLatexMode) {
     }
     
     if (token.type === "operator" && (token.value === "-" || token.value === "+")) {
-      const expr = parseInfixExpression(40);
+      const expr = parseInfixExpression(UNARY_OPERAND_PRECEDENCE);
       return { type: "unary", op: token.value, value: expr };
     }
     

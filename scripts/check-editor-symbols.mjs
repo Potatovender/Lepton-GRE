@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "../src/math/expression-syntax.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
@@ -56,12 +57,16 @@ const sandbox = {
   requestAnimationFrame: () => {},
   InputEvent: function InputEvent() {},
   Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
-  getComputedStyle: () => ({ fontSize: "16px" })
+  getComputedStyle: () => ({ fontSize: "16px" }),
+  convertPowers,
+  getOpPrecedence,
+  normalizeMathSyntax,
+  UNARY_OPERAND_PRECEDENCE
 };
 
 vm.createContext(sandbox);
 vm.runInContext(
-  source.replace(
+  source.replace(/^import .*expression-syntax\.js";\s*/, "").replace(
     /loadSceneFromUrl\(\);\s*sceneHistory\.last = sceneSnapshot\(\);\s*renderApp\(\);/,
     "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; }; globalThis.__debugSetDisplayMode = (mode) => { displayMode = mode; }; globalThis.__debugPlayTime = (id) => { playingTimeIds.add(id); timeVariableDirections.set(id, 1); };"
   ),
@@ -72,7 +77,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260714-exponent-hyperbolic-point-drag2")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260715-nested-functions-fps")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -114,6 +119,65 @@ check("LaTeX trig expressions normalize for compiler and GLSL", () => {
   assert(mqNormalized === "sin(x)+cos(y)", mqNormalized);
   assert(sandbox.expressionToGlsl(mathQuillLatex, {}) === "sin(x)+cos(y)", "MathQuill GLSL normalization failed");
   assert(sandbox.validateExpression(mathQuillLatex, {}).status === "valid", "MathQuill LaTeX should validate");
+});
+
+check("nested built-ins and user functions compile through CPU and GLSL", () => {
+  const nestedSource = `function square(v) = v^2
+function soften(v,limit) = clamp(square(v),0,limit)
+function wave(a,b) = tanh(sinh(cosh(a)))+sin(cos(b))
+expression randomBase = clamp(random(),0,1)
+expression nestedRandom = sqrt(abs(randomBase-0.5))
+expression nestedUser = soften(sin(x),2)+wave(x,y)
+expression powers = 2^3^2
+expression negativePower = -2^2
+expression groupedPower = (-2)^2
+expression negativeExponential = e^(-(x^2)/16)`;
+  const imported = sandbox.importScene(nestedSource);
+  sandbox.__debugSetScene(imported);
+  const env = sandbox.sceneFunctionEnv(true);
+  const runtime = sandbox.buildRuntimeEnv(env);
+  const byId = (id) => imported.functions.find((entry) => entry.id === id);
+  const glsl = (id) => sandbox.expressionToGlsl(byId(id).expression, env);
+  const cpu = (id, x = 0, y = 0) => sandbox.compileExpression(byId(id).expression)(x, y, runtime);
+
+  for (const id of ["nestedRandom", "nestedUser", "powers", "negativePower", "groupedPower", "negativeExponential"]) {
+    const output = glsl(id);
+    assert(!output.includes("clamp3*("), `${id}: ${output}`);
+    assert(!output.includes("vec2*("), `${id}: ${output}`);
+    assert(!output.includes("^"), `${id}: ${output}`);
+  }
+  assert(Number.isFinite(cpu("nestedRandom", 0.2, -0.4)), "nested random CPU evaluation failed");
+  assert(Number.isFinite(cpu("nestedUser", 0.2, -0.4)), "nested user-function CPU evaluation failed");
+  assert(cpu("powers") === 512, `right-associative power returned ${cpu("powers")}`);
+  assert(cpu("negativePower") === -4, `negative power returned ${cpu("negativePower")}`);
+  assert(cpu("groupedPower") === 4, `grouped negative power returned ${cpu("groupedPower")}`);
+});
+
+check("negative exponents and nested calls survive text round trips", () => {
+  const source = `function square(v) = v^2
+function nested(v) = clamp(sqrt(abs(square(v))),0,4)
+expression result = nested(sin(x))+e^(-(x^2)/16)
+colour rgb = result~result~result
+draw(result,colour=rgb)`;
+  const first = sandbox.importScene(source);
+  sandbox.__debugSetScene(first);
+  const firstEnv = sandbox.sceneFunctionEnv(true);
+  const firstGlsl = sandbox.expressionToGlsl(first.functions.find((entry) => entry.id === "result").expression, firstEnv);
+  const exported = sandbox.exportScene();
+  const second = sandbox.importScene(exported);
+  sandbox.__debugSetScene(second);
+  const secondEnv = sandbox.sceneFunctionEnv(true);
+  const secondGlsl = sandbox.expressionToGlsl(second.functions.find((entry) => entry.id === "result").expression, secondEnv);
+  assert(firstGlsl === secondGlsl, `round trip changed GLSL:\n${firstGlsl}\n${secondGlsl}`);
+});
+
+check("time playback controls include a live FPS output", () => {
+  const timed = sandbox.importScene("time unbounded t = 0 speed 1");
+  sandbox.__debugSetScene(timed);
+  sandbox.__debugPlayTime("t");
+  const html = sandbox.timePlaybackControls();
+  assert(html.includes("data-fps-counter"), html);
+  assert(html.includes("FPS"), html);
 });
 
 check("fractions normalize from all supported text and LaTeX forms", () => {
