@@ -77,7 +77,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260715-nested-functions-fps")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260715-dependencies-drag")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -1090,11 +1090,77 @@ check("deleted default IDs are reused without creating extra rows", () => {
 });
 
 check("sort control cycles through grouped order", () => {
-  assert(sandbox.nextSort("custom") === "az");
+  assert(sandbox.nextSort("custom") === "dependencies");
+  assert(sandbox.nextSort("dependencies") === "az");
   assert(sandbox.nextSort("az") === "za");
   assert(sandbox.nextSort("za") === "group");
   assert(sandbox.nextSort("group") === "custom");
+  assert(sandbox.sortLabel("dependencies") === "Dependencies");
   assert(sandbox.sortLabel("group") === "In group");
+});
+
+check("dependency mode follows transitive draw references and keeps folder ancestry", () => {
+  const imported = sandbox.importScene(`folder Inputs = {
+ expression base = x
+ expression wave = sin(base)
+}
+function local(base) = base+1
+colour shade = wave~base~0
+boundary edge = wave~False
+draw(wave,colour=shade,boundary=edge)`);
+  sandbox.__debugSetScene(imported);
+  const draw = imported.draws[0];
+  const included = sandbox.dependencyEntryKeys({ kind: "draws", uid: draw._uid }, imported);
+  const key = (kind, entry) => sandbox.entryOrderKey(kind, entry._uid);
+  assert(included.has(key("draws", draw)), JSON.stringify([...included]));
+  assert(included.has(key("colors", imported.colors[0])), JSON.stringify([...included]));
+  assert(included.has(key("restrictions", imported.restrictions[0])), JSON.stringify([...included]));
+  assert(included.has(key("functions", imported.functions.find((entry) => entry.id === "wave"))), JSON.stringify([...included]));
+  assert(included.has(key("functions", imported.functions.find((entry) => entry.id === "base"))), JSON.stringify([...included]));
+  assert(included.has(key("folders", imported.folders[0])), JSON.stringify([...included]));
+  assert(!included.has(key("functions", imported.functions.find((entry) => entry.id === "local"))), JSON.stringify([...included]));
+});
+
+check("local function parameters are not treated as outer dependencies", () => {
+  const imported = sandbox.importScene(`expression banana = 7
+function local(banana) = banana+1`);
+  sandbox.__debugSetScene(imported);
+  const local = imported.functions.find((entry) => entry.id === "local");
+  const included = sandbox.dependencyEntryKeys({ kind: "functions", uid: local._uid }, imported);
+  assert(included.size === 1, JSON.stringify([...included]));
+});
+
+check("drop slots support the first position and the root-list end", () => {
+  const imported = sandbox.importScene(`expression first = x
+folder Group = {
+ expression nested = y
+}
+expression last = x+y`);
+  sandbox.__debugSetScene(imported);
+  const lastIndex = imported.functions.findIndex((entry) => entry.id === "last");
+  assert(sandbox.moveEntryToDropSlot("functions", lastIndex, { dataset: { entryDropBefore: "functions.0" } }));
+  assert(sandbox.orderedDataEntries(imported)[0].entry.id === "last", sandbox.exportScene());
+  assert(sandbox.moveEntryToDropSlot("functions", 0, { dataset: { entryDropEnd: "true" } }));
+  const rootItems = sandbox.orderedDataEntries(imported).filter((item) => !item.parentUid);
+  assert(rootItems.at(-1).entry.id === "first", rootItems.map((item) => item.entry.id).join(","));
+});
+
+check("new reference creation adds exactly one compatible line", () => {
+  const imported = sandbox.importScene(`expression eq = x
+colour shade = 1~2~3
+boundary edge = eq~False
+transparency fade = 0
+draw(eq,colour=shade,boundary=edge,transparency=fade)`);
+  sandbox.__debugSetScene(imported);
+  const before = sandbox.orderedDataEntries(imported).length;
+  const color = sandbox.createReferenceEntry("draws.0.components.0.id");
+  assert(color.kind === "colors" && sandbox.orderedDataEntries(imported).length === before + 1, JSON.stringify(color));
+  const boundary = sandbox.createReferenceEntry("draws.0.components.1.id");
+  assert(boundary.kind === "restrictions" && sandbox.orderedDataEntries(imported).length === before + 2, JSON.stringify(boundary));
+  const transparency = sandbox.createReferenceEntry("draws.0.components.2.id");
+  assert(transparency.kind === "transparencies" && sandbox.orderedDataEntries(imported).length === before + 3, JSON.stringify(transparency));
+  const value = sandbox.createReferenceEntry("draws.0.equationId");
+  assert(value.kind === "functions" && sandbox.orderedDataEntries(imported).length === before + 4, JSON.stringify(value));
 });
 
 check("new data entries append after imported entries", () => {

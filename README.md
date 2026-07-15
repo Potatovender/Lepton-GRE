@@ -43,6 +43,8 @@ Run tests directly:
 npm test
 ```
 
+In the standard workspace, drag the grip at the left of a row onto the insertion line between rows, onto a folder to place it inside, or to the final insertion line to move it to the root-list end. The sort control cycles through in-order, dependency, alphabetical, reverse-alphabetical, and grouped views. Select a row before choosing Dependencies to show that row, its transitive requirements, and their containing folders.
+
 ## Lepton Text Format
 
 Text mode exports settings first, followed by functions, colors, boundaries, and draw layers:

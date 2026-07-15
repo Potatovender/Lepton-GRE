@@ -36,7 +36,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260715-nested-functions-fps";
+const APP_VERSION = "20260715-dependencies-drag";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -55,6 +55,7 @@ function ensureLeptonFavicon() {
 
 const DATA_ENTRY_KINDS = ["functions", "colors", "restrictions", "transparencies", "draws", "points", "folders"];
 let dropdownDismissBound = false;
+let selectedDependencyEntry = null;
 
 const BUILTIN_NAMES = new Set([
   "x",
@@ -429,6 +430,7 @@ function panelScrollKey() {
 }
 
 function sortLabel(sort) {
+  if (sort === "dependencies") return "Dependencies";
   if (sort === "az") return "ID A-Z";
   if (sort === "za") return "ID Z-A";
   if (sort === "group") return "In group";
@@ -645,7 +647,8 @@ function envFunctionDefinitions(env) {
 }
 
 function nextSort(sort) {
-  if (sort === "custom") return "az";
+  if (sort === "custom") return "dependencies";
+  if (sort === "dependencies") return "az";
   if (sort === "az") return "za";
   if (sort === "za") return "group";
   return "custom";
@@ -1098,38 +1101,48 @@ function renderPanel() {
 }
 
 function renderDataPanel(diagnostics) {
-  const rows = visibleDataEntries().map(({ kind, index, entry, depth = 0 }) => {
-    if (kind === "folders") return folderRow(entry, index, depth, diagnostics.folders?.[index]);
-    if (isCommentEntry(entry)) return commentRow(kind, index, entry, dataTypeLabel(kind, entry));
-    return expressionRow(
+  const visible = visibleDataEntries();
+  const reorderable = canReorderDataEntries();
+  const rows = visible.flatMap(({ kind, index, entry, depth = 0 }) => {
+    const selectedClass = isSelectedDependencyEntry(kind, entry) ? "expression-row-dependency-selected " : "";
+    let row;
+    if (kind === "folders") row = folderRow(entry, index, depth, diagnostics.folders?.[index], selectedClass);
+    else if (isCommentEntry(entry)) row = commentRow(kind, index, entry, dataTypeLabel(kind, entry), selectedClass);
+    else row = expressionRow(
       diagnostics[kind]?.[index]?.status ?? "invalid",
       diagnostics[kind]?.[index]?.message ?? "",
       dataRowContent(kind, entry, index, diagnostics[kind]?.[index]),
       kind,
       index,
-      { rowClass: `${kind === "draws" && entry.hidden ? "expression-row-hidden " : ""}${depth > 0 ? "expression-row-nested" : ""}`, typeLabel: dataTypeLabel(kind, entry), attrs: `style="padding-left:${8 + Math.min(depth, 5) * 14}px"` }
+      { rowClass: `${selectedClass}${kind === "draws" && entry.hidden ? "expression-row-hidden " : ""}${depth > 0 ? "expression-row-nested" : ""}`, typeLabel: dataTypeLabel(kind, entry), attrs: `style="padding-left:${8 + Math.min(depth, 5) * 14}px"` }
     );
+    return [reorderable ? entryDropSlot(kind, index, depth) : "", row];
   });
   return [
     tutorialCoachmark(),
     timePlaybackControls(),
     listControlBar("data", "data"),
     ...rows,
+    reorderable && visible.length ? `<div class="entry-drop-slot entry-drop-slot-end" data-entry-drop-end="true" aria-label="Move to end of list"></div>` : "",
     addDataRow()
   ].join("");
 }
 
-function folderRow(entry, index, depth = 0, diagnostic = { status: "valid", message: "Folder is valid" }) {
+function folderRow(entry, index, depth = 0, diagnostic = { status: "valid", message: "Folder is valid" }, extraClass = "") {
   const uid = ensureEntryUid(entry, "folders");
   const childCount = (scene.dataOrder ?? []).filter((ref) => ref.parentUid === uid).length;
   return expressionRow(diagnostic.status, diagnostic.message, "", "folders", index, {
-    rowClass: `expression-row-folder ${depth > 0 ? "expression-row-nested" : ""}`,
+    rowClass: `${extraClass}expression-row-folder ${depth > 0 ? "expression-row-nested" : ""}`,
     noInlineComment: false,
     staticTypeHtml: folderIcon(),
     headingActionHtml: `<button class="folder-toggle" data-toggle-folder="${index}" type="button" aria-expanded="${!entry.collapsed}" aria-label="${entry.collapsed ? "Open" : "Close"} folder">${entry.collapsed ? "›" : "⌄"}</button>`,
     headingSuffixHtml: `<span class="folder-count">${childCount} item${childCount === 1 ? "" : "s"}</span>`,
     attrs: `data-folder-uid="${escapeHtml(uid)}" style="padding-left:${8 + Math.min(depth, 5) * 14}px"`
   });
+}
+
+function entryDropSlot(kind, index, depth = 0) {
+  return `<div class="entry-drop-slot" data-entry-drop-before="${kind}.${index}" style="--drop-depth:${Math.min(depth, 5)}" aria-label="Move before this line"></div>`;
 }
 
 function folderIcon() {
@@ -1419,7 +1432,11 @@ function visibleDataEntries() {
       return String(entry.id ?? "").toLowerCase().includes(query);
     });
   }
-  if (state.sort === "group") {
+  if (state.sort === "dependencies" && selectedDependencyEntry) {
+    const included = dependencyEntryKeys(selectedDependencyEntry);
+    if (included.size) indexed = indexed.filter((item) => included.has(dataItemKey(item)));
+    else selectedDependencyEntry = null;
+  } else if (state.sort === "group") {
     const groups = { variable: 0, slider: 1, function: 2, colors: 3, restrictions: 4, transparencies: 5, draws: 6, folder: 7, comment: 8 };
     indexed.sort((left, right) => (groups[dataSubtype(left.entry, left.kind)] ?? 9) - (groups[dataSubtype(right.entry, right.kind)] ?? 9));
   } else if (state.sort !== "custom") {
@@ -1431,8 +1448,93 @@ function visibleDataEntries() {
       return state.sort === "az" ? order : -order;
     });
   }
-  if (state.sort === "custom" && !query && type === "all") indexed = nestOrderedEntries(indexed);
+  if ((state.sort === "custom" || state.sort === "dependencies") && !query && type === "all") indexed = nestOrderedEntries(indexed);
   return indexed;
+}
+
+function canReorderDataEntries() {
+  const state = listControls.data ?? { query: "", sort: "custom", type: "all" };
+  return state.sort === "custom" && !state.query.trim() && (state.type ?? "all") === "all";
+}
+
+function dataItemKey(item) {
+  return entryOrderKey(item.kind, ensureEntryUid(item.entry, item.kind));
+}
+
+function selectedDependencyKey() {
+  if (!selectedDependencyEntry) return "";
+  return entryOrderKey(selectedDependencyEntry.kind, selectedDependencyEntry.uid);
+}
+
+function isSelectedDependencyEntry(kind, entry) {
+  return selectedDependencyKey() === entryOrderKey(kind, ensureEntryUid(entry, kind));
+}
+
+function dependencyEntryKeys(rootSelection, target = scene) {
+  const ordered = orderedDataEntries(target);
+  const byKey = new Map(ordered.map((item) => [dataItemKey(item), item]));
+  const byId = new Map();
+  for (const item of ordered) {
+    if (isCommentEntry(item.entry) || !item.entry?.id) continue;
+    const entries = byId.get(String(item.entry.id)) ?? [];
+    entries.push(dataItemKey(item));
+    byId.set(String(item.entry.id), entries);
+  }
+  const rootKey = entryOrderKey(rootSelection.kind, rootSelection.uid);
+  if (!byKey.has(rootKey)) return new Set();
+  const included = new Set();
+  const visit = (key) => {
+    if (!key || included.has(key)) return;
+    const item = byKey.get(key);
+    if (!item) return;
+    included.add(key);
+    for (const dependency of directDependencyKeys(item, ordered, byId)) visit(dependency);
+  };
+  visit(rootKey);
+
+  for (const key of [...included]) {
+    let parentUid = byKey.get(key)?.parentUid ?? "";
+    const seen = new Set();
+    while (parentUid && !seen.has(parentUid)) {
+      seen.add(parentUid);
+      const parentKey = entryOrderKey("folders", parentUid);
+      if (!byKey.has(parentKey)) break;
+      included.add(parentKey);
+      parentUid = byKey.get(parentKey)?.parentUid ?? "";
+    }
+  }
+  return included;
+}
+
+function directDependencyKeys(item, ordered, byId) {
+  const ids = new Set();
+  const addExpression = (source, localNames = new Set()) => {
+    for (const match of String(source ?? "").matchAll(/\b[A-Za-z_]\w*\b/g)) {
+      if (!localNames.has(match[0]) && byId.has(match[0])) ids.add(match[0]);
+    }
+  };
+  const { kind, entry } = item;
+  if (kind === "functions") {
+    const normalized = normalizeFunctionEntry(entry);
+    addExpression(normalized.expression, normalized.kind === "function" ? new Set(normalized.params) : new Set());
+  }
+  else if (kind === "colors") [entry.red, entry.green, entry.blue].forEach((source) => addExpression(source));
+  else if (kind === "restrictions" || kind === "transparencies") addExpression(entry.expression);
+  else if (kind === "points") {
+    addExpression(entry.x);
+    addExpression(entry.y);
+    if (entry.colorId && entry.colorId !== "default") ids.add(entry.colorId);
+  } else if (kind === "draws") {
+    const draw = normalizeDrawEntry(entry);
+    if (draw.equationId) ids.add(draw.equationId);
+    draw.components.forEach((component) => {
+      if (component.id && component.id !== "default") ids.add(component.id);
+    });
+  } else if (kind === "folders") {
+    const uid = ensureEntryUid(entry, "folders");
+    return ordered.filter((candidate) => candidate.parentUid === uid).map(dataItemKey);
+  }
+  return [...ids].flatMap((id) => byId.get(id) ?? []);
 }
 
 function nestOrderedEntries(entries) {
@@ -1479,10 +1581,10 @@ function visibleEntries(entries, kind) {
   return indexed;
 }
 
-function commentRow(kind, index, entry, typeLabel = "comment") {
+function commentRow(kind, index, entry, typeLabel = "comment", extraClass = "") {
   return expressionRow("valid", "Comment", `
     <textarea class="entry-comment-body" data-field="${kind}.${index}.text" placeholder="write a comment" aria-label="Comment">${escapeHtml(commentText(entry))}</textarea>
-  `, kind, index, { rowClass: "expression-row-comment", noInlineComment: true, typeLabel });
+  `, kind, index, { rowClass: `${extraClass}expression-row-comment`, noInlineComment: true, typeLabel });
 }
 
 function functionRowContent(entry, index) {
@@ -2012,6 +2114,19 @@ function bindEvents() {
     });
   });
 
+  root.querySelectorAll("[data-entry-kind][data-entry-index]").forEach((row) => {
+    row.addEventListener("pointerdown", (event) => {
+      if (event.target.closest?.(".entry-row-grip")) return;
+      const kind = row.dataset.entryKind;
+      const entry = scene[kind]?.[Number(row.dataset.entryIndex)];
+      if (!entry) return;
+      const next = { kind, uid: ensureEntryUid(entry, kind) };
+      const changed = selectedDependencyKey() !== entryOrderKey(next.kind, next.uid);
+      selectedDependencyEntry = next;
+      if (changed && listControls.data.sort === "dependencies") renderApp();
+    });
+  });
+
   root.querySelectorAll("[data-entry-type-filter]").forEach((field) => {
     field.addEventListener("change", () => {
       const kind = field.dataset.entryTypeFilter;
@@ -2095,6 +2210,7 @@ function bindEvents() {
   });
   root.querySelectorAll("[data-reference-picker]").forEach((picker) => {
     picker.addEventListener("toggle", () => {
+      picker.closest(".expression-row")?.classList.toggle("expression-row-picker-open", picker.open);
       if (picker.open) requestAnimationFrame(() => picker.querySelector("[data-reference-filter]")?.focus());
     });
   });
@@ -2429,30 +2545,14 @@ function bindEvents() {
   });
   root.querySelectorAll("[data-new-reference-function]").forEach((button) => {
     button.addEventListener("click", () => {
-      syncFields(); const before=sceneSnapshot(); const target=addEntry("functions");
-      if(!target)return; const entry=scene.functions[target.index]; entry.kind="variable";
+      syncFields(); const before=sceneSnapshot();
       const field = button.dataset.newReferenceFunction;
-      let selectedId = entry.id;
-      const componentMatch = field.match(/^draws\.(\d+)\.components\.(\d+)\.id$/);
-      const componentType = componentMatch ? scene.draws[Number(componentMatch[1])]?.components?.[Number(componentMatch[2])]?.type : "";
-      if (/^(draws|points)\.\d+\.colorId$/.test(field) || componentType === "color") {
-        const colorTarget = addEntry("colors");
-        const color = colorTarget && scene.colors[colorTarget.index];
-        if (color) { color.red = entry.id; color.green = entry.id; color.blue = entry.id; selectedId = color.id; }
-      } else if (/^draws\.\d+\.restrictionId$/.test(field) || componentType === "boundary") {
-        const boundaryTarget = addEntry("restrictions");
-        const boundary = boundaryTarget && scene.restrictions[boundaryTarget.index];
-        if (boundary) { boundary.expression = entry.id; selectedId = boundary.id; }
-      } else if (componentType === "transparency") {
-        const transparencyTarget = addEntry("transparencies");
-        const transparency = transparencyTarget && scene.transparencies[transparencyTarget.index];
-        if (transparency) { transparency.expression = entry.id; selectedId = transparency.id; }
-      } else if (field === "settings.backgroundColor") {
-        const colorTarget = addEntry("colors");
-        const color = colorTarget && scene.colors[colorTarget.index];
-        if (color) { color.red = entry.id; color.green = entry.id; color.blue = entry.id; selectedId = color.id; }
-      }
-      updateReferenceField(field, selectedId); recordSceneHistory(before); pendingScrollTarget={...target,bottom:true}; renderApp();
+      const created = createReferenceEntry(field);
+      if (!created) return;
+      updateReferenceField(field, created.id);
+      recordSceneHistory(before);
+      pendingScrollTarget={kind:created.kind,index:created.index,bottom:true};
+      renderApp();
     });
   });
 
@@ -2553,6 +2653,10 @@ function bindEvents() {
   root.querySelectorAll("[data-entry-drag-handle]").forEach((handle) => {
     handle.addEventListener("pointerdown", (event) => startEntryPointerDrag(handle, event));
     handle.addEventListener("dragstart", (event) => {
+      if (!canReorderDataEntries()) {
+        event.preventDefault();
+        return;
+      }
       const [kind, rawIndex] = handle.dataset.entryDragHandle.split(".");
       entryDragState = { kind, index: Number(rawIndex) };
       entryDragScrollTop = root.querySelector(".entry-list")?.scrollTop ?? null;
@@ -2570,6 +2674,28 @@ function bindEvents() {
       root.querySelectorAll(".expression-row-drop-target").forEach((row) => row.classList.remove("expression-row-drop-target"));
       root.querySelectorAll(".expression-row-drop-after").forEach((row) => row.classList.remove("expression-row-drop-after"));
       root.querySelectorAll(".folder-drop-target").forEach((row) => row.classList.remove("folder-drop-target"));
+      root.querySelectorAll(".entry-drop-slot-active").forEach((slot) => slot.classList.remove("entry-drop-slot-active"));
+    });
+  });
+
+  root.querySelectorAll("[data-entry-drop-before], [data-entry-drop-end]").forEach((slot) => {
+    slot.addEventListener("dragover", (event) => {
+      if (!entryDragState || !canReorderDataEntries()) return;
+      event.preventDefault();
+      slot.classList.add("entry-drop-slot-active");
+    });
+    slot.addEventListener("dragleave", () => slot.classList.remove("entry-drop-slot-active"));
+    slot.addEventListener("drop", (event) => {
+      if (!entryDragState) return;
+      event.preventDefault();
+      slot.classList.remove("entry-drop-slot-active");
+      syncFields();
+      const before = sceneSnapshot();
+      const moved = moveEntryToDropSlot(entryDragState.kind, entryDragState.index, slot);
+      if (moved) recordSceneHistory(before);
+      if (entryDragScrollTop != null) entryScrollTops.set("data", entryDragScrollTop);
+      entryDragState = null;
+      if (moved) renderApp();
     });
   });
 
@@ -2616,11 +2742,11 @@ function bindEvents() {
     if (!entryDragState) return;
     event.preventDefault();
     const before = sceneSnapshot();
-    moveEntryToRoot(entryDragState.kind, entryDragState.index);
-    recordSceneHistory(before);
+    const moved = moveEntryToRootEnd(entryDragState.kind, entryDragState.index);
+    if (moved) recordSceneHistory(before);
     if (entryDragScrollTop != null) entryScrollTops.set("data", entryDragScrollTop);
     entryDragState = null;
-    renderApp();
+    if (moved) renderApp();
   });
 
   if (!dropdownDismissBound) {
@@ -2884,18 +3010,21 @@ function startDrawPointerDrag(from, event) {
 function startEntryPointerDrag(handle, event) {
   const [kind, rawIndex] = String(handle.dataset.entryDragHandle ?? "").split(".");
   const index = Number(rawIndex);
-  if (!DATA_ENTRY_KINDS.includes(kind) || !Number.isInteger(index)) return;
+  if (!DATA_ENTRY_KINDS.includes(kind) || !Number.isInteger(index) || !canReorderDataEntries()) return;
   event.preventDefault();
   const originalScrollTop = root.querySelector(".entry-list")?.scrollTop ?? 0;
   const dragImage = createEntryDragImage(handle);
   let targetRow = null;
+  let targetSlot = null;
   let rootTarget = null;
   let targetPosition = "before";
 
   const clearTarget = () => {
     targetRow?.classList.remove("expression-row-drop-target", "expression-row-drop-after", "folder-drop-target");
+    targetSlot?.classList.remove("entry-drop-slot-active");
     rootTarget?.classList.remove("root-drop-target");
     targetRow = null;
+    targetSlot = null;
     rootTarget = null;
   };
 
@@ -2908,9 +3037,10 @@ function startEntryPointerDrag(handle, event) {
   const onMove = (moveEvent) => {
     positionImage(moveEvent);
     const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+    const slot = element?.closest?.("[data-entry-drop-before], [data-entry-drop-end]");
     const row = element?.closest?.("[data-entry-kind][data-entry-index]");
     const addTarget = element?.closest?.("[data-add-default]");
-    if (row === targetRow && addTarget === rootTarget) {
+    if (slot === targetSlot && row === targetRow && addTarget === rootTarget) {
       if (row) {
         const nextPosition = dropPositionForRow(row, moveEvent.clientY);
         if (nextPosition !== targetPosition) {
@@ -2921,7 +3051,10 @@ function startEntryPointerDrag(handle, event) {
       return;
     }
     clearTarget();
-    if (row) {
+    if (slot) {
+      targetSlot = slot;
+      targetSlot.classList.add("entry-drop-slot-active");
+    } else if (row) {
       targetRow = row;
       targetPosition = dropPositionForRow(row, moveEvent.clientY);
       applyRowDropIndicator(row, moveEvent.clientY);
@@ -2935,6 +3068,7 @@ function startEntryPointerDrag(handle, event) {
     document.removeEventListener("pointermove", onMove);
     document.removeEventListener("pointerup", onUp);
     const element = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+    const slot = element?.closest?.("[data-entry-drop-before], [data-entry-drop-end]") ?? targetSlot;
     const row = element?.closest?.("[data-entry-kind][data-entry-index]") ?? targetRow;
     const dropAtRoot = Boolean(element?.closest?.("[data-add-default]") ?? rootTarget);
     clearTarget();
@@ -2942,13 +3076,15 @@ function startEntryPointerDrag(handle, event) {
     syncFields();
     const before = sceneSnapshot();
     let moved = false;
-    if (row?.dataset.entryKind === "folders" && targetPosition === "inside") {
+    if (slot) {
+      moved = moveEntryToDropSlot(kind, index, slot);
+    } else if (row?.dataset.entryKind === "folders" && targetPosition === "inside") {
       moved = moveEntryIntoFolder(kind, index, Number(row.dataset.entryIndex));
     } else if (row) {
       const position = row === targetRow ? targetPosition : dropPositionForRow(row, upEvent.clientY);
       moved = moveMixedDataEntry(kind, index, row.dataset.entryKind, Number(row.dataset.entryIndex), position);
     } else if (dropAtRoot) {
-      moved = moveEntryToRoot(kind, index);
+      moved = moveEntryToRootEnd(kind, index);
     }
     if (!moved) return;
     recordSceneHistory(before);
@@ -3662,6 +3798,7 @@ function changeDataEntryKind(fromKind, fromIndex, target) {
   if (!Array.isArray(scene[targetKind])) scene[targetKind] = [];
   scene[targetKind].push(converted);
   if (ref) ref.kind = targetKind;
+  if (selectedDependencyEntry?.uid === uid) selectedDependencyEntry.kind = targetKind;
   ensureSceneDataOrder(scene);
   return { kind: targetKind, index: scene[targetKind].length - 1 };
 }
@@ -3677,6 +3814,22 @@ function addEntry(kind, type = "data") {
     scene.dataOrder.push({ kind, uid: entry._uid });
   }
   return { kind, index: scene[kind].length - 1 };
+}
+
+function createReferenceEntry(field) {
+  const componentMatch = String(field ?? "").match(/^draws\.(\d+)\.components\.(\d+)\.id$/);
+  const componentType = componentMatch
+    ? scene.draws[Number(componentMatch[1])]?.components?.[Number(componentMatch[2])]?.type
+    : "";
+  let kind = "functions";
+  if (/^(draws|points)\.\d+\.colorId$/.test(field) || componentType === "color" || field === "settings.backgroundColor") kind = "colors";
+  else if (/^draws\.\d+\.restrictionId$/.test(field) || componentType === "boundary") kind = "restrictions";
+  else if (componentType === "transparency") kind = "transparencies";
+  const target = addEntry(kind);
+  if (!target) return null;
+  const entry = scene[kind][target.index];
+  if (kind === "functions") entry.kind = "variable";
+  return { ...target, id: entry.id };
 }
 
 function insertEntryAfter(kind, index, type = "data") {
@@ -3755,6 +3908,28 @@ function moveEntryToRoot(kind, index) {
   return true;
 }
 
+function moveEntryToRootEnd(kind, index) {
+  const entry = scene[kind]?.[index];
+  if (!entry) return false;
+  ensureSceneDataOrder(scene);
+  const uid = ensureEntryUid(entry, kind);
+  const refIndex = scene.dataOrder.findIndex((item) => item.kind === kind && item.uid === uid);
+  if (refIndex < 0) return false;
+  const [ref] = scene.dataOrder.splice(refIndex, 1);
+  ref.parentUid = "";
+  scene.dataOrder.push(ref);
+  return true;
+}
+
+function moveEntryToDropSlot(kind, index, slot) {
+  if (!slot) return false;
+  if (slot.dataset?.entryDropEnd != null) return moveEntryToRootEnd(kind, index);
+  const [toKind, rawToIndex] = String(slot.dataset?.entryDropBefore ?? "").split(".");
+  const toIndex = Number(rawToIndex);
+  if (!DATA_ENTRY_KINDS.includes(toKind) || !Number.isInteger(toIndex)) return false;
+  return moveMixedDataEntry(kind, index, toKind, toIndex, "before");
+}
+
 function folderHasAncestor(folderUid, possibleAncestorUid) {
   let cursor = folderUid;
   const seen = new Set();
@@ -3782,6 +3957,7 @@ function deleteEntry(kind, index) {
   if (!Array.isArray(scene[kind]) || !scene[kind][index]) return;
   const removed = scene[kind][index];
   const removedUid = removed?._uid;
+  if (removedUid && selectedDependencyEntry?.kind === kind && selectedDependencyEntry.uid === removedUid) selectedDependencyEntry = null;
   const removedRef = scene.dataOrder?.find((ref) => ref.kind === kind && ref.uid === removedUid);
   if (kind === "folders" && removedUid) {
     for (const ref of scene.dataOrder ?? []) {
