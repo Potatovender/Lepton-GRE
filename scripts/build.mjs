@@ -24,6 +24,7 @@ const requiredFiles = [
   "docs/DEVELOPMENT.md",
   "docs/LEPTON_LANGUAGE.md",
   ".github/workflows/ci.yml",
+  ".github/workflows/pages.yml",
   ".editorconfig",
   "package-lock.json"
 ];

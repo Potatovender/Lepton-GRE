@@ -87,4 +87,4 @@ Before release, verify:
 
 ## Repository Policy
 
-CI uses Node 24 and dependency caching through `package-lock.json`. GitHub Pages deploys the static repository. Do not commit secrets, local IDE files, generated Python caches, or browser storage. Vendored MathQuill files are intentionally tracked.
+CI uses Node 24 and dependency caching through `package-lock.json`. The Pages workflow uploads and deploys the static repository with GitHub's supported Pages actions. Do not commit secrets, local IDE files, generated Python caches, or browser storage. Vendored MathQuill files are intentionally tracked.
