@@ -77,7 +77,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260721-release-readiness")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260721-caret-random")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -119,6 +119,19 @@ check("LaTeX trig expressions normalize for compiler and GLSL", () => {
   assert(mqNormalized === "sin(x)+cos(y)", mqNormalized);
   assert(sandbox.expressionToGlsl(mathQuillLatex, {}) === "sin(x)+cos(y)", "MathQuill GLSL normalization failed");
   assert(sandbox.validateExpression(mathQuillLatex, {}).status === "valid", "MathQuill LaTeX should validate");
+});
+
+check("bare random is a zero-argument built-in with operator styling", () => {
+  assert(sandbox.normalizeExpressionText("random") === "random()", "bare random did not normalize to a call");
+  assert(sandbox.normalizeExpressionText("random()") === "random()", "explicit random call changed");
+  assert(sandbox.latexSourceFromExpression("random") === "\\operatorname{random}", "bare random did not render as an operator");
+  assert(sandbox.expressionToGlsl("random", {}).includes("leptonRandom(vec2(x,y))"), "bare random did not compile to GLSL");
+  assert(sandbox.validateExpression("random", {}).status === "valid", "bare random should validate");
+  for (const [x, y] of [[0, 0], [1.5, -2], [200, 300]]) {
+    const value = sandbox.compileExpression("random")(x, y, { __randomSeed: 731029 });
+    assert(value >= 0 && value < 1, `random at (${x},${y}) returned ${value}`);
+  }
+  assert(source.includes("scheduleMountedMathFieldReflow();"), "sidebar resizing does not reflow MathQuill fields");
 });
 
 check("nested built-ins and user functions compile through CPU and GLSL", () => {

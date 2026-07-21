@@ -36,7 +36,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260721-release-readiness";
+const APP_VERSION = "20260721-caret-random";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -262,6 +262,7 @@ let sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, Number(localStorage.getItem("lept
 let sidebarCollapsed = localStorage.getItem("lepton-sidebar-collapsed") === "true";
 let viewport = loadViewport();
 let panRenderFrame = 0;
+let mathFieldReflowFrame = 0;
 let tutorialStep = null;
 const TUTORIAL_STEPS = [
   {
@@ -858,6 +859,7 @@ function closestMathFieldTarget(target) {
 }
 
 function keepHorizontalCaretVisible(field) {
+  if (!field.matches(":focus-within") && !field.classList.contains("mq-focused")) return;
   const cursor = field.querySelector(".mq-cursor");
   const selection = field.querySelector(".mq-selection");
   if (selection) return;
@@ -871,6 +873,23 @@ function keepHorizontalCaretVisible(field) {
   } else if (cursorRect.left < fieldRect.left + inset) {
     field.scrollLeft -= fieldRect.left + inset - cursorRect.left;
   }
+  field.scrollLeft = clampNumber(field.scrollLeft, 0, Math.max(0, field.scrollWidth - field.clientWidth));
+}
+
+function scheduleMountedMathFieldReflow() {
+  if (mathFieldReflowFrame) return;
+  mathFieldReflowFrame = requestAnimationFrame(() => {
+    mathFieldReflowFrame = 0;
+    root.querySelectorAll(".mathquill-field[data-field]").forEach((field) => {
+      const mathField = field.mathquillInstance ?? field.__mathField;
+      mathField?.reflow?.();
+      field.scrollLeft = clampNumber(field.scrollLeft, 0, Math.max(0, field.scrollWidth - field.clientWidth));
+      if (field.matches(":focus-within") || field.classList.contains("mq-focused")) {
+        keepHorizontalCaretVisible(field);
+      }
+    });
+    reflowMathLayout(root);
+  });
 }
 
 function scrollFieldNearPointer(field, event) {
@@ -997,6 +1016,8 @@ function insertKeyboardValue(value) {
       mathField.cmd("\\sqrt");
     } else if (value === "pi") {
       mathField.cmd("\\pi");
+    } else if (value === "random") {
+      mathField.typedText("random");
     } else if (LATEX_FUNCTIONS[value] && value !== "frac") {
       mathField.typedText(`${value}(`);
     } else {
@@ -1032,6 +1053,7 @@ function insertKeyboardValue(value) {
 function keyboardTextForValue(value) {
   if (value === "pi") return "pi";
   if (value === "sqrt") return "sqrt(";
+  if (value === "random") return "random";
   if (LATEX_FUNCTIONS[value] && value !== "frac") return `${LATEX_FUNCTIONS[value].internal}(`;
   return value;
 }
@@ -2270,7 +2292,7 @@ function bindEvents() {
 
     const mathField = MQ.MathField(el, {
       autoCommands: "sqrt sum",
-      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan",
+      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan random",
       handlers: {
         edit: () => {
           if (el.dataset.initializing === "true" || !el.contains(document.activeElement)) return;
@@ -3083,12 +3105,14 @@ function bindSidebarResize() {
     sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(Math.max(SIDEBAR_MIN_WIDTH, window.innerWidth - 260), event.clientX));
     localStorage.setItem("lepton-sidebar-width", String(sidebarWidth));
     root.querySelector(".app-shell")?.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
+    scheduleMountedMathFieldReflow();
     renderScene(validateScene());
   };
 
   const onUp = () => {
     document.removeEventListener("pointermove", onMove);
     document.removeEventListener("pointerup", onUp);
+    scheduleMountedMathFieldReflow();
   };
 
   resizer.addEventListener("pointerdown", (event) => {
@@ -6102,6 +6126,7 @@ const STANDARD_LATEX_COMMANDS = {
   ceil: "\\operatorname{ceil}",
   round: "\\operatorname{round}",
   exp: "\\exp",
+  random: "\\operatorname{random}",
   sec: "\\sec",
   csc: "\\csc",
   cot: "\\cot",
@@ -6308,6 +6333,10 @@ function createParser(tokens, isLatexMode) {
         }
         return { type: "call", name, args };
       }
+
+      if (name === "random") {
+        return { type: "call", name, args: [] };
+      }
       
       return { type: "identifier", name };
     }
@@ -6389,6 +6418,10 @@ function createParser(tokens, isLatexMode) {
       
       if (["pi", "theta", "e"].includes(name)) {
         return { type: "identifier", name };
+      }
+
+      if (name === "random") {
+        return { type: "call", name, args: [] };
       }
       
       let args = [];
@@ -6512,6 +6545,9 @@ function astToLatex(node) {
   if (node.type === "call") {
     const name = node.name;
     const args = node.args.map(astToLatex);
+    if (name === "random" && args.length === 0) {
+      return "\\operatorname{random}";
+    }
     if (name === "abs" && args.length === 1) {
       return `\\left|${args[0]}\\right|`;
     }

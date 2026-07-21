@@ -158,7 +158,7 @@ Multi-argument functions:
 - `union(a,b)` = `min(a,b)`
 - `intersect(a,b)` = `max(a,b)`
 - `subtract(a,b)` = `max(-a,b)`
-- `random()` returns a deterministic coordinate-based value in `[0,1]` using the scene seed; it accepts no arguments.
+- `random` and `random()` return the same deterministic coordinate-based value in `[0,1]` using the scene seed; neither form accepts arguments. The Standard editor displays bare `random` as an upright built-in operator.
 
 ## Naming and Diagnostics
 
