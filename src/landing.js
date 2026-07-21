@@ -1,4 +1,4 @@
-const APP_VERSION = "20260715-dependencies-drag";
+const APP_VERSION = "20260721-release-readiness";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

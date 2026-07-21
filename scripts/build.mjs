@@ -17,7 +17,15 @@ const requiredFiles = [
   "src/assets/sample-mandelbrot.png",
   "src/assets/sample-ripple.png",
   "src/assets/sample-contour.png",
-  "sample code/fire"
+  "sample code/fire",
+  "README.md",
+  "CONTRIBUTING.md",
+  "docs/ARCHITECTURE.md",
+  "docs/DEVELOPMENT.md",
+  "docs/LEPTON_LANGUAGE.md",
+  ".github/workflows/ci.yml",
+  ".editorconfig",
+  "package-lock.json"
 ];
 
 for (const file of requiredFiles) {
@@ -38,6 +46,19 @@ const app = await readFile("app.html", "utf8");
 for (const asset of ["src/browser-preview-live.js", "src/styles.css", "src/assets/lepton-favicon.png", "src/assets/lepton-logo-transparent.png"]) {
   if (!app.includes(asset)) {
     throw new Error(`app.html does not reference ${asset}`);
+  }
+}
+
+const readme = await readFile("README.md", "utf8");
+for (const document of ["docs/ARCHITECTURE.md", "docs/DEVELOPMENT.md", "docs/LEPTON_LANGUAGE.md", "CONTRIBUTING.md"]) {
+  if (!readme.includes(document)) {
+    throw new Error(`README.md does not link to ${document}`);
+  }
+}
+
+for (const removedPath of ["src/main.ts", "src/ui/app.ts", "src/model/scene.ts", "src/math/equation.ts"]) {
+  if (readme.includes(removedPath)) {
+    throw new Error(`README.md still documents removed runtime ${removedPath}`);
   }
 }
 

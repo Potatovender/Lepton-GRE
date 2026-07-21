@@ -3,11 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "A browser-based mathematical field renderer with a Lepton text language and GLSL output.",
+  "repository": "github:Potatovender/Lepton-GRE",
+  "homepage": "https://potatovender.github.io/Lepton-GRE/",
+  "bugs": "https://github.com/Potatovender/Lepton-GRE/issues",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "node scripts/build.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run build && npm test && npm run typecheck",
+    "update:mathquill": "node scripts/download-mathquill.mjs"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

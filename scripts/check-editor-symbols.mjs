@@ -77,7 +77,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260715-dependencies-drag")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260721-release-readiness")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -178,6 +178,23 @@ check("time playback controls include a live FPS output", () => {
   const html = sandbox.timePlaybackControls();
   assert(html.includes("data-fps-counter"), html);
   assert(html.includes("FPS"), html);
+});
+
+check("time animation compiles slider values as reusable shader uniforms", () => {
+  const timed = sandbox.importScene(`time unbounded t = 0 speed 1
+expression eq = sin(x+t)+cos(y)
+colour rgb = eq~eq~eq
+draw(eq,colour=rgb)`);
+  sandbox.__debugSetScene(timed);
+  const firstKey = sandbox.webGlShaderCacheKey();
+  const shader = sandbox.buildFragmentShader();
+  assert(shader.includes("uniform float u_time_0;"), shader);
+  assert(shader.includes("u_time_0"), shader);
+  assert(shader.includes("uniform vec3 u_background;"), shader);
+  timed.functions.find((entry) => entry.id === "t").expression = "12.5";
+  assert(sandbox.webGlShaderCacheKey() === firstKey, "time value invalidated the structural shader cache");
+  timed.functions.find((entry) => entry.id === "eq").expression = "sin(x-t)";
+  assert(sandbox.webGlShaderCacheKey() !== firstKey, "structural expression edit did not invalidate the shader cache");
 });
 
 check("fractions normalize from all supported text and LaTeX forms", () => {
@@ -1346,6 +1363,20 @@ draw(eq,rgb,rest,False)`);
   assert(html.includes('class="syntax-name">x</span>'), html);
   assert(html.includes('class="syntax-name">y</span>'), html);
   assert(!html.includes('class="syntax-name">syntax'), html);
+});
+
+check("Lepton text highlighting recognizes every exported setting", () => {
+  const imported = sandbox.importScene("");
+  sandbox.__debugSetScene(imported);
+  const html = sandbox.highlightLeptonText(sandbox.exportScene());
+  for (const key of [
+    "x_min", "x_max", "y_min", "y_max", "max_recursion", "angle_mode", "background_color",
+    "ensure_square_grid", "aspect_ratio", "draw_only_inside_boundary", "show_coordinate_grid",
+    "show_grid", "show_x_axis", "show_y_axis", "show_x_numbers", "show_y_numbers",
+    "unbounded_decimal_places", "random_seed"
+  ]) {
+    assert(html.includes(`class="syntax-setting">${key}</span>`), `${key} was not highlighted as a setting`);
+  }
 });
 
 check("Lepton text highlighting distinguishes function local variables", () => {

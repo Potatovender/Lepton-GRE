@@ -1,74 +1,90 @@
 # Lepton GRE
 
-Lepton GRE, the Lepton Graph Rendering Interface, is a browser-based mathematical field renderer. It lets you define values, colors, boundaries, transparency, draw layers, recursion settings, and text-mode scenes, then renders the result as a dense per-pixel graph.
+[![CI](https://github.com/Potatovender/Lepton-GRE/actions/workflows/ci.yml/badge.svg)](https://github.com/Potatovender/Lepton-GRE/actions/workflows/ci.yml)
 
-Live site: https://potatovender.github.io/Lepton-GRE/
+Lepton GRE (Lepton Graph Rendering Interface) is a browser-based mathematical field renderer. A scene combines expressions, parameterized functions, sliders, colours, boundaries, transparency, points, and ordered draw layers, then evaluates the result as a per-pixel GLSL graph.
 
-## Project Structure
+- Live site: [potatovender.github.io/Lepton-GRE](https://potatovender.github.io/Lepton-GRE/)
+- Grapher: [potatovender.github.io/Lepton-GRE/app.html](https://potatovender.github.io/Lepton-GRE/app.html)
+- Language reference: [docs/LEPTON_LANGUAGE.md](docs/LEPTON_LANGUAGE.md)
+- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Development and releases: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
-- `index.html`: Landing page with launch links, sample cards, SEO metadata, and favicon declarations.
-- `app.html`: Main grapher page shell. It loads the MathQuill bundle, shared styles, and the live grapher script.
-- `src/browser-preview-live.js`: Main GRE application runtime, including UI rendering, scene import/export, parser helpers, validation, recursion/node checks, MathQuill editing behavior, and GLSL canvas rendering.
-- `src/landing.js`: Landing page sample definitions and sample-card launch URL wiring.
-- `src/styles.css`: Shared styling for the landing page, grapher layout, editor controls, MathQuill fields, sample cards, and renderer surface.
-- `src/assets/`: Logo, favicon source image, landing hero image, and sample graph thumbnails.
-- `src/libs/mathquill/`: Vendored MathQuill-compatible editor runtime and CSS used for math entry.
-- `src/math/`: Equation evaluation plus the shared live-expression syntax helpers for precedence, power lowering, and implicit multiplication.
-- `src/model/`: Older TypeScript scene, color, and boundary model helpers.
-- `src/ui/`: Earlier static UI shell code retained as project history/reference.
-- `src/types.ts`: Shared TypeScript interfaces for scene data.
-- `tests/`: Vitest coverage for equation, scene, color, and boundary behavior.
-- `scripts/`: Build and validation utilities, including editor-symbol checks and the npm shim.
-- `sample code/`: Copyable Lepton scene examples such as fire, Mandelbrot, and the logo sample.
-- `robots.txt` and `sitemap.xml`: Search crawler configuration for the GitHub Pages deployment.
-- `vite.config.ts`, `tsconfig.json`, `package.json`: Build, TypeScript, and package scripts.
+## Features
 
-## Development
+- Unified visual workspace and one-to-one Lepton text representation.
+- MathQuill-backed structured equation editing and LaTeX clipboard input.
+- Expressions, parameterized functions, sliders, animated time values, colours, boundaries, transparency, points, folders, and comments.
+- Piecewise expressions, recursive references with a configurable depth, and dependency-focused workspace filtering.
+- Full-canvas WebGL rendering, coordinate-grid controls, pan/zoom, local saves, PNG export, and sample scenes.
+- Live diagnostics for syntax, naming, recursion size, dependencies, channels, settings, and draw components.
 
-Run the local Vite dev server:
+## Quick Start
+
+Lepton is a static site. Node.js 24 is recommended for development.
 
 ```sh
+npm install
 npm run dev
 ```
 
-Run the validation suite:
+Open the URL printed by Vite. The landing page is `index.html`; the editor is `app.html`.
+
+Run the complete local verification suite before committing:
 
 ```sh
-npm run build
+npm run verify
 ```
 
-Run tests directly:
+The dependency-free production check can also run without installing packages:
 
 ```sh
-npm test
+node scripts/build.mjs
 ```
 
-In the standard workspace, drag the grip at the left of a row onto the insertion line between rows, onto a folder to place it inside, or to the final insertion line to move it to the root-list end. The sort control cycles through in-order, dependency, alphabetical, reverse-alphabetical, and grouped views. Select a row before choosing Dependencies to show that row, its transitive requirements, and their containing folders.
-
-## Lepton Text Format
-
-Text mode exports settings first, followed by functions, colors, boundaries, and draw layers:
+## Minimal Scene
 
 ```text
-set x_min = -15
-set x_max = 15
-set y_min = -15
-set y_max = 15
-set max_recursion = 100
-set angle_mode = radians
-set background_color = 0
-set ensure_square_grid = True
-set aspect_ratio = 1:1
-set draw_only_inside_boundary = False
-expression eq = sin(x)+cos(y)
-colour rgb = 120+80sin(eq)~120+80cos(eq)~210
-boundary rest = 1~False
-transparency glass = clamp(abs(x),0,1)
-draw(eq,colour=rgb,boundary=rest,transparency=glass)
+set x_min = -10
+set x_max = 10
+set y_min = -10
+set y_max = 10
+expression wave = sin(x)+cos(y)
+colour ocean = 40+20*wave~120+35*wave~210
+boundary visible = 1~False
+draw(wave,colour=ocean,boundary=visible)
 ```
 
-Only the first draw argument is required. Optional named fields are `colour`, `boundary`, `transparency`, and `visible`. Transparency is evaluated like a colour channel: its `x` input is the selected draw value and its `y` input is the current vertical coordinate. The result is clamped from `0` (opaque) to `1` (transparent). Time sliders may include a coordinate-free speed, for example `time unbounded t = 0 speed 1.5`. While time is playing, the top bar reports the graph's measured rendering FPS.
+Only the first argument to `draw` is required. Missing colour, boundary, and transparency components use Lepton's virtual defaults.
 
-`random()` is deterministic for each scene seed and takes no arguments. Use the shuffle control below the graph Settings button to generate and save a new seed.
+## Repository Map
 
-Legacy `F:`, `C:`, `R:`, `D~`, and `S:` scene text is still imported for compatibility, but new exports use the clearer keyword-based format.
+| Path | Purpose |
+| --- | --- |
+| `index.html` | Landing page, metadata, samples, and blank-graph links. |
+| `app.html` | Grapher HTML shell and production script/style entry points. |
+| `src/browser-preview-live.js` | Production state, UI, text import/export, diagnostics, expression compilation, animation, and WebGL rendering. |
+| `src/math/expression-syntax.js` | Shared implicit-multiplication and power-precedence transformations. |
+| `src/landing.js` | Landing-page sample source and launch URL generation. |
+| `src/styles.css` | Landing and grapher styles. |
+| `src/libs/mathquill/` | Vendored equation editor assets. |
+| `src/assets/` | Logo, favicon, hero, and sample images. |
+| `scripts/build.mjs` | Dependency-free repository and runtime verification entry point. |
+| `scripts/check-editor-symbols.mjs` | Executable grammar, parser, model, UI-contract, and GLSL regression suite. |
+| `tests/` | Focused Vitest tests for the standalone syntax module. |
+| `sample code/` | Copyable current-language scenes used by tests and documentation. |
+| `docs/` | Architecture, language, development, and design references. |
+
+The production app intentionally has one runtime entry point. Older parallel model/UI implementations were removed so grammar and rendering changes cannot diverge between unused and live code paths.
+
+## Browser Support
+
+Lepton requires a modern browser with ES modules, Canvas, and WebGL. WebGL is the primary renderer; a CPU renderer remains as a compatibility fallback. PNG export uses the same GLSL scene and configured viewport as the live graph.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing grammar or rendering behavior. Every language feature must remain aligned across text import/export, editor display, validation, CPU evaluation, GLSL generation, tests, samples, help text, and documentation.
+
+## License
+
+No open-source license has been selected. Unless a license is added, the repository remains under the copyright holder's default rights.

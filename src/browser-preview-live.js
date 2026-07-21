@@ -36,7 +36,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260715-dependencies-drag";
+const APP_VERSION = "20260721-release-readiness";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -189,7 +189,14 @@ const SETTING_TEXT_KEYS = new Set([
   "ensure_square_grid",
   "aspect_ratio",
   "draw_only_inside_boundary",
-  "unbounded_decimal_places"
+  "show_coordinate_grid",
+  "show_grid",
+  "show_x_axis",
+  "show_y_axis",
+  "show_x_numbers",
+  "show_y_numbers",
+  "unbounded_decimal_places",
+  "random_seed"
 ]);
 const COMMON_ASPECT_RATIOS = [
   { value: "1:1", label: "1:1" },
@@ -325,7 +332,9 @@ let animationLastTimestamp = 0;
 let animationFpsWindowStart = 0;
 let animationFpsFrameCount = 0;
 let animationFps = 0;
+let latestDiagnostics = null;
 const TIME_VARIABLE_RATE = 1;
+const webGlRenderCache = new WeakMap();
 let saveDialogOpen = false;
 let libraryDialogOpen = false;
 let saveNameDraft = "";
@@ -619,23 +628,10 @@ function functionEntryExpression(entry) {
   return String(normalizeFunctionEntry(entry).expression ?? "");
 }
 
-function functionEntryParams(entry) {
-  return normalizeFunctionEntry(entry).params;
-}
-
-function functionEntryKind(entry) {
-  return normalizeFunctionEntry(entry).kind;
-}
-
 function envEntry(env, name) {
   const value = env?.[name];
   if (!value) return null;
   return typeof value === "string" ? normalizeFunctionEntry({ id: name, kind: "variable", expression: value }) : normalizeFunctionEntry(value);
-}
-
-function envExpression(env, name) {
-  const entry = envEntry(env, name);
-  return entry ? functionEntryExpression(entry) : "";
 }
 
 function envFunctionDefinitions(env) {
@@ -1559,28 +1555,6 @@ function nestOrderedEntries(entries) {
   return output;
 }
 
-function visibleEntries(entries, kind) {
-  const state = listControls[kind] ?? { query: "", sort: "custom" };
-  const query = state.query.trim().toLowerCase();
-  let indexed = entries.map((entry, index) => [entry, index]);
-  if (query) {
-    indexed = indexed.filter(([entry]) => {
-      if (isCommentEntry(entry)) return commentText(entry).toLowerCase().includes(query);
-      return String(entry.id ?? "").toLowerCase().includes(query);
-    });
-  }
-  if (state.sort !== "custom") {
-    indexed.sort(([left], [right]) => {
-      if (isCommentEntry(left) && isCommentEntry(right)) return 0;
-      if (isCommentEntry(left)) return 1;
-      if (isCommentEntry(right)) return -1;
-      const order = String(left.id ?? "").localeCompare(String(right.id ?? ""), undefined, { numeric: true, sensitivity: "base" });
-      return state.sort === "az" ? order : -order;
-    });
-  }
-  return indexed;
-}
-
 function commentRow(kind, index, entry, typeLabel = "comment", extraClass = "") {
   return expressionRow("valid", "Comment", `
     <textarea class="entry-comment-body" data-field="${kind}.${index}.text" placeholder="write a comment" aria-label="Comment">${escapeHtml(commentText(entry))}</textarea>
@@ -1801,21 +1775,6 @@ function addDataRow() {
           <button data-add="points" type="button">Point</button>
         </div>
       </details>
-    </div>
-  `;
-}
-
-function addRow(label, kind) {
-  if (kind === "settingsComments") {
-    return `<button class="comment-add-button" data-add="${kind}" type="button" title="Add comment" aria-label="Add comment">${commentIcon()}</button>`;
-  }
-  return `
-    <div class="add-row-wrap">
-      <button class="add-row" data-add="${kind}">
-        <span class="entry-status"></span>
-        <span>${label}</span>
-      </button>
-      <button class="add-comment-side-button" data-add-comment="${kind}" type="button" title="Add comment" aria-label="Add comment">${commentIcon()}</button>
     </div>
   `;
 }
@@ -3474,7 +3433,7 @@ function syncSliderRangeControl(index, rawEntry = scene.functions[index]) {
 }
 
 function refreshAfterSliderChange() {
-  const diagnostics = validateScene();
+  const diagnostics = latestDiagnostics ?? validateScene();
   updateStatusLights(diagnostics);
   renderScene(diagnostics);
 }
@@ -3832,29 +3791,12 @@ function createReferenceEntry(field) {
   return { ...target, id: entry.id };
 }
 
-function insertEntryAfter(kind, index, type = "data") {
-  if (!Array.isArray(scene[kind])) return null;
-  const entry = type === "comment" ? createCommentEntry("") : defaultEntryForKind(kind);
-  if (!entry) return null;
-  const targetIndex = Math.max(0, Math.min(scene[kind].length, index + 1));
-  scene[kind].splice(targetIndex, 0, entry);
-  return { kind, index: targetIndex };
-}
-
 function moveEntry(kind, index, direction) {
   if (!Array.isArray(scene[kind]) || !Number.isInteger(index) || !Number.isInteger(direction)) return false;
   const target = index + direction;
   if (index < 0 || target < 0 || index >= scene[kind].length || target >= scene[kind].length || index === target) return false;
   const [entry] = scene[kind].splice(index, 1);
   scene[kind].splice(target, 0, entry);
-  return true;
-}
-
-function moveEntryTo(kind, from, to) {
-  if (!Array.isArray(scene[kind]) || !Number.isInteger(from) || !Number.isInteger(to)) return false;
-  if (from < 0 || from >= scene[kind].length || to < 0 || to >= scene[kind].length || from === to) return false;
-  const [entry] = scene[kind].splice(from, 1);
-  scene[kind].splice(to, 0, entry);
   return true;
 }
 
@@ -4183,43 +4125,75 @@ function renderSceneWebGlInto(canvas, options = {}) {
   const cssWidth = Math.max(1, options.cssWidth ?? rect.width);
   const cssHeight = Math.max(1, options.cssHeight ?? rect.height);
   const dpr = options.dpr ?? window.devicePixelRatio ?? 1;
-  canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
-  canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
+  const pixelWidth = Math.max(1, Math.floor(cssWidth * dpr));
+  const pixelHeight = Math.max(1, Math.floor(cssHeight * dpr));
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
   const visibleViewport = options.visibleViewport ?? displayViewportForSize(viewport, cssWidth, cssHeight);
   if (options.updateOverlay !== false) updateBoundaryOverlay(canvas, visibleViewport);
   gl.viewport(0, 0, canvas.width, canvas.height);
 
-  const fragmentSource = buildFragmentShader();
-  window.__leptonFragmentSource = fragmentSource;
-  const vertexSource = `
-    attribute vec2 a_position;
-    void main() {
-      gl_Position = vec4(a_position, 0.0, 1.0);
+  const shaderKey = webGlShaderCacheKey();
+  let cached = webGlRenderCache.get(canvas);
+  if (!cached || cached.gl !== gl || cached.shaderKey !== shaderKey) {
+    const fragmentSource = buildFragmentShader();
+    window.__leptonFragmentSource = fragmentSource;
+    const vertexSource = `
+      attribute vec2 a_position;
+      void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }
+    `;
+    const program = createProgram(gl, vertexSource, fragmentSource);
+    if (!program) {
+      window.__leptonGlError = gl.getError();
+      gl.clearColor(0.98, 0.94, 0.94, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      showShaderError(window.__leptonShaderLog || "The generated shader could not be compiled.", fragmentSource.length);
+      return options.fallbackOnFailure === true ? false : true;
     }
-  `;
-  const program = createProgram(gl, vertexSource, fragmentSource);
-  if (!program) {
+    if (cached?.program) gl.deleteProgram(cached.program);
+    if (cached?.buffer) gl.deleteBuffer(cached.buffer);
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+    cached = {
+      gl,
+      shaderKey,
+      program,
+      buffer,
+      position: gl.getAttribLocation(program, "a_position"),
+      uniforms: {
+        resolution: gl.getUniformLocation(program, "u_resolution"),
+        bounds: gl.getUniformLocation(program, "u_bounds"),
+        clipBounds: gl.getUniformLocation(program, "u_clip_bounds"),
+        clipEnabled: gl.getUniformLocation(program, "u_clip_enabled"),
+        randomSeed: gl.getUniformLocation(program, "u_random_seed"),
+        background: gl.getUniformLocation(program, "u_background"),
+        time: timeUniformBindings().map((binding) => ({ ...binding, location: gl.getUniformLocation(program, binding.uniform) }))
+      }
+    };
+    webGlRenderCache.set(canvas, cached);
+    window.__leptonShaderBuildCount = (window.__leptonShaderBuildCount ?? 0) + 1;
+  }
+  if (!cached?.program) {
     window.__leptonGlError = gl.getError();
     gl.clearColor(0.98, 0.94, 0.94, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    showShaderError(window.__leptonShaderLog || "The generated shader could not be compiled.", fragmentSource.length);
+    showShaderError(window.__leptonShaderLog || "The generated shader could not be compiled.", 0);
     return options.fallbackOnFailure === true ? false : true;
   }
   clearShaderError();
 
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-  gl.useProgram(program);
+  gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
+  gl.useProgram(cached.program);
+  gl.enableVertexAttribArray(cached.position);
+  gl.vertexAttribPointer(cached.position, 2, gl.FLOAT, false, 0, 0);
 
-  const position = gl.getAttribLocation(program, "a_position");
-  gl.enableVertexAttribArray(position);
-  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-
-  gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
-  gl.uniform1f(gl.getUniformLocation(program, "u_random_seed"), Number(scene.settings.randomSeed) || 1);
+  gl.uniform2f(cached.uniforms.resolution, canvas.width, canvas.height);
+  gl.uniform1f(cached.uniforms.randomSeed, Number(scene.settings.randomSeed) || 1);
   gl.uniform4f(
-    gl.getUniformLocation(program, "u_bounds"),
+    cached.uniforms.bounds,
     visibleViewport.xMin,
     visibleViewport.xMax,
     visibleViewport.yMin,
@@ -4228,20 +4202,49 @@ function renderSceneWebGlInto(canvas, options = {}) {
   const clipViewport = sceneViewport();
   const clipEnabled = scene.settings.drawOnlyInsideBoundary && isValidViewport(clipViewport);
   const safeClipViewport = clipEnabled ? clipViewport : visibleViewport;
-  gl.uniform1i(gl.getUniformLocation(program, "u_clip_enabled"), clipEnabled ? 1 : 0);
+  gl.uniform1i(cached.uniforms.clipEnabled, clipEnabled ? 1 : 0);
   gl.uniform4f(
-    gl.getUniformLocation(program, "u_clip_bounds"),
+    cached.uniforms.clipBounds,
     safeClipViewport.xMin,
     safeClipViewport.xMax,
     safeClipViewport.yMin,
     safeClipViewport.yMax
   );
   const backgroundColor = resolveBackgroundColor();
+  gl.uniform3f(cached.uniforms.background, backgroundColor.rgb[0] / 255, backgroundColor.rgb[1] / 255, backgroundColor.rgb[2] / 255);
+  for (const binding of cached.uniforms.time) {
+    const entry = timeVariableEntries().find(({ entry: candidate }) => candidate.id === binding.id)?.entry;
+    const value = evaluateScalarSetting(entry?.expression);
+    gl.uniform1f(binding.location, Number.isFinite(value) ? value : 0);
+  }
   gl.clearColor(backgroundColor.rgb[0] / 255, backgroundColor.rgb[1] / 255, backgroundColor.rgb[2] / 255, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
-  gl.finish();
+  if (options.synchronous === true) gl.finish();
   return true;
+}
+
+function timeUniformBindings() {
+  return timeVariableEntries().map(({ entry }, index) => ({ id: entry.id, uniform: `u_time_${index}` }));
+}
+
+function timeUniformGlslMap() {
+  return Object.fromEntries(timeUniformBindings().map(({ id, uniform }) => [id, uniform]));
+}
+
+function webGlShaderCacheKey() {
+  const functions = dataEntries(scene.functions).map(normalizeFunctionEntry).map((entry) =>
+    entry.kind === "slider" && entry.time ? { ...entry, expression: "__time_uniform__" } : entry
+  );
+  return JSON.stringify({
+    forceGradient: Boolean(window.__leptonForceGradient),
+    functions,
+    colors: dataEntries(scene.colors),
+    restrictions: dataEntries(scene.restrictions),
+    transparencies: dataEntries(scene.transparencies),
+    draws: dataEntries(scene.draws),
+    angleMode: scene.settings.angleMode
+  });
 }
 
 function showShaderError(log, sourceLength) {
@@ -4257,7 +4260,7 @@ function showShaderError(log, sourceLength) {
 
 function clearShaderError() {
   const overlay = root.querySelector(".render-overlay");
-  if (overlay && !validateScene().hasErrors) overlay.remove();
+  if (overlay?.classList.contains("render-overlay-error")) overlay.remove();
 }
 
 function resolveBackgroundColor() {
@@ -4277,11 +4280,6 @@ function resolveBackgroundColor() {
   }
 }
 
-function backgroundColorGlsl() {
-  const color = resolveBackgroundColor().rgb.map((value) => (value / 255).toFixed(6));
-  return `vec3(${color.join(", ")})`;
-}
-
 function buildFragmentShader() {
   if (window.__leptonForceGradient) {
     return `
@@ -4295,6 +4293,7 @@ function buildFragmentShader() {
   }
 
   const env = sceneFunctionEnv(true);
+  const dynamicMap = timeUniformGlslMap();
   const layers = dataEntries(scene.draws)
     .map((draw) => {
       if (draw?.hidden) return null;
@@ -4315,12 +4314,12 @@ function buildFragmentShader() {
       }
       try {
         return {
-          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, fn.kind === "function" ? defaultParamGlslMap(fn.params) : {}),
-          red: expressionToGlsl(color.red, env, "z", [], scene.settings.angleMode),
-          green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode),
-          blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode),
-          bound: expressionToGlsl(restriction.expression, env, null, [], scene.settings.angleMode),
-          transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode),
+          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, { ...dynamicMap, ...(fn.kind === "function" ? defaultParamGlslMap(fn.params) : {}) }),
+          red: expressionToGlsl(color.red, env, "z", [], scene.settings.angleMode, dynamicMap),
+          green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode, dynamicMap),
+          blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode, dynamicMap),
+          bound: expressionToGlsl(restriction.expression, env, null, [], scene.settings.angleMode, dynamicMap),
+          transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode, dynamicMap),
           boundCheck: restriction.checkSmaller ? "boundValue <= 0.0" : "boundValue >= 0.0"
         };
       } catch {
@@ -4346,7 +4345,7 @@ function buildFragmentShader() {
         )
         .join("\n")
     : "";
-  const backgroundColor = backgroundColorGlsl();
+  const timeUniforms = timeUniformBindings().map(({ uniform }) => `uniform float ${uniform};`).join("\n      ");
 
   return `
       precision highp float;
@@ -4355,6 +4354,8 @@ function buildFragmentShader() {
       uniform vec4 u_clip_bounds;
       uniform bool u_clip_enabled;
       uniform float u_random_seed;
+      uniform vec3 u_background;
+      ${timeUniforms}
 
     float frac(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
     float ln(float value) { return value > 0.0 ? log(value) : 0.0; }
@@ -4388,7 +4389,7 @@ function buildFragmentShader() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
       float x = mix(u_bounds.x, u_bounds.y, uv.x);
       float y = mix(u_bounds.z, u_bounds.w, uv.y);
-      vec3 color = ${backgroundColor};
+      vec3 color = u_background;
       bool painted = false;
       if (u_clip_enabled && (x < u_clip_bounds.x || x > u_clip_bounds.y || y < u_clip_bounds.z || y > u_clip_bounds.w)) {
         gl_FragColor = vec4(color, 1.0);
@@ -4535,17 +4536,24 @@ function drawErrorCanvas(canvas, message) {
 function createProgram(gl, vertexSource, fragmentSource) {
   const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
   const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  if (!vertexShader || !fragmentShader) return null;
+  if (!vertexShader || !fragmentShader) {
+    if (vertexShader) gl.deleteShader(vertexShader);
+    if (fragmentShader) gl.deleteShader(fragmentShader);
+    return null;
+  }
 
   const program = gl.createProgram();
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     window.__leptonShaderLog = gl.getProgramInfoLog(program);
     window.__leptonFailedShaderSource = fragmentSource;
     console.warn(window.__leptonShaderLog);
+    gl.deleteProgram(program);
     return null;
   }
 
@@ -4765,7 +4773,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
       throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
     }
     const expandedArgs = args.map((arg) => expressionToGlsl(arg, env, zName, stack, angleMode, localMap));
-    const nextLocalMap = Object.fromEntries(entry.params.map((param, index) => [param, `(${expandedArgs[index]})`]));
+    const nextLocalMap = { ...localMap, ...Object.fromEntries(entry.params.map((param, index) => [param, `(${expandedArgs[index]})`])) };
     return `(${expressionToGlsl(entry.expression, env, zName, [...stack, entry.id], angleMode, nextLocalMap)})`;
   });
   expression = inlineCustomVariables(expression, env, stack, zName, angleMode, localMap);
@@ -4890,7 +4898,8 @@ function inlineCustomVariables(expression, env, stack, zName, angleMode = "radia
     if (stack.length >= recursionLimit()) {
       return `(${recursionBaseGlsl(zName)})`;
     }
-    return `(${expressionToGlsl(entry.expression, env, zName, [...stack, name], angleMode, entry.kind === "function" ? defaultParamGlslMap(entry.params, zName) : {})})`;
+    const nextLocalMap = entry.kind === "function" ? { ...localMap, ...defaultParamGlslMap(entry.params, zName) } : localMap;
+    return `(${expressionToGlsl(entry.expression, env, zName, [...stack, name], angleMode, nextLocalMap)})`;
   });
 }
 
@@ -4908,7 +4917,8 @@ function inlineBareVariables(expression, env, stack, zName, angleMode = "radians
       if (stack.length >= recursionLimit()) {
         return `(${recursionBaseGlsl(zName)})`;
       }
-      return `(${expressionToGlsl(entry.expression, env, zName, [...stack, name], angleMode, entry.kind === "function" ? defaultParamGlslMap(entry.params, zName) : {})})`;
+      const nextLocalMap = entry.kind === "function" ? { ...localMap, ...defaultParamGlslMap(entry.params, zName) } : localMap;
+      return `(${expressionToGlsl(entry.expression, env, zName, [...stack, name], angleMode, nextLocalMap)})`;
     },
     GENERATED_GLSL_NAMES,
     new Set(Object.keys(localMap))
@@ -5079,6 +5089,7 @@ function validateScene() {
   const firstWarning = all.find((item) => item.status === "warning");
   diagnostics.hasErrors = Boolean(firstError);
   diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
+  latestDiagnostics = diagnostics;
   return diagnostics;
 }
 
@@ -5636,18 +5647,6 @@ function reflowMathLayout(container = root) {
   });
 }
 
-function shouldAutoRefreshVisualSource(source) {
-  const value = String(source ?? "").trim();
-  if (!value) return true;
-  if (/^[A-Za-z_]\w*\^(?:[A-Za-z_]\w*|\d+(?:\.\d+)?)$/.test(value)) return true;
-  for (const config of Object.values(LATEX_FUNCTIONS)) {
-    const call = parseFunctionCall(value, config.internal);
-    if (call && call.length === config.args && call.every((arg) => !/[()]/.test(arg))) return true;
-  }
-  if (/^frac\{[^{}]*\}\{[^{}]*\}$/.test(value)) return true;
-  return false;
-}
-
 function isReadyForVisualRefresh(source) {
   const value = String(source ?? "");
   if (!value.trim()) return true;
@@ -5686,16 +5685,6 @@ function hasIncompletePower(source) {
   if (!power) return false;
   const grouped = splitPowerOperands(source, power.index);
   return !grouped.exponent.trim();
-}
-
-function hasRenderableLatex(source) {
-  const commands = Object.keys(LATEX_FUNCTIONS).join("|");
-  return new RegExp(`\\\\(?:operatorname|${commands}|left\\||lvert|lfloor|lceil)\\b`).test(source);
-}
-
-function hasInternalRenderableCall(source) {
-  const names = [...new Set(Object.values(LATEX_FUNCTIONS).map((config) => config.internal))].join("|");
-  return new RegExp(`\\b(?:${names})\\(`).test(source);
 }
 
 function renderEditableLatex(source) {
@@ -6047,16 +6036,6 @@ function formatPowerExponentSource(source) {
     return exponent;
   }
   return `(${exponent})`;
-}
-
-function updateMathSourceDisplay(field, source) {
-  const raw = root.querySelector(`textarea[data-source-field="${cssEscape(field.dataset.field)}"]`);
-  if (raw) raw.value = latexSourceFromExpression(source);
-}
-
-function toLatexPreview(source) {
-  const normalized = normalizeExpressionDisplayText(source);
-  return renderLatexExpression(normalized);
 }
 
 function convertDivisionsToFrac(source) {
@@ -6711,41 +6690,11 @@ function sourceFromLatexText(text) {
     .trim();
 }
 
-function editorSourceText(field) {
-  if (field.dataset.rendered === "true" && field.querySelector("[data-latex]")) {
-    return sourceFromRenderedNode(field) || field.dataset.source || "";
-  }
-  return field.textContent ?? field.dataset.source ?? "";
-}
-
 function sourceFromRenderedNode(node) {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (node.nodeType !== Node.ELEMENT_NODE) return "";
   if (node.dataset?.latex) return node.dataset.latex;
   return Array.from(node.childNodes).map(sourceFromRenderedNode).join("");
-}
-
-function replaceLatexCommand(source, command, build) {
-  let output = source;
-  let marker = `\\${command}`;
-  let index = output.indexOf(marker);
-  while (index !== -1) {
-    const args = [];
-    let cursor = index + marker.length;
-    while (output[cursor] === "{") {
-      const end = matchingBrace(output, cursor);
-      if (end === -1) break;
-      args.push(output.slice(cursor + 1, end));
-      cursor = end + 1;
-    }
-    if (!args.length) {
-      index = output.indexOf(marker, index + marker.length);
-      continue;
-    }
-    output = `${output.slice(0, index)}${build(args)}${output.slice(cursor)}`;
-    index = output.indexOf(marker, index + 1);
-  }
-  return output;
 }
 
 function matchingBrace(source, openIndex) {
@@ -7463,28 +7412,6 @@ function splitSliderRange(source) {
   };
 }
 
-function wrapIfNeeded(expr) {
-  const trimmed = expr.trim();
-  if (trimmed.startsWith("(") && matchingParen(trimmed, 0) === trimmed.length - 1) {
-    return trimmed;
-  }
-  let depth = 0;
-  let braceDepth = 0;
-  for (let i = 0; i < trimmed.length; i++) {
-    const char = trimmed[i];
-    if (char === "(") depth++;
-    if (char === ")") depth--;
-    if (char === "{") braceDepth++;
-    if (char === "}") braceDepth--;
-    if (depth === 0 && braceDepth === 0) {
-      if (char === "+" || char === "-" || char === "*" || char === "/") {
-        return `(${trimmed})`;
-      }
-    }
-  }
-  return trimmed;
-}
-
 function convertFracToDivisions(source) {
   let output = "";
   let i = 0;
@@ -7858,47 +7785,6 @@ function latexToExpression(value) {
   }
 }
 
-function replaceBareBraceCommand(source, command, expectedArgs, build) {
-  let output = source;
-  let index = output.indexOf(`${command}{`);
-  while (index !== -1) {
-    const before = output[index - 1] ?? "";
-    if (/[A-Za-z_\\]/.test(before)) {
-      index = output.indexOf(`${command}{`, index + command.length);
-      continue;
-    }
-    const args = [];
-    let cursor = index + command.length;
-    while (args.length < expectedArgs && output[cursor] === "{") {
-      const end = matchingBrace(output, cursor);
-      if (end === -1) break;
-      args.push(output.slice(cursor + 1, end));
-      cursor = end + 1;
-    }
-    if (args.length !== expectedArgs) {
-      index = output.indexOf(`${command}{`, index + command.length);
-      continue;
-    }
-    output = `${output.slice(0, index)}${build(args)}${output.slice(cursor)}`;
-    index = output.indexOf(`${command}{`, index + 1);
-  }
-  return output;
-}
-
-function replaceLatexDelimited(source, open, close, build) {
-  let output = source;
-  let start = output.indexOf(open);
-  while (start !== -1) {
-    const innerStart = start + open.length;
-    const end = output.indexOf(close, innerStart);
-    if (end === -1) break;
-    const inner = output.slice(innerStart, end);
-    output = `${output.slice(0, start)}${build(inner)}${output.slice(end + close.length)}`;
-    start = output.indexOf(open, start + 1);
-  }
-  return output;
-}
-
 function parseAssignment(value) {
   const assignment = value.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.+)$/);
   return assignment ? { id: assignment[1], expression: assignment[2].trim() } : null;
@@ -8239,6 +8125,7 @@ function exportCurrentGraphImage() {
       dpr: 1,
       visibleViewport: exportViewport,
       updateOverlay: false,
+      synchronous: true,
       fallbackOnFailure: true
     });
     if (!exportedWithGl) {
