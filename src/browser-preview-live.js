@@ -42,7 +42,8 @@ const SAVED_GRAPH_THUMBNAIL_HEIGHT = 100;
 const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
-const APP_VERSION = "20260722-saved-preview-recovery2";
+const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
+const APP_VERSION = "20260722-saved-preview-recovery3";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -8171,6 +8172,7 @@ function normalizeSavedGraph(graph) {
     name,
     scene: savedScene,
     thumbnail: normalizeSavedGraphThumbnail(graph.thumbnail),
+    thumbnailVersion: Number(graph.thumbnailVersion) || 0,
     createdAt: String(graph.createdAt ?? new Date().toISOString()),
     updatedAt: String(graph.updatedAt ?? graph.createdAt ?? new Date().toISOString())
   };
@@ -8197,6 +8199,7 @@ function saveCurrentGraph(name, { forceNew = false } = {}) {
     name,
     scene: exportScene(),
     thumbnail: captureGraphThumbnail(),
+    thumbnailVersion: SAVED_GRAPH_THUMBNAIL_VERSION,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
   };
@@ -8364,8 +8367,8 @@ function normalizeSavedGraphThumbnail(value) {
 
 function savedGraphThumbnailState(value) {
   const thumbnail = String(value ?? "");
-  if (/^data:image\/(?:jpeg|webp);/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS) return "compact";
-  if (/^data:image\/png;/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS) return "legacy";
+  if (/^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/]+=*$/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS) return "compact";
+  if (/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS) return "legacy";
   if (thumbnail === fallbackSavedGraphThumbnail()) return "fallback";
   return "invalid";
 }
@@ -8377,9 +8380,12 @@ function bindSavedGraphThumbnailRecovery() {
     const id = image.dataset.savedThumbnailId;
     if (!id || recoveringSavedGraphThumbnails.has(id)) return;
     const graph = loadSavedGraphs().find((entry) => entry.id === id);
-    if (!graph || savedGraphThumbnailState(graph.thumbnail) === "compact") return;
+    if (!graph) return;
+    const currentCompact = graph.thumbnailVersion === SAVED_GRAPH_THUMBNAIL_VERSION && savedGraphThumbnailState(graph.thumbnail) === "compact";
+    if (currentCompact && image.complete && image.naturalWidth > 0) return;
     recoverSavedGraphThumbnail(graph, image);
   };
+  previews.forEach((image) => image.addEventListener("error", () => recover(image), { once: true }));
   if (typeof IntersectionObserver !== "function") {
     previews.slice(0, 8).forEach(recover);
     return;
@@ -8398,9 +8404,10 @@ async function recoverSavedGraphThumbnail(graph, image) {
   recoveringSavedGraphThumbnails.add(graph.id);
   try {
     const state = savedGraphThumbnailState(graph.thumbnail);
-    const thumbnail = state === "legacy"
-      ? await compactSavedGraphThumbnail(graph.thumbnail)
-      : renderSavedSceneThumbnail(graph.scene);
+    let thumbnail = renderSavedSceneThumbnail(graph.scene);
+    if (savedGraphThumbnailState(thumbnail) !== "compact" && state === "legacy") {
+      thumbnail = await compactSavedGraphThumbnail(graph.thumbnail);
+    }
     if (savedGraphThumbnailState(thumbnail) !== "compact") return;
     persistRecoveredSavedGraphThumbnail(graph.id, thumbnail);
     if (image?.isConnected) image.src = thumbnail;
@@ -8449,6 +8456,7 @@ function persistRecoveredSavedGraphThumbnail(id, thumbnail) {
   const graph = raw.find((entry) => String(entry?.id ?? "") === id);
   if (!graph) return;
   graph.thumbnail = thumbnail;
+  graph.thumbnailVersion = SAVED_GRAPH_THUMBNAIL_VERSION;
   localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(raw.slice(0, SAVED_GRAPHS_LIMIT)));
 }
 

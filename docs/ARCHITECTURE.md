@@ -71,7 +71,7 @@ Animation reuses the latest structural diagnostics because changing a numeric ti
 
 - URL scenes use the `scene` query parameter.
 - up to 60 saved graphs live in browser `localStorage` under `lepton-saved-graphs-v1`; each stores canonical scene text and a compressed 160×100 preview capped at 24,000 characters;
-- legacy PNG previews are displayed while they are compacted, and missing legacy previews are regenerated lazily from scene text only when their library rows become visible;
+- legacy, unversioned, malformed, or missing previews are regenerated lazily from scene text when their library rows become visible; verified previews carry a schema version so broken old captures are never trusted again;
 - loading a saved graph retains its local identity, so Save immediately replaces that entry; an unsaved graph prompts for a new name;
 - current exports use keyword grammar;
 - legacy `F:`, `C:`, `R:`, `D~`, and `S:` lines remain import-only compatibility paths;

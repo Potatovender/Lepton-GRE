@@ -6,7 +6,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260722-saved-preview-recovery2";
+const cacheVersion = "20260722-saved-preview-recovery3";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -40,7 +40,7 @@ function createMockElement(tagName) {
     element.width = 0;
     element.height = 0;
     element.getContext = () => ({ fillStyle: "", fillRect: () => {}, drawImage: () => {} });
-    element.toDataURL = (type, quality) => `data:${type};mock,${element.width}x${element.height}@${quality}`;
+    element.toDataURL = (type, quality) => `data:${type};base64,${Buffer.from(`${element.width}x${element.height}@${quality}`).toString("base64")}`;
   }
   return element;
 }
@@ -1594,6 +1594,7 @@ draw(eq,rgb,rest,False)`));
   assert(saved.name === "Local sample", JSON.stringify(saved));
   assert(saved.scene.includes("expression eq = x"), saved.scene);
   assert(saved.thumbnail.startsWith("data:image/"), saved.thumbnail);
+  assert(saved.thumbnailVersion === 2, JSON.stringify(saved));
   const graphs = sandbox.loadSavedGraphs();
   assert(graphs.length === 1, JSON.stringify(graphs));
   assert(graphs[0].name === "Local sample", JSON.stringify(graphs));
@@ -1617,9 +1618,10 @@ check("saving a loaded graph updates it while a forced new save creates a copy",
 
 check("saved graph thumbnails are reduced before local persistence", () => {
   const thumbnail = sandbox.createGraphThumbnailDataUrl({ width: 1780, height: 1440 });
-  assert(thumbnail.startsWith("data:image/jpeg;"), thumbnail);
-  assert(thumbnail.includes("160x100@0.72"), thumbnail);
-  assert(!thumbnail.includes("1780x1440"), thumbnail);
+  assert(thumbnail.startsWith("data:image/jpeg;base64,"), thumbnail);
+  const payload = Buffer.from(thumbnail.split(",")[1], "base64").toString("utf8");
+  assert(payload === "160x100@0.72", payload);
+  assert(!payload.includes("1780x1440"), payload);
 });
 
 check("legacy PNG thumbnails remain visible until background compaction", () => {
@@ -1628,6 +1630,7 @@ check("legacy PNG thumbnails remain visible until background compaction", () => 
   const [graph] = sandbox.loadSavedGraphs();
   assert(graph.scene === "expression eq = x", JSON.stringify(graph));
   assert(graph.thumbnail.startsWith("data:image/png;"), graph.thumbnail);
+  assert(graph.thumbnailVersion === 0, JSON.stringify(graph));
   assert(sandbox.savedGraphThumbnailState(graph.thumbnail) === "legacy", graph.thumbnail);
 });
 
@@ -1638,6 +1641,14 @@ check("oversized and invalid thumbnails are replaced without losing scenes", () 
   const [graph] = sandbox.loadSavedGraphs();
   assert(graph.scene === "expression eq = x", JSON.stringify(graph));
   assert(sandbox.savedGraphThumbnailState(graph.thumbnail) === "fallback", graph.thumbnail);
+});
+
+check("malformed compact image URLs are recovered instead of trusted", () => {
+  storage.clear();
+  storage.set("lepton-saved-graphs-v1", JSON.stringify([{ id: "broken", name: "Broken", scene: "expression eq = x", thumbnail: "data:image/jpeg;broken" }]));
+  const [graph] = sandbox.loadSavedGraphs();
+  assert(sandbox.savedGraphThumbnailState(graph.thumbnail) === "fallback", graph.thumbnail);
+  assert(graph.thumbnailVersion === 0, JSON.stringify(graph));
 });
 
 check("saving after five legacy previews compacts them instead of hitting the old practical cap", () => {
