@@ -1,4 +1,4 @@
-const APP_VERSION = "20260721-caret-random";
+const APP_VERSION = "20260721-cloud-functions";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

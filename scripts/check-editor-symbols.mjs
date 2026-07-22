@@ -7,7 +7,8 @@ const landingSource = await readFile("src/landing.js", "utf8");
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
-  readFile("sample code/Lepton Logo", "utf8")
+  readFile("sample code/Lepton Logo", "utf8"),
+  readFile("sample code/cinematic clouds", "utf8")
 ]);
 const storage = new Map();
 const headLinks = [];
@@ -77,7 +78,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260721-caret-random")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260721-cloud-functions")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -138,9 +139,11 @@ check("nested built-ins and user functions compile through CPU and GLSL", () => 
   const nestedSource = `function square(v) = v^2
 function soften(v,limit) = clamp(square(v),0,limit)
 function wave(a,b) = tanh(sinh(cosh(a)))+sin(cos(b))
+function offset(v) = v+0.25
 expression randomBase = clamp(random(),0,1)
 expression nestedRandom = sqrt(abs(randomBase-0.5))
 expression nestedUser = soften(sin(x),2)+wave(x,y)
+expression nestedArgument = wave(x+offset(y),offset(sin(x)))
 expression powers = 2^3^2
 expression negativePower = -2^2
 expression groupedPower = (-2)^2
@@ -153,7 +156,7 @@ expression negativeExponential = e^(-(x^2)/16)`;
   const glsl = (id) => sandbox.expressionToGlsl(byId(id).expression, env);
   const cpu = (id, x = 0, y = 0) => sandbox.compileExpression(byId(id).expression)(x, y, runtime);
 
-  for (const id of ["nestedRandom", "nestedUser", "powers", "negativePower", "groupedPower", "negativeExponential"]) {
+  for (const id of ["nestedRandom", "nestedUser", "nestedArgument", "powers", "negativePower", "groupedPower", "negativeExponential"]) {
     const output = glsl(id);
     assert(!output.includes("clamp3*("), `${id}: ${output}`);
     assert(!output.includes("vec2*("), `${id}: ${output}`);
@@ -161,6 +164,7 @@ expression negativeExponential = e^(-(x^2)/16)`;
   }
   assert(Number.isFinite(cpu("nestedRandom", 0.2, -0.4)), "nested random CPU evaluation failed");
   assert(Number.isFinite(cpu("nestedUser", 0.2, -0.4)), "nested user-function CPU evaluation failed");
+  assert(Number.isFinite(cpu("nestedArgument", 0.2, -0.4)), "nested function argument CPU evaluation failed");
   assert(cpu("powers") === 512, `right-associative power returned ${cpu("powers")}`);
   assert(cpu("negativePower") === -4, `negative power returned ${cpu("negativePower")}`);
   assert(cpu("groupedPower") === 4, `grouped negative power returned ${cpu("groupedPower")}`);
@@ -195,7 +199,8 @@ check("time playback controls include a live FPS output", () => {
 
 check("time animation compiles slider values as reusable shader uniforms", () => {
   const timed = sandbox.importScene(`time unbounded t = 0 speed 1
-expression eq = sin(x+t)+cos(y)
+function animatedWave(q) = sin(x+q)+cos(y-q)
+expression eq = animatedWave(t)
 colour rgb = eq~eq~eq
 draw(eq,colour=rgb)`);
   sandbox.__debugSetScene(timed);
@@ -203,6 +208,7 @@ draw(eq,colour=rgb)`);
   const shader = sandbox.buildFragmentShader();
   assert(shader.includes("uniform float u_time_0;"), shader);
   assert(shader.includes("u_time_0"), shader);
+  assert((shader.match(/u_time_0/g) ?? []).length > 1, "time uniform was lost inside a nested user function");
   assert(shader.includes("uniform vec3 u_background;"), shader);
   timed.functions.find((entry) => entry.id === "t").expression = "12.5";
   assert(sandbox.webGlShaderCacheKey() === firstKey, "time value invalidated the structural shader cache");

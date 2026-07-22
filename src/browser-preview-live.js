@@ -36,7 +36,7 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260721-caret-random";
+const APP_VERSION = "20260721-cloud-functions";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -4615,12 +4615,14 @@ function compileExpression(source, localNames = new Set()) {
   }
   let js = normalizeMathSyntax(normalizeExpressionText(normalizedSource));
   js = rewritePointSelectors(js, (point, coordinate) => `point("${point.id}",${coordinate})`);
-  js = rewriteCustomFunctionCalls(js, sceneFunctionEnv(true), (entry, args) => {
+  const functionEnv = sceneFunctionEnv(true);
+  const rewriteRuntimeFunctionCalls = (expression) => rewriteCustomFunctionCalls(expression, functionEnv, (entry, args) => {
     if (args.length !== entry.params.length) {
       throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
     }
-    return `call("${entry.id}", [${args.join(",")}], x, y)`;
+    return `call("${entry.id}", [${args.map(rewriteRuntimeFunctionCalls).join(",")}], x, y)`;
   });
+  js = rewriteRuntimeFunctionCalls(js);
   js = convertPowers(js)
     .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
     .replaceAll(/\bpi\b/g, "Math.PI")
@@ -4964,6 +4966,7 @@ function rewriteBareIdentifiers(expression, replace, extraReserved, overrideName
 
   return expression.replaceAll(/\b[A-Za-z_]\w*\b/g, (name, offset) => {
     if (stringRanges.some(([start, end]) => offset >= start && offset < end)) return name;
+    if (/^u_time_\d+$/.test(name)) return name;
     if (overrideNames.has(name)) return replace(name);
     if (BUILTIN_NAMES.has(name) || extraReserved.has(name)) return name;
     return replace(name);
