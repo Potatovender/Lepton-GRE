@@ -1,4 +1,4 @@
-const APP_VERSION = "20260722-local-autosave-sky";
+const APP_VERSION = "20260722-saved-preview-recovery2";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

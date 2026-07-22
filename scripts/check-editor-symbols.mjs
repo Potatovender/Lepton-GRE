@@ -5,6 +5,8 @@ import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PREC
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
+const appSource = await readFile("app.html", "utf8");
+const cacheVersion = "20260722-saved-preview-recovery2";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -86,8 +88,17 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260722-saved-preview-recovery")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes(`lepton-favicon.png?v=${cacheVersion}`)), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
+});
+
+check("HTML shells and runtime modules share one cache version", () => {
+  for (const [name, content] of [["app", appSource], ["index", indexSource], ["landing", landingSource], ["runtime", source]]) {
+    assert(content.includes(cacheVersion), `${name} does not use ${cacheVersion}`);
+    assert(!content.includes("20260722-local-autosave-sky"), `${name} still uses the previous cache key`);
+  }
+  assert(appSource.includes(`browser-preview-live.js?v=${cacheVersion}`), "app runtime URL is stale");
+  assert(indexSource.includes(`landing.js?v=${cacheVersion}`), "landing runtime URL is stale");
 });
 
 check("bundled sample scripts use named draw fields and time speeds", () => {

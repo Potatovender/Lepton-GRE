@@ -42,7 +42,7 @@ const SAVED_GRAPH_THUMBNAIL_HEIGHT = 100;
 const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
-const APP_VERSION = "20260722-saved-preview-recovery";
+const APP_VERSION = "20260722-saved-preview-recovery2";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
