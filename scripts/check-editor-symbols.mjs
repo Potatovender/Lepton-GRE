@@ -4,6 +4,7 @@ import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PREC
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
+const indexSource = await readFile("index.html", "utf8");
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -13,7 +14,7 @@ const sampleSources = await Promise.all([
 const storage = new Map();
 const headLinks = [];
 function createMockElement(tagName) {
-  return {
+  const element = {
     tagName: tagName.toUpperCase(),
     rel: "",
     href: "",
@@ -33,6 +34,13 @@ function createMockElement(tagName) {
     querySelector: () => null,
     querySelectorAll: () => []
   };
+  if (tagName.toLowerCase() === "canvas") {
+    element.width = 0;
+    element.height = 0;
+    element.getContext = () => ({ fillStyle: "", fillRect: () => {}, drawImage: () => {} });
+    element.toDataURL = (type, quality) => `data:${type};mock,${element.width}x${element.height}@${quality}`;
+  }
+  return element;
 }
 const sandbox = {
   console,
@@ -78,7 +86,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260721-cloud-functions")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260722-local-autosave-sky")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -86,6 +94,12 @@ check("bundled sample scripts use named draw fields and time speeds", () => {
   assert(!/draw\([^\n]*,[^=\n]+,[^=\n]+,(?:False|True)\)/.test(landingSource), "legacy positional draw remains in landing samples");
   assert(landingSource.includes("draw(eq,colour=rgb,boundary=rest)"), "named sample draw missing");
   assert(landingSource.includes("time unbounded t = 0 speed 1"), "sample time speed missing");
+});
+
+check("the Sky Sample is linked from the landing menu", () => {
+  assert(indexSource.includes('data-sample="sky"'), "Sky Sample card missing");
+  assert(indexSource.includes("Sky Sample"), "Sky Sample label missing");
+  assert(landingSource.includes("time unbounded t = 10269.973 speed 1"), "Sky Sample scene missing");
 });
 
 check("copyable sample files import with the current grammar", () => {
@@ -143,6 +157,7 @@ check("graph actions menu exposes New Save Load and Export", () => {
   for (const action of ["new-graph", "open-save-dialog", "open-library", "export-graph"]) {
     assert(html.includes(`data-action="${action}"`), html);
   }
+  assert(!html.includes('data-action="open-save-as-dialog"'), html);
 });
 
 check("LaTeX trig expressions normalize for compiler and GLSL", () => {
@@ -1573,6 +1588,69 @@ draw(eq,rgb,rest,False)`));
   assert(graphs[0].name === "Local sample", JSON.stringify(graphs));
   sandbox.deleteSavedGraph(graphs[0].id);
   assert(sandbox.loadSavedGraphs().length === 0, JSON.stringify(sandbox.loadSavedGraphs()));
+});
+
+check("saving a loaded graph updates it while a forced new save creates a copy", () => {
+  storage.clear();
+  sandbox.__debugSetScene(sandbox.importScene("expression eq = x\ndraw(eq)"));
+  const original = sandbox.saveCurrentGraph("Working graph", { forceNew: true });
+  sandbox.__debugSetScene(sandbox.importScene("expression eq = y\ndraw(eq)"));
+  const updated = sandbox.saveCurrentGraph("Working graph");
+  assert(updated.id === original.id, `${original.id} became ${updated.id}`);
+  assert(sandbox.loadSavedGraphs().length === 1, JSON.stringify(sandbox.loadSavedGraphs()));
+  assert(sandbox.loadSavedGraphs()[0].scene.includes("expression eq = y"), sandbox.loadSavedGraphs()[0].scene);
+  const copy = sandbox.saveCurrentGraph("Working graph copy", { forceNew: true });
+  assert(copy.id !== original.id, `${copy.id} should be new`);
+  assert(sandbox.loadSavedGraphs().length === 2, JSON.stringify(sandbox.loadSavedGraphs()));
+});
+
+check("saved graph thumbnails are reduced before local persistence", () => {
+  const thumbnail = sandbox.createGraphThumbnailDataUrl({ width: 1780, height: 1440 });
+  assert(thumbnail.startsWith("data:image/jpeg;"), thumbnail);
+  assert(thumbnail.includes("160x100@0.72"), thumbnail);
+  assert(!thumbnail.includes("1780x1440"), thumbnail);
+});
+
+check("legacy full-resolution saved thumbnails fall back without losing graph data", () => {
+  storage.clear();
+  storage.set("lepton-saved-graphs-v1", JSON.stringify([{ id: "legacy", name: "Legacy", scene: "expression eq = x", thumbnail: "data:image/png;base64,large" }]));
+  const [graph] = sandbox.loadSavedGraphs();
+  assert(graph.scene === "expression eq = x", JSON.stringify(graph));
+  assert(graph.thumbnail.startsWith("data:image/svg+xml,"), graph.thumbnail);
+});
+
+check("saving after five legacy previews compacts them instead of hitting the old practical cap", () => {
+  storage.clear();
+  const legacyGraphs = Array.from({ length: 5 }, (_, index) => ({
+    id: `legacy-${index}`,
+    name: `Legacy ${index}`,
+    scene: "expression eq = x",
+    thumbnail: `data:image/png;base64,${"x".repeat(20_000)}`,
+    createdAt: new Date(index).toISOString()
+  }));
+  storage.set("lepton-saved-graphs-v1", JSON.stringify(legacyGraphs));
+  sandbox.saveCurrentGraph("Sixth graph", { forceNew: true });
+  const stored = storage.get("lepton-saved-graphs-v1");
+  assert(sandbox.loadSavedGraphs().length === 6, JSON.stringify(sandbox.loadSavedGraphs()));
+  assert(!stored.includes("data:image/png"), "legacy PNG previews were retained");
+  assert(stored.length < 20_000, `compacted saves still use ${stored.length} characters`);
+});
+
+check("local persistence keeps sixty Sky Sample graphs", () => {
+  storage.clear();
+  sandbox.__debugSetScene(sandbox.importScene(sampleSources[3]));
+  for (let index = 0; index < 65; index += 1) sandbox.saveCurrentGraph(`Graph ${index + 1}`, { forceNew: true });
+  const graphs = sandbox.loadSavedGraphs();
+  assert(graphs.length === 60, String(graphs.length));
+  assert(graphs.some((graph) => graph.name === "Graph 65"), JSON.stringify(graphs));
+  assert(!graphs.some((graph) => graph.name === "Graph 1"), JSON.stringify(graphs));
+  assert(graphs.every((graph) => graph.scene.includes("function cloudDensity")), "a saved entry is not the Sky Sample");
+});
+
+check("storage quota errors are recognized for save feedback", () => {
+  assert(sandbox.isStorageQuotaError({ name: "QuotaExceededError" }), "name was not recognized");
+  assert(sandbox.isStorageQuotaError({ code: 22 }), "legacy code was not recognized");
+  assert(!sandbox.isStorageQuotaError(new Error("unrelated")), "unrelated errors should not match");
 });
 
 function check(name, fn) {
