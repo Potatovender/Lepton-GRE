@@ -70,7 +70,8 @@ Animation reuses the latest structural diagnostics because changing a numeric ti
 ## Persistence and Compatibility
 
 - URL scenes use the `scene` query parameter.
-- saved graphs live in browser `localStorage` under `lepton-saved-graphs-v1`;
+- up to 60 saved graphs live in browser `localStorage` under `lepton-saved-graphs-v1`; each stores canonical scene text and a compressed 160×100 preview;
+- loading a saved graph retains its local identity, so Save immediately replaces that entry; an unsaved graph prompts for a new name;
 - current exports use keyword grammar;
 - legacy `F:`, `C:`, `R:`, `D~`, and `S:` lines remain import-only compatibility paths;
 - folders and comments are preserved in current text exports.

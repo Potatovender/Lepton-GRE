@@ -36,7 +36,12 @@ const DEFAULT_SCENE = {
 };
 
 const SAVED_GRAPHS_KEY = "lepton-saved-graphs-v1";
-const APP_VERSION = "20260721-cloud-functions";
+const SAVED_GRAPHS_LIMIT = 60;
+const SAVED_GRAPH_THUMBNAIL_WIDTH = 160;
+const SAVED_GRAPH_THUMBNAIL_HEIGHT = 100;
+const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
+const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 100_000;
+const APP_VERSION = "20260722-local-autosave-sky";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -339,6 +344,8 @@ const webGlRenderCache = new WeakMap();
 let saveDialogOpen = false;
 let libraryDialogOpen = false;
 let saveNameDraft = "";
+let saveErrorMessage = "";
+let activeSavedGraphId = null;
 let hasUnsavedChanges = false;
 let graphActionFeedback = "";
 
@@ -1344,18 +1351,19 @@ function renderSavedGraphsDialog() {
 function renderSaveGraphDialog() {
   return `
     <div class="modal-backdrop" data-action="close-save-dialog">
-      <section class="modal-card save-graph-card" role="dialog" aria-modal="true" aria-label="Save graph">
+      <section class="modal-card save-graph-card" role="dialog" aria-modal="true" aria-label="Save new graph">
         <header class="modal-header">
-          <h2>Save graph</h2>
+          <h2>Save new graph</h2>
           <button class="modal-close" data-action="close-save-dialog" type="button" aria-label="Close save dialog">×</button>
         </header>
         <label class="save-name-row">
           <span>Name</span>
           <input class="compact-field" data-save-name value="${escapeHtml(saveNameDraft)}" placeholder="Graph name" />
         </label>
+        ${saveErrorMessage ? `<p class="save-graph-error" role="alert">${escapeHtml(saveErrorMessage)}</p>` : ""}
         <div class="modal-actions">
           <button class="toolbar-button" data-action="close-save-dialog" type="button">Cancel</button>
-          <button class="toolbar-button primary" data-action="confirm-save-graph" type="button">Save graph</button>
+          <button class="toolbar-button primary" data-action="confirm-save-graph" type="button">Save new graph</button>
         </div>
       </section>
     </div>
@@ -1385,7 +1393,7 @@ function savedGraphRow(graph) {
       <img class="saved-graph-thumb" src="${escapeHtml(graph.thumbnail)}" alt="" />
       <div class="saved-graph-meta">
         <strong>${escapeHtml(graph.name)}</strong>
-        <span>${escapeHtml(formatSavedGraphDate(graph.createdAt))}</span>
+        <span>${escapeHtml(formatSavedGraphDate(graph.updatedAt))}</span>
       </div>
       <div class="saved-graph-actions">
         <button class="toolbar-button primary" data-load-saved-graph="${escapeHtml(graph.id)}" type="button">Load</button>
@@ -1934,9 +1942,25 @@ function bindEvents() {
   root.querySelector('[data-action="open-save-dialog"]')?.addEventListener("click", () => {
     setGraphActionFeedback("open-save-dialog");
     syncFields();
-    saveNameDraft = defaultSavedGraphName();
-    saveDialogOpen = true;
-    libraryDialogOpen = false;
+    const existing = savedGraphForId(activeSavedGraphId);
+    if (existing) {
+      try {
+        saveCurrentGraph(existing.name);
+        saveErrorMessage = "";
+      } catch (error) {
+        saveNameDraft = existing.name;
+        saveErrorMessage = isStorageQuotaError(error)
+          ? "Browser storage is full. Delete an older saved graph, then try again."
+          : "This graph could not be saved in this browser.";
+        saveDialogOpen = true;
+        libraryDialogOpen = false;
+      }
+    } else {
+      saveNameDraft = defaultSavedGraphName();
+      saveErrorMessage = "";
+      saveDialogOpen = true;
+      libraryDialogOpen = false;
+    }
     renderApp();
   });
   root.querySelector('[data-action="new-graph"]')?.addEventListener("click", () => {
@@ -1944,6 +1968,7 @@ function bindEvents() {
     syncFields();
     const before = sceneSnapshot();
     scene = structuredClone(DEFAULT_SCENE);
+    activeSavedGraphId = null;
     viewport = sceneViewport();
     if (isValidViewport(viewport)) saveViewport();
     recordSceneHistory(before);
@@ -1974,9 +1999,19 @@ function bindEvents() {
   root.querySelector('[data-action="confirm-save-graph"]')?.addEventListener("click", () => {
     syncFields();
     const name = root.querySelector("[data-save-name]")?.value?.trim() || defaultSavedGraphName();
-    saveCurrentGraph(name);
-    saveDialogOpen = false;
-    libraryDialogOpen = true;
+    saveNameDraft = name;
+    try {
+      saveCurrentGraph(name, { forceNew: true });
+      saveErrorMessage = "";
+      saveDialogOpen = false;
+      libraryDialogOpen = true;
+    } catch (error) {
+      saveErrorMessage = isStorageQuotaError(error)
+        ? "Browser storage is full. Delete an older saved graph, then try again."
+        : "This graph could not be saved in this browser.";
+      saveDialogOpen = true;
+      libraryDialogOpen = false;
+    }
     renderApp();
   });
   root.querySelectorAll("[data-load-saved-graph]").forEach((button) => {
@@ -1985,6 +2020,7 @@ function bindEvents() {
       if (!saved) return;
       const before = sceneSnapshot();
       scene = importScene(saved.scene);
+      activeSavedGraphId = saved.id;
       viewport = sceneViewport();
       if (isValidViewport(viewport)) saveViewport();
       sceneHistory.undo = [];
@@ -2278,6 +2314,7 @@ function bindEvents() {
     if (raw) {
       const before = sceneSnapshot();
       scene = importScene(raw);
+      activeSavedGraphId = null;
       displayMode = "standard";
       activeTab = "functions";
       recordSceneHistory(before);
@@ -8114,7 +8151,7 @@ function loadSavedGraphs() {
     return parsed
       .map(normalizeSavedGraph)
       .filter(Boolean)
-      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+      .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
   } catch {
     return [];
   }
@@ -8130,26 +8167,41 @@ function normalizeSavedGraph(graph) {
     id,
     name,
     scene: savedScene,
-    thumbnail: String(graph.thumbnail ?? "") || fallbackSavedGraphThumbnail(),
-    createdAt: String(graph.createdAt ?? new Date().toISOString())
+    thumbnail: normalizeSavedGraphThumbnail(graph.thumbnail),
+    createdAt: String(graph.createdAt ?? new Date().toISOString()),
+    updatedAt: String(graph.updatedAt ?? graph.createdAt ?? new Date().toISOString())
   };
 }
 
 function writeSavedGraphs(graphs) {
-  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(graphs.slice(0, 60)));
+  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(graphs.slice(0, SAVED_GRAPHS_LIMIT)));
 }
 
-function saveCurrentGraph(name) {
+function isStorageQuotaError(error) {
+  return error?.name === "QuotaExceededError" || error?.code === 22 || error?.code === 1014;
+}
+
+function saveCurrentGraph(name, { forceNew = false } = {}) {
+  const graphs = loadSavedGraphs();
+  const existing = forceNew ? null : graphs.find((graph) => graph.id === activeSavedGraphId);
+  const now = new Date().toISOString();
   const graph = {
-    id: createSavedGraphId(),
+    id: existing?.id ?? createSavedGraphId(),
     name,
     scene: exportScene(),
     thumbnail: captureGraphThumbnail(),
-    createdAt: new Date().toISOString()
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
   };
-  writeSavedGraphs([graph, ...loadSavedGraphs()]);
+  writeSavedGraphs([graph, ...graphs.filter((saved) => saved.id !== graph.id)]);
+  activeSavedGraphId = graph.id;
   markSaved();
   return graph;
+}
+
+function savedGraphForId(id) {
+  if (!id) return null;
+  return loadSavedGraphs().find((graph) => graph.id === id) ?? null;
 }
 
 function exportCurrentGraphImage() {
@@ -8259,6 +8311,7 @@ function safeDownloadName(value) {
 
 function deleteSavedGraph(id) {
   writeSavedGraphs(loadSavedGraphs().filter((graph) => graph.id !== id));
+  if (activeSavedGraphId === id) activeSavedGraphId = null;
 }
 
 function defaultSavedGraphName() {
@@ -8274,10 +8327,33 @@ function captureGraphThumbnail() {
   try {
     const canvas = root.querySelector(".grid-canvas");
     if (!canvas || !canvas.width || !canvas.height) return fallbackSavedGraphThumbnail();
-    return canvas.toDataURL("image/png");
+    return createGraphThumbnailDataUrl(canvas);
   } catch {
     return fallbackSavedGraphThumbnail();
   }
+}
+
+function createGraphThumbnailDataUrl(sourceCanvas) {
+  const thumbnail = document.createElement("canvas");
+  thumbnail.width = SAVED_GRAPH_THUMBNAIL_WIDTH;
+  thumbnail.height = SAVED_GRAPH_THUMBNAIL_HEIGHT;
+  const context = thumbnail.getContext("2d");
+  if (!context) return fallbackSavedGraphThumbnail();
+
+  context.fillStyle = "#111827";
+  context.fillRect(0, 0, thumbnail.width, thumbnail.height);
+  const scale = Math.min(thumbnail.width / sourceCanvas.width, thumbnail.height / sourceCanvas.height);
+  const width = sourceCanvas.width * scale;
+  const height = sourceCanvas.height * scale;
+  context.drawImage(sourceCanvas, (thumbnail.width - width) / 2, (thumbnail.height - height) / 2, width, height);
+  return normalizeSavedGraphThumbnail(thumbnail.toDataURL("image/jpeg", SAVED_GRAPH_THUMBNAIL_QUALITY));
+}
+
+function normalizeSavedGraphThumbnail(value) {
+  const thumbnail = String(value ?? "");
+  const isCompactImage = /^data:image\/(?:jpeg|webp);/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS;
+  const isFallback = thumbnail.startsWith("data:image/svg+xml,") && thumbnail.length <= SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS;
+  return isCompactImage || isFallback ? thumbnail : fallbackSavedGraphThumbnail();
 }
 
 function fallbackSavedGraphThumbnail() {

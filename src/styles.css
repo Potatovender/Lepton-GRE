@@ -1640,6 +1640,13 @@ select {
   gap: 4px;
 }
 
+.save-graph-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 .saved-graph-meta strong {
   overflow: hidden;
   color: #182033;
