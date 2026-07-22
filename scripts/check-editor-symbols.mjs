@@ -86,7 +86,7 @@ const functionNames = Object.keys(sandbox.__debugLatexFunctions);
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
-  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260722-local-autosave-sky")), JSON.stringify(headLinks));
+  assert(headLinks.every((link) => link.href.includes("lepton-favicon.png?v=20260722-saved-preview-recovery")), JSON.stringify(headLinks));
   assert(headLinks.some((link) => link.rel === "icon" && link.sizes === "any"), JSON.stringify(headLinks));
 });
 
@@ -1611,12 +1611,22 @@ check("saved graph thumbnails are reduced before local persistence", () => {
   assert(!thumbnail.includes("1780x1440"), thumbnail);
 });
 
-check("legacy full-resolution saved thumbnails fall back without losing graph data", () => {
+check("legacy PNG thumbnails remain visible until background compaction", () => {
   storage.clear();
   storage.set("lepton-saved-graphs-v1", JSON.stringify([{ id: "legacy", name: "Legacy", scene: "expression eq = x", thumbnail: "data:image/png;base64,large" }]));
   const [graph] = sandbox.loadSavedGraphs();
   assert(graph.scene === "expression eq = x", JSON.stringify(graph));
-  assert(graph.thumbnail.startsWith("data:image/svg+xml,"), graph.thumbnail);
+  assert(graph.thumbnail.startsWith("data:image/png;"), graph.thumbnail);
+  assert(sandbox.savedGraphThumbnailState(graph.thumbnail) === "legacy", graph.thumbnail);
+});
+
+check("oversized and invalid thumbnails are replaced without losing scenes", () => {
+  storage.clear();
+  const oversized = `data:image/jpeg;base64,${"x".repeat(24_001)}`;
+  storage.set("lepton-saved-graphs-v1", JSON.stringify([{ id: "large", name: "Large", scene: "expression eq = x", thumbnail: oversized }]));
+  const [graph] = sandbox.loadSavedGraphs();
+  assert(graph.scene === "expression eq = x", JSON.stringify(graph));
+  assert(sandbox.savedGraphThumbnailState(graph.thumbnail) === "fallback", graph.thumbnail);
 });
 
 check("saving after five legacy previews compacts them instead of hitting the old practical cap", () => {

@@ -40,8 +40,9 @@ const SAVED_GRAPHS_LIMIT = 60;
 const SAVED_GRAPH_THUMBNAIL_WIDTH = 160;
 const SAVED_GRAPH_THUMBNAIL_HEIGHT = 100;
 const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
-const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 100_000;
-const APP_VERSION = "20260722-local-autosave-sky";
+const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
+const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
+const APP_VERSION = "20260722-saved-preview-recovery";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -346,6 +347,7 @@ let libraryDialogOpen = false;
 let saveNameDraft = "";
 let saveErrorMessage = "";
 let activeSavedGraphId = null;
+const recoveringSavedGraphThumbnails = new Set();
 let hasUnsavedChanges = false;
 let graphActionFeedback = "";
 
@@ -1390,7 +1392,7 @@ function renderSavedGraphLibrary() {
 function savedGraphRow(graph) {
   return `
     <article class="saved-graph-row">
-      <img class="saved-graph-thumb" src="${escapeHtml(graph.thumbnail)}" alt="" />
+      <img class="saved-graph-thumb" src="${escapeHtml(graph.thumbnail)}" data-saved-thumbnail-id="${escapeHtml(graph.id)}" alt="Preview of ${escapeHtml(graph.name)}" />
       <div class="saved-graph-meta">
         <strong>${escapeHtml(graph.name)}</strong>
         <span>${escapeHtml(formatSavedGraphDate(graph.updatedAt))}</span>
@@ -1938,6 +1940,7 @@ function bindEvents() {
   root.onclick = (event) => {
     if (event.target?.closest?.("[data-field]")) activateKeyboardTarget(event.target);
   };
+  bindSavedGraphThumbnailRecovery();
 
   root.querySelector('[data-action="open-save-dialog"]')?.addEventListener("click", () => {
     setGraphActionFeedback("open-save-dialog");
@@ -8174,7 +8177,11 @@ function normalizeSavedGraph(graph) {
 }
 
 function writeSavedGraphs(graphs) {
-  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(graphs.slice(0, SAVED_GRAPHS_LIMIT)));
+  const compactGraphs = graphs.slice(0, SAVED_GRAPHS_LIMIT).map((graph) => ({
+    ...graph,
+    thumbnail: savedGraphThumbnailState(graph.thumbnail) === "compact" ? graph.thumbnail : fallbackSavedGraphThumbnail()
+  }));
+  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(compactGraphs));
 }
 
 function isStorageQuotaError(error) {
@@ -8351,9 +8358,98 @@ function createGraphThumbnailDataUrl(sourceCanvas) {
 
 function normalizeSavedGraphThumbnail(value) {
   const thumbnail = String(value ?? "");
-  const isCompactImage = /^data:image\/(?:jpeg|webp);/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS;
-  const isFallback = thumbnail.startsWith("data:image/svg+xml,") && thumbnail.length <= SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS;
-  return isCompactImage || isFallback ? thumbnail : fallbackSavedGraphThumbnail();
+  const state = savedGraphThumbnailState(thumbnail);
+  return state === "compact" || state === "legacy" || state === "fallback" ? thumbnail : fallbackSavedGraphThumbnail();
+}
+
+function savedGraphThumbnailState(value) {
+  const thumbnail = String(value ?? "");
+  if (/^data:image\/(?:jpeg|webp);/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS) return "compact";
+  if (/^data:image\/png;/i.test(thumbnail) && thumbnail.length <= SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS) return "legacy";
+  if (thumbnail === fallbackSavedGraphThumbnail()) return "fallback";
+  return "invalid";
+}
+
+function bindSavedGraphThumbnailRecovery() {
+  const previews = Array.from(root.querySelectorAll?.("[data-saved-thumbnail-id]") ?? []);
+  if (!previews.length) return;
+  const recover = (image) => {
+    const id = image.dataset.savedThumbnailId;
+    if (!id || recoveringSavedGraphThumbnails.has(id)) return;
+    const graph = loadSavedGraphs().find((entry) => entry.id === id);
+    if (!graph || savedGraphThumbnailState(graph.thumbnail) === "compact") return;
+    recoverSavedGraphThumbnail(graph, image);
+  };
+  if (typeof IntersectionObserver !== "function") {
+    previews.slice(0, 8).forEach(recover);
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      observer.unobserve(entry.target);
+      recover(entry.target);
+    }
+  }, { root: root.querySelector?.(".saved-graph-list") ?? null, rootMargin: "80px" });
+  previews.forEach((image) => observer.observe(image));
+}
+
+async function recoverSavedGraphThumbnail(graph, image) {
+  recoveringSavedGraphThumbnails.add(graph.id);
+  try {
+    const state = savedGraphThumbnailState(graph.thumbnail);
+    const thumbnail = state === "legacy"
+      ? await compactSavedGraphThumbnail(graph.thumbnail)
+      : renderSavedSceneThumbnail(graph.scene);
+    if (savedGraphThumbnailState(thumbnail) !== "compact") return;
+    persistRecoveredSavedGraphThumbnail(graph.id, thumbnail);
+    if (image?.isConnected) image.src = thumbnail;
+  } catch {
+    // A failed preview must never make the saved graph itself unavailable.
+  } finally {
+    recoveringSavedGraphThumbnails.delete(graph.id);
+  }
+}
+
+function compactSavedGraphThumbnail(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(createGraphThumbnailDataUrl(image));
+    image.onerror = () => reject(new Error("Saved preview could not be decoded"));
+    image.src = source;
+  });
+}
+
+function renderSavedSceneThumbnail(source) {
+  const previousScene = scene;
+  const previousViewport = viewport;
+  try {
+    scene = importScene(source);
+    viewport = sceneViewport();
+    const canvas = document.createElement("canvas");
+    const rendered = renderSceneWebGlInto(canvas, {
+      cssWidth: SAVED_GRAPH_THUMBNAIL_WIDTH,
+      cssHeight: SAVED_GRAPH_THUMBNAIL_HEIGHT,
+      dpr: 1,
+      visibleViewport: viewport,
+      updateOverlay: false,
+      synchronous: true,
+      fallbackOnFailure: true
+    });
+    return rendered ? createGraphThumbnailDataUrl(canvas) : fallbackSavedGraphThumbnail();
+  } finally {
+    scene = previousScene;
+    viewport = previousViewport;
+  }
+}
+
+function persistRecoveredSavedGraphThumbnail(id, thumbnail) {
+  const raw = JSON.parse(localStorage.getItem(SAVED_GRAPHS_KEY) ?? "[]");
+  if (!Array.isArray(raw)) return;
+  const graph = raw.find((entry) => String(entry?.id ?? "") === id);
+  if (!graph) return;
+  graph.thumbnail = thumbnail;
+  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(raw.slice(0, SAVED_GRAPHS_LIMIT)));
 }
 
 function fallbackSavedGraphThumbnail() {
