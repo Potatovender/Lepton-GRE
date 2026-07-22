@@ -102,6 +102,42 @@ check("copyable sample files import with the current grammar", () => {
   }
 });
 
+check("cinematic cloud functions survive text import and visual editor round-trip", () => {
+  const imported = sandbox.importScene(sampleSources[3]);
+  for (const id of ["cloudHash", "cloudNoise", "cloudFbm", "cloudFine", "cloudDensity", "farDensity"]) {
+    const entry = imported.functions.find((candidate) => candidate.id === id);
+    assert(entry, `${id} was dropped while importing text`);
+    assert(entry.kind === "function", `${id} was not imported as a function`);
+    const latex = sandbox.latexSourceFromExpression(entry.expression);
+    assert(latex !== entry.expression, `${id} fell back to unstructured editor text: ${latex}`);
+    assert(!latex.includes("\\lfloor") && !latex.includes("\\lceil"), `${id} emitted delimiters unsupported by MathQuill: ${latex}`);
+    const roundTrip = sandbox.latexToLeptonText(latex);
+    let actual;
+    let expected;
+    try {
+      actual = sandbox.astToMathString(sandbox.parseLeptonText(roundTrip));
+      expected = sandbox.astToMathString(sandbox.parseLeptonText(entry.expression));
+    } catch (error) {
+      throw new Error(`${id} could not round-trip\nLaTeX: ${latex}\nLepton: ${roundTrip}\n${error.message}`);
+    }
+    assert(actual === expected, `${id} changed after editor round-trip: ${roundTrip}`);
+  }
+  sandbox.__debugSetScene(imported);
+  const shader = sandbox.buildFragmentShader();
+  assert(shader.includes("float z ="), "cinematic cloud draw layers were not generated");
+  assert(!shader.includes("cloudHash") && !shader.includes("cloudNoise"), "custom cloud calls were not expanded in GLSL");
+});
+
+check("MathQuill custom functions preserve multiple nested arguments", () => {
+  const source = "mixCloud(hash2(floor(px),floor(py)),fade(px-floor(px)))";
+  const latex = sandbox.latexSourceFromExpression(source);
+  const roundTrip = sandbox.latexToLeptonText(latex);
+  assert(
+    sandbox.astToMathString(sandbox.parseLeptonText(roundTrip)) === sandbox.astToMathString(sandbox.parseLeptonText(source)),
+    `${latex} became ${roundTrip}`
+  );
+});
+
 check("graph actions menu exposes New Save Load and Export", () => {
   const html = sandbox.renderGraphActionsMenu();
   for (const action of ["new-graph", "open-save-dialog", "open-library", "export-graph"]) {
@@ -348,9 +384,10 @@ check("SDF helpers and random compile for CPU and GLSL", () => {
   assert(!glsl.includes("random2"), glsl);
 });
 
-check("floor and ceil delimiters survive LaTeX and text round-trips", () => {
+check("floor and ceil use MathQuill-safe calls and survive text round-trips", () => {
   for (const [source, expected] of [["floor(2*x)", "floor(2*x)"], ["ceil(y/3)", "ceil(frac(y,3))"]]) {
     const latex = sandbox.latexSourceFromExpression(source);
+    assert(latex.startsWith(`\\operatorname{${source.startsWith("floor") ? "floor" : "ceil"}}`), latex);
     const normalized = sandbox.normalizeExpressionText(latex);
     assert(normalized === expected, `${source} -> ${latex} -> ${normalized}`);
     assert(!normalized.includes("lfloor") && !normalized.includes("rfloor"), normalized);

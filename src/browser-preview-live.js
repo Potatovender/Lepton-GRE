@@ -6504,7 +6504,13 @@ function createParser(tokens, isLatexMode) {
 }
 
 function parseLatex(source) {
-  const tokens = tokenizeLatex(source);
+  // MathQuill adds \left/\right around scalable grouping delimiters. They are
+  // presentation-only; retaining them makes a multi-argument operatorname call
+  // look like one grouped argument to the AST parser.
+  const normalized = String(source ?? "")
+    .replace(/\\left\s*(?=[()[\]{}])/g, "")
+    .replace(/\\right\s*(?=[()[\]{}])/g, "");
+  const tokens = tokenizeLatex(normalized);
   return createParser(tokens, true);
 }
 
@@ -6555,10 +6561,10 @@ function astToLatex(node) {
       return `\\left|${args[0]}\\right|`;
     }
     if (name === "floor" && args.length === 1) {
-      return `\\lfloor{${args[0]}}\\rfloor`;
+      return `\\operatorname{floor}\\left(${args[0]}\\right)`;
     }
     if (name === "ceil" && args.length === 1) {
-      return `\\lceil{${args[0]}}\\rceil`;
+      return `\\operatorname{ceil}\\left(${args[0]}\\right)`;
     }
     if (name === "sqrt" && args.length === 1) {
       return `\\sqrt{${args[0]}}`;
