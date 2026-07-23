@@ -11,7 +11,8 @@ const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
   readFile("sample code/Lepton Logo", "utf8"),
-  readFile("sample code/cinematic clouds", "utf8")
+  readFile("sample code/cinematic clouds", "utf8"),
+  readFile("sample code/tree", "utf8")
 ]);
 const storage = new Map();
 const headLinks = [];
@@ -111,6 +112,12 @@ check("the Sky Sample is linked from the landing menu", () => {
   assert(indexSource.includes('data-sample="sky"'), "Sky Sample card missing");
   assert(indexSource.includes("Sky Sample"), "Sky Sample label missing");
   assert(landingSource.includes("time unbounded t = 10269.973 speed 1"), "Sky Sample scene missing");
+});
+
+check("the Tree Sample is linked from the landing menu", () => {
+  assert(indexSource.includes('data-sample="tree"'), "Tree Sample card missing");
+  assert(indexSource.includes("Tree Sample"), "Tree Sample label missing");
+  assert(landingSource.includes("folder Discontinuous foliage"), "Tree Sample scene missing");
 });
 
 check("copyable sample files import with the current grammar", () => {
