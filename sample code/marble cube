@@ -72,7 +72,7 @@ folder Ray setup = {
   expression rayNear = max(max(min(slabX0,slabX1),min(slabY0,slabY1)),min(slabZ0,slabZ1))
   expression rayFar = min(min(max(slabX0,slabX1),max(slabY0,slabY1)),max(slabZ0,slabZ1))
   expression cubeHit = min(rayFar-rayNear,rayNear)
-  boundary cubeVisible = cubeHit~False
+  boundary cubeVisible = cubeHit
   expression localX = rayOX+rayDX*rayNear
   expression localY = rayOY+rayDY*rayNear
   expression localZ = rayOZ+rayDZ*rayNear
@@ -90,24 +90,15 @@ folder Visible faces = {
   expression faceYN = min(faceY,0-localY)
   expression faceZP = min(faceZ,localZ)
   expression faceZN = min(faceZ,0-localZ)
-  boundary showXP = faceXP~False
-  boundary showXN = faceXN~False
-  boundary showYP = faceYP~False
-  boundary showYN = faceYN~False
-  boundary showZP = faceZP~False
-  boundary showZN = faceZN~False
+  boundary showXP = faceXP
+  boundary showXN = faceXN
+  boundary showYP = faceYP
+  boundary showYN = faceYN
+  boundary showZP = faceZP
+  boundary showZN = faceZN
 }
 folder Object space marble = {
-  expression stoneCloud = 0.5+0.24*marbleLayer(localX,localY,localZ,0.52,0.3)+0.13*marbleLayer(localX,localY,localZ,1.07,1.4)+0.07*marbleLayer(localX,localY,localZ,2.13,2.7)
-  expression veinWarp = 1.05*marbleLayer(localX,localY,localZ,0.61,0.8)+0.43*marbleLayer(localX,localY,localZ,1.49,2.1)+0.17*marbleLayer(localX,localY,localZ,3.21,0.2)
-  expression majorDistance = abs(sin(0.66*localX+0.24*localY+0.41*localZ+1.45*veinWarp)+0.31*sin(1.13*localX-0.57*localY+0.82*localZ+0.39*veinWarp))
-  expression branchDistance = abs(sin(1.72*localX-0.83*localY+1.19*localZ+0.62*veinWarp+0.28*sin(3.1*localY-1.7*localZ))+0.22*sin(2.61*localY+1.37*localZ-0.91*localX))
-  expression hairDistance = abs(sin(4.83*localX+2.91*localY-3.77*localZ+0.31*veinWarp)+0.16*sin(7.13*localZ-5.41*localX+1.83*localY))
-  expression majorInk = e^(-((majorDistance/0.22)^2))
-  expression branchInk = e^(-((branchDistance/0.13)^2))
-  expression hairInk = e^(-((hairDistance/0.068)^2))
-  expression crystalGrain = 0.5+0.5*sin(12.7*localX+9.1*localY-10.9*localZ+1.8*sin(4.4*localX-3.7*localY))
-  expression mineralSpeck = 0.5+0.5*sin(23.17*localX+31.11*localY-27.73*localZ+3.4*sin(11.7*localX-8.9*localY+5.3*localZ))
+  expression stoneCloud = clamp(0.83+0.1*marbleLayer(localX,localY,localZ,0.43,0.3)-0.34*clamp(1-abs(sin(0.61*localX+0.2*localY+0.37*localZ+2.2*marbleLayer(localX,localY,localZ,0.78,0.8))+0.42*sin(1.17*localX-0.73*localY+0.88*localZ+0.8*marbleLayer(localX,localY,localZ,1.37,2.1)))/0.72,0,1)-0.1*clamp(1-abs(sin(2.03*localX-1.31*localY+1.57*localZ+0.31*sin(3.7*localY-2.2*localZ)))/0.26,0,1),0.28,1)
 }
 folder Rotated lighting and stone surface = {
   expression rolledLightX = rotateA(-0.42,0.74,0-zAngle)
@@ -117,39 +108,24 @@ folder Rotated lighting and stone surface = {
   expression objectLightX = rotateA(rolledLightX,pitchedLightZ,0-yAngle)
   expression objectLightY = pitchedLightY
   expression objectLightZ = rotateB(rolledLightX,pitchedLightZ,0-yAngle)
-  expression lightXP = 0.34+0.66*clamp(objectLightX,0,1)
-  expression lightXN = 0.34+0.66*clamp(0-objectLightX,0,1)
-  expression lightYP = 0.34+0.66*clamp(objectLightY,0,1)
-  expression lightYN = 0.34+0.66*clamp(0-objectLightY,0,1)
-  expression lightZP = 0.34+0.66*clamp(objectLightZ,0,1)
-  expression lightZN = 0.34+0.66*clamp(0-objectLightZ,0,1)
-  colour marbleXP = (50+202*x)*lightXP~(55+196*x)*lightXP~(61+190*x)*lightXP
-  colour marbleXN = (50+202*x)*lightXN~(55+196*x)*lightXN~(61+190*x)*lightXN
-  colour marbleYP = (50+202*x)*lightYP~(55+196*x)*lightYP~(61+190*x)*lightYP
-  colour marbleYN = (50+202*x)*lightYN~(55+196*x)*lightYN~(61+190*x)*lightYN
-  colour marbleZP = (50+202*x)*lightZP~(55+196*x)*lightZP~(61+190*x)*lightZP
-  colour marbleZN = (50+202*x)*lightZN~(55+196*x)*lightZN~(61+190*x)*lightZN
+  expression lightXP = 0.62+0.38*clamp(objectLightX,0,1)
+  expression lightXN = 0.62+0.38*clamp(0-objectLightX,0,1)
+  expression lightYP = 0.62+0.38*clamp(objectLightY,0,1)
+  expression lightYN = 0.62+0.38*clamp(0-objectLightY,0,1)
+  expression lightZP = 0.62+0.38*clamp(objectLightZ,0,1)
+  expression lightZN = 0.62+0.38*clamp(0-objectLightZ,0,1)
+  colour marbleXP = (124+131*x)*lightXP~(128+126*x)*lightXP~(132+120*x)*lightXP
+  colour marbleXN = (124+131*x)*lightXN~(128+126*x)*lightXN~(132+120*x)*lightXN
+  colour marbleYP = (124+131*x)*lightYP~(128+126*x)*lightYP~(132+120*x)*lightYP
+  colour marbleYN = (124+131*x)*lightYN~(128+126*x)*lightYN~(132+120*x)*lightYN
+  colour marbleZP = (124+131*x)*lightZP~(128+126*x)*lightZP~(132+120*x)*lightZP
+  colour marbleZN = (124+131*x)*lightZN~(128+126*x)*lightZN~(132+120*x)*lightZN
   draw(stoneCloud,colour=marbleXP,boundary=showXP)
   draw(stoneCloud,colour=marbleXN,boundary=showXN)
   draw(stoneCloud,colour=marbleYP,boundary=showYP)
   draw(stoneCloud,colour=marbleYN,boundary=showYN)
   draw(stoneCloud,colour=marbleZP,boundary=showZP)
   draw(stoneCloud,colour=marbleZN,boundary=showZN)
-  colour deepMineral = 50+22*x~57+23*x~63+25*x
-  transparency deepMineralFade = clamp(1-0.09*x,0.91,1)
-  draw(majorInk,colour=deepMineral,boundary=cubeVisible,transparency=deepMineralFade)
-  colour branchingMineral = 71+25*x~77+26*x~83+28*x
-  transparency branchingMineralFade = clamp(1-0.06*x,0.94,1)
-  draw(branchInk,colour=branchingMineral,boundary=cubeVisible,transparency=branchingMineralFade)
-  colour hairlineMineral = 63~70~75
-  transparency hairlineMineralFade = clamp(1-0.03*x,0.97,1)
-  draw(hairInk,colour=hairlineMineral,boundary=cubeVisible,transparency=hairlineMineralFade)
-  colour crystalColour = 224~227~228
-  transparency crystalFade = clamp(1-0.035*x,0.965,1)
-  draw(crystalGrain,colour=crystalColour,boundary=cubeVisible,transparency=crystalFade)
-  colour speckColour = 49~56~62
-  transparency speckFade = clamp(1-0.03*x,0.97,1)
-  draw(mineralSpeck,colour=speckColour,boundary=cubeVisible,transparency=speckFade)
 }
 folder Cube edges = {
   expression edgeX = min(faceX,0.075-min(cubeSize-abs(localY),cubeSize-abs(localZ)))

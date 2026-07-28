@@ -1,4 +1,4 @@
-const APP_VERSION = "20260722-saved-preview-recovery3";
+const APP_VERSION = "20260728-boundary-sample-loader-marble";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -34,7 +34,7 @@ variable g = 255(sin(1.5(-x+pi/2))/2.8+0.5)
 variable b = 255(e^(-(3(-x+0.99))^2)/3+x/9+0.1)
 variable rest = 1
 colour rgb = r~g~b
-boundary rest = rest~False
+boundary rest = rest
 draw(eq,colour=rgb,boundary=rest)`,
   mandelbrot: `set x_min = -2
 set x_max = 1
@@ -52,7 +52,7 @@ variable one = 1
 variable combined = real^2+imaginary^2
 variable rest = combined-4
 colour rgb = one~one~one
-boundary rest = rest~True
+boundary rest = 0-(rest)
 draw(combined,colour=rgb,boundary=rest)`,
   water: `set x_min = -12
 set x_max = 12
@@ -71,7 +71,7 @@ variable g = 145+85*cos(x/2+t*0.35)
 variable b = 215+35*sin(y/2+t*0.45)
 variable rest = 1
 colour rgb = r~g~b
-boundary rest = rest~False
+boundary rest = rest
 draw(eq,colour=rgb,boundary=rest)`,
   stars: `set x_min = -8
 set x_max = 8
@@ -95,7 +95,7 @@ variable g = 10+70*galaxy*arm+145*core+145*dust*galaxy
 variable b = 32+180*galaxy*arm+225*core+220*dust*galaxy
 variable rest = 1
 colour rgb = r~g~b
-boundary rest = rest~False
+boundary rest = rest
 draw(eq,colour=rgb,boundary=rest)`,
   sky: `set x_min = -10
 set x_max = 10
@@ -223,7 +223,7 @@ folder Trunk structure = {
   expression rightLimbs = max(max(max(branch2(x,y,0.03,1.75,2.65,4.8,0.29,0.13),branch2(x,y,1.75,3.75,4.7,5.75,0.17,0.05)),max(branch2(x,y,0.02,0.2,3.45,2.8,0.31,0.11),branch2(x,y,2.45,2.05,5.35,3.75,0.14,0.04))),max(branch2(x,y,1.65,4.05,2.85,6.9,0.115,0.035),branch2(x,y,3.55,4.95,5.25,6.25,0.075,0.02)))
   expression crownForks = max(max(branch2(x,y,-0.03,2.1,-0.95,7.2,0.22,0.045),branch2(x,y,0.02,2.15,1.15,7.4,0.21,0.04)),max(branch2(x,y,-0.65,5.3,-3.35,7.55,0.09,0.018),branch2(x,y,0.8,5.45,3.55,7.5,0.09,0.018)))
   expression wood = max(max(trunk,leftLimbs),max(rightLimbs,crownForks))
-  boundary woodInside = wood~False
+  boundary woodInside = wood
   colour woodBase = 63+23*clamp(x,0,0.8)+1.3*y~39+14*clamp(x,0,0.8)+0.8*y~23+8*clamp(x,0,0.8)+0.45*y
   transparency woodOpacity = clamp(1-24*x,0,1)
   draw(wood,colour=woodBase,transparency=woodOpacity)
@@ -251,7 +251,7 @@ folder Trunk structure = {
 folder Discontinuous foliage = {
   expression crownEnvelope = max(max(max(ellipse2(x,y,-4.35,3.35,2.05,1.8),ellipse2(x,y,-3.25,5.35,2.35,2.1)),max(ellipse2(x,y,-1.25,6.85,2.5,2.0),ellipse2(x,y,1.15,7.05,2.65,1.95))),max(max(ellipse2(x,y,3.35,5.6,2.45,2.05),ellipse2(x,y,4.55,3.5,1.95,1.75)),max(ellipse2(x,y,1.8,3.85,3.05,2.25),ellipse2(x,y,-1.55,3.8,3.0,2.25))))
   expression crownMask = crownEnvelope+0.3*(fbm2(0.69*x+0.08*y,0.71*y-0.06*x)-0.49)+0.17*(fbm2(1.43*x-4.2,1.37*y+2.8)-0.5)+0.055*(noise2(4.7*x+1.8,4.5*y-3.2)-0.5)
-  boundary insideCrown = crownMask~False
+  boundary insideCrown = crownMask
   expression deepLeaves = min(crownMask,fbm2(1.34*x+1.7,1.29*y-4.1)-0.365+0.018*sin(4.3*x-2.7*y))
   colour deepLeafColour = 12+50*clamp(x,0,0.55)+1.8*y~33+84*clamp(x,0,0.55)+3.1*y~16+42*clamp(x,0,0.55)+1.2*y
   transparency deepLeafFade = clamp(1-31*x,0.05,1)
@@ -340,7 +340,7 @@ folder Dark room = {
 folder Glass chamber = {
   expression glassWidth = 1.76-0.052*(y+4.6)
   expression vessel = min(min(y+4.65,6.25-y),glassWidth-abs(x))
-  boundary vesselInside = vessel~False
+  boundary vesselInside = vessel
   expression liquidBackdrop = vessel
   colour liquidBackdropColour = 38+26*clamp(x,0,1)~7+10*clamp(x,0,1)~15+18*clamp(x,0,1)
   transparency liquidBackdropFade = clamp(0.9-0.28*clamp(x,0,1),0.58,0.92)
@@ -394,7 +394,7 @@ folder Glass reflections = {
 }
 folder Metal base and cap = {
   expression base = max(taperLamp(x,y,-7.15,-4.35,2.55,1.7),ellipseLamp(x,y,0,-6.9,2.52,0.58))
-  boundary baseInside = base~False
+  boundary baseInside = base
   colour baseColour = 36+46*clamp(x,0,0.75)~25+26*clamp(x,0,0.75)~30+28*clamp(x,0,0.75)
   transparency baseFade = clamp(1-24*x,0,1)
   draw(base,colour=baseColour,transparency=baseFade)
@@ -411,7 +411,7 @@ folder Metal base and cap = {
   transparency baseLipFade = clamp(1-28*x,0.38,1)
   draw(baseLip,colour=baseLipColour,boundary=baseInside,transparency=baseLipFade)
   expression cap = max(taperLamp(x,y,6.05,8.25,1.32,0.28),ellipseLamp(x,y,0,6.08,1.34,0.25))
-  boundary capInside = cap~False
+  boundary capInside = cap
   colour capColour = 38+42*clamp(x,0,0.7)~25+25*clamp(x,0,0.7)~31+27*clamp(x,0,0.7)
   transparency capFade = clamp(1-25*x,0,1)
   draw(cap,colour=capColour,transparency=capFade)
@@ -498,7 +498,7 @@ folder Ray setup = {
   expression rayNear = max(max(min(slabX0,slabX1),min(slabY0,slabY1)),min(slabZ0,slabZ1))
   expression rayFar = min(min(max(slabX0,slabX1),max(slabY0,slabY1)),max(slabZ0,slabZ1))
   expression cubeHit = min(rayFar-rayNear,rayNear)
-  boundary cubeVisible = cubeHit~False
+  boundary cubeVisible = cubeHit
   expression localX = rayOX+rayDX*rayNear
   expression localY = rayOY+rayDY*rayNear
   expression localZ = rayOZ+rayDZ*rayNear
@@ -516,24 +516,15 @@ folder Visible faces = {
   expression faceYN = min(faceY,0-localY)
   expression faceZP = min(faceZ,localZ)
   expression faceZN = min(faceZ,0-localZ)
-  boundary showXP = faceXP~False
-  boundary showXN = faceXN~False
-  boundary showYP = faceYP~False
-  boundary showYN = faceYN~False
-  boundary showZP = faceZP~False
-  boundary showZN = faceZN~False
+  boundary showXP = faceXP
+  boundary showXN = faceXN
+  boundary showYP = faceYP
+  boundary showYN = faceYN
+  boundary showZP = faceZP
+  boundary showZN = faceZN
 }
 folder Object space marble = {
-  expression stoneCloud = 0.5+0.24*marbleLayer(localX,localY,localZ,0.52,0.3)+0.13*marbleLayer(localX,localY,localZ,1.07,1.4)+0.07*marbleLayer(localX,localY,localZ,2.13,2.7)
-  expression veinWarp = 1.05*marbleLayer(localX,localY,localZ,0.61,0.8)+0.43*marbleLayer(localX,localY,localZ,1.49,2.1)+0.17*marbleLayer(localX,localY,localZ,3.21,0.2)
-  expression majorDistance = abs(sin(0.66*localX+0.24*localY+0.41*localZ+1.45*veinWarp)+0.31*sin(1.13*localX-0.57*localY+0.82*localZ+0.39*veinWarp))
-  expression branchDistance = abs(sin(1.72*localX-0.83*localY+1.19*localZ+0.62*veinWarp+0.28*sin(3.1*localY-1.7*localZ))+0.22*sin(2.61*localY+1.37*localZ-0.91*localX))
-  expression hairDistance = abs(sin(4.83*localX+2.91*localY-3.77*localZ+0.31*veinWarp)+0.16*sin(7.13*localZ-5.41*localX+1.83*localY))
-  expression majorInk = e^(-((majorDistance/0.22)^2))
-  expression branchInk = e^(-((branchDistance/0.13)^2))
-  expression hairInk = e^(-((hairDistance/0.068)^2))
-  expression crystalGrain = 0.5+0.5*sin(12.7*localX+9.1*localY-10.9*localZ+1.8*sin(4.4*localX-3.7*localY))
-  expression mineralSpeck = 0.5+0.5*sin(23.17*localX+31.11*localY-27.73*localZ+3.4*sin(11.7*localX-8.9*localY+5.3*localZ))
+  expression stoneCloud = clamp(0.83+0.1*marbleLayer(localX,localY,localZ,0.43,0.3)-0.34*clamp(1-abs(sin(0.61*localX+0.2*localY+0.37*localZ+2.2*marbleLayer(localX,localY,localZ,0.78,0.8))+0.42*sin(1.17*localX-0.73*localY+0.88*localZ+0.8*marbleLayer(localX,localY,localZ,1.37,2.1)))/0.72,0,1)-0.1*clamp(1-abs(sin(2.03*localX-1.31*localY+1.57*localZ+0.31*sin(3.7*localY-2.2*localZ)))/0.26,0,1),0.28,1)
 }
 folder Rotated lighting and stone surface = {
   expression rolledLightX = rotateA(-0.42,0.74,0-zAngle)
@@ -543,39 +534,24 @@ folder Rotated lighting and stone surface = {
   expression objectLightX = rotateA(rolledLightX,pitchedLightZ,0-yAngle)
   expression objectLightY = pitchedLightY
   expression objectLightZ = rotateB(rolledLightX,pitchedLightZ,0-yAngle)
-  expression lightXP = 0.34+0.66*clamp(objectLightX,0,1)
-  expression lightXN = 0.34+0.66*clamp(0-objectLightX,0,1)
-  expression lightYP = 0.34+0.66*clamp(objectLightY,0,1)
-  expression lightYN = 0.34+0.66*clamp(0-objectLightY,0,1)
-  expression lightZP = 0.34+0.66*clamp(objectLightZ,0,1)
-  expression lightZN = 0.34+0.66*clamp(0-objectLightZ,0,1)
-  colour marbleXP = (50+202*x)*lightXP~(55+196*x)*lightXP~(61+190*x)*lightXP
-  colour marbleXN = (50+202*x)*lightXN~(55+196*x)*lightXN~(61+190*x)*lightXN
-  colour marbleYP = (50+202*x)*lightYP~(55+196*x)*lightYP~(61+190*x)*lightYP
-  colour marbleYN = (50+202*x)*lightYN~(55+196*x)*lightYN~(61+190*x)*lightYN
-  colour marbleZP = (50+202*x)*lightZP~(55+196*x)*lightZP~(61+190*x)*lightZP
-  colour marbleZN = (50+202*x)*lightZN~(55+196*x)*lightZN~(61+190*x)*lightZN
+  expression lightXP = 0.62+0.38*clamp(objectLightX,0,1)
+  expression lightXN = 0.62+0.38*clamp(0-objectLightX,0,1)
+  expression lightYP = 0.62+0.38*clamp(objectLightY,0,1)
+  expression lightYN = 0.62+0.38*clamp(0-objectLightY,0,1)
+  expression lightZP = 0.62+0.38*clamp(objectLightZ,0,1)
+  expression lightZN = 0.62+0.38*clamp(0-objectLightZ,0,1)
+  colour marbleXP = (124+131*x)*lightXP~(128+126*x)*lightXP~(132+120*x)*lightXP
+  colour marbleXN = (124+131*x)*lightXN~(128+126*x)*lightXN~(132+120*x)*lightXN
+  colour marbleYP = (124+131*x)*lightYP~(128+126*x)*lightYP~(132+120*x)*lightYP
+  colour marbleYN = (124+131*x)*lightYN~(128+126*x)*lightYN~(132+120*x)*lightYN
+  colour marbleZP = (124+131*x)*lightZP~(128+126*x)*lightZP~(132+120*x)*lightZP
+  colour marbleZN = (124+131*x)*lightZN~(128+126*x)*lightZN~(132+120*x)*lightZN
   draw(stoneCloud,colour=marbleXP,boundary=showXP)
   draw(stoneCloud,colour=marbleXN,boundary=showXN)
   draw(stoneCloud,colour=marbleYP,boundary=showYP)
   draw(stoneCloud,colour=marbleYN,boundary=showYN)
   draw(stoneCloud,colour=marbleZP,boundary=showZP)
   draw(stoneCloud,colour=marbleZN,boundary=showZN)
-  colour deepMineral = 50+22*x~57+23*x~63+25*x
-  transparency deepMineralFade = clamp(1-0.09*x,0.91,1)
-  draw(majorInk,colour=deepMineral,boundary=cubeVisible,transparency=deepMineralFade)
-  colour branchingMineral = 71+25*x~77+26*x~83+28*x
-  transparency branchingMineralFade = clamp(1-0.06*x,0.94,1)
-  draw(branchInk,colour=branchingMineral,boundary=cubeVisible,transparency=branchingMineralFade)
-  colour hairlineMineral = 63~70~75
-  transparency hairlineMineralFade = clamp(1-0.03*x,0.97,1)
-  draw(hairInk,colour=hairlineMineral,boundary=cubeVisible,transparency=hairlineMineralFade)
-  colour crystalColour = 224~227~228
-  transparency crystalFade = clamp(1-0.035*x,0.965,1)
-  draw(crystalGrain,colour=crystalColour,boundary=cubeVisible,transparency=crystalFade)
-  colour speckColour = 49~56~62
-  transparency speckFade = clamp(1-0.03*x,0.97,1)
-  draw(mineralSpeck,colour=speckColour,boundary=cubeVisible,transparency=speckFade)
 }
 folder Cube edges = {
   expression edgeX = min(faceX,0.075-min(cubeSize-abs(localY),cubeSize-abs(localZ)))
@@ -589,9 +565,12 @@ folder Cube edges = {
 };
 
 for (const link of document.querySelectorAll("[data-sample]")) {
-  const scene = sampleScenes[link.dataset.sample];
+  const sampleId = link.dataset.sample;
+  const scene = sampleScenes[sampleId];
   if (!scene) continue;
-  link.href = `./app.html?scene=${encodeURIComponent(scene)}&v=${APP_VERSION}`;
+  link.href = ["fire", "mandelbrot", "tree", "lava", "marble"].includes(sampleId)
+    ? `./app.html?sample=${encodeURIComponent(sampleId)}&v=${APP_VERSION}`
+    : `./app.html?scene=${encodeURIComponent(scene)}&v=${APP_VERSION}`;
 }
 
 for (const link of document.querySelectorAll('[data-launch-blank]')) {

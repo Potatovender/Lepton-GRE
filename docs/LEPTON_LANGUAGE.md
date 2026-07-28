@@ -92,11 +92,14 @@ Channels are separated by `~`, accept full expressions, and are clamped to displ
 ## Boundaries
 
 ```text
-boundary inside = circle~True
-boundary outside = circle~False
+boundary inside = 0-circle
+boundary outside = circle
 ```
 
-`True` draws where the boundary expression is less than or equal to zero. `False` draws where it is greater than or equal to zero. A boundary ID can also be used as a piecewise condition.
+A boundary draws where its expression is greater than or equal to zero. Negate the
+expression to draw the opposite region. Boundary expressions are edited directly,
+just like colour channels and transparency expressions. A boundary ID can also be
+used as a piecewise condition.
 
 ## Transparency
 

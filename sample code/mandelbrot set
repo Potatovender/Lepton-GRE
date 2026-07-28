@@ -10,5 +10,5 @@ expression one = 1
 expression combined = real^2+imaginary^2
 expression rest = combined-4
 colour rgb = one~one~one
-boundary rest = rest~True
+boundary rest = 0-(rest)
 draw(combined,colour=rgb,boundary=rest)

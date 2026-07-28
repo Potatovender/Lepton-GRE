@@ -6,7 +6,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260722-saved-preview-recovery3";
+const cacheVersion = "20260728-boundary-sample-loader-marble";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -81,7 +81,7 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(
   source.replace(/^import .*expression-syntax\.js";\s*/, "").replace(
-    /loadSceneFromUrl\(\);\s*sceneHistory\.last = sceneSnapshot\(\);\s*renderApp\(\);/,
+    /loadSceneFromUrl\(\)\.then\(\(\) => \{\s*sceneHistory\.last = sceneSnapshot\(\);\s*renderApp\(\);\s*\}\);/,
     "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; }; globalThis.__debugSetDisplayMode = (mode) => { displayMode = mode; }; globalThis.__debugPlayTime = (id) => { playingTimeIds.add(id); timeVariableDirections.set(id, 1); };"
   ),
   sandbox
@@ -131,7 +131,16 @@ check("the Lava Lamp and Marble Cube samples are linked from the landing menu", 
   assert(landingSource.includes("folder Object space marble"), "Marble Cube Sample scene missing");
   assert(landingSource.includes("slider yAngle") && landingSource.includes("slider xAngle") && landingSource.includes("slider zAngle"), "Marble Cube rotation controls missing");
   assert(landingSource.includes("function rotateA") && landingSource.includes("function rotateB"), "Marble Cube rotation helpers missing");
-  assert(landingSource.includes("expression stoneCloud") && landingSource.includes("expression majorInk"), "Marble Cube continuous material missing");
+  assert(landingSource.includes("expression stoneCloud"), "Marble Cube continuous material missing");
+});
+
+check("file-backed samples use compact URLs instead of embedding their scenes", () => {
+  assert(landingSource.includes('["fire", "mandelbrot", "tree", "lava", "marble"]'), "Compact sample link list missing");
+  assert(landingSource.includes("?sample=${encodeURIComponent(sampleId)}"), "Compact sample URL missing");
+  assert(source.includes('tree: "tree"'), "Tree sample loader mapping missing");
+  assert(source.includes('lava: "lava lamp"'), "Lava sample loader mapping missing");
+  assert(source.includes('marble: "marble cube"'), "Marble sample loader mapping missing");
+  assert(source.includes("fetch(`./sample%20code/"), "Sample file fetch missing");
 });
 
 check("copyable sample files import with the current grammar", () => {
@@ -649,7 +658,7 @@ set background_color = 0`);
   assert(exported.startsWith("set x_min = -15\nset x_max = 15"), exported);
   assert(exported.includes("\nexpression f1 = x+y"), exported);
   assert(exported.includes("\ncolour c1 = f1~f1~f1"), exported);
-  assert(exported.includes("\nboundary r1 = f1~False"), exported);
+  assert(exported.includes("\nboundary r1 = f1"), exported);
   assert(exported.includes("\ndraw(f1,colour=c1,boundary=r1)"), exported);
 });
 
@@ -663,7 +672,7 @@ draw(f1,c1,r1,true)`);
   assert(imported.settings.angleMode === "radians", JSON.stringify(imported.settings));
   assert(imported.settings.maxRecursion === 33, JSON.stringify(imported.settings));
   assert(imported.colors[0].id === "c1", JSON.stringify(imported.colors));
-  assert(imported.restrictions[0].checkSmaller === true, JSON.stringify(imported.restrictions));
+  assert(imported.restrictions[0].expression === "0-(f1)", JSON.stringify(imported.restrictions));
   assert(imported.draws[0].hidden === true, JSON.stringify(imported.draws));
 });
 
@@ -810,7 +819,7 @@ draw(eq,rgb,rest,False) // inline draw`);
   const exported = sandbox.exportScene();
   assert(exported.includes("// helper note\nexpression eq = x+y // inline equation"), exported);
   assert(exported.includes("// palette note\ncolour rgb = eq~eq~eq // inline colour"), exported);
-  assert(exported.includes("// gate note\nboundary rest = rest_fn~False // inline boundary"), exported);
+  assert(exported.includes("// gate note\nboundary rest = 1 // inline boundary"), exported);
   assert(exported.includes("// layer note\ndraw(eq,colour=rgb,boundary=rest) // inline draw"), exported);
   assert(!exported.includes("// functions:"), exported);
   assert(!exported.includes("// colors:"), exported);
@@ -952,7 +961,7 @@ expression later = y`);
   const laterIndex = exported.indexOf("expression later = y");
   assert(colorIndex !== -1 && eqIndex !== -1 && laterIndex !== -1, exported);
   assert(colorIndex < eqIndex, exported);
-  assert(exported.includes("// note before boundary\nboundary rest = rest_fn~False"), exported);
+  assert(exported.includes("// note before boundary\nboundary rest = 1"), exported);
 });
 
 check("nested folders round-trip without changing contained data", () => {
@@ -1071,7 +1080,7 @@ check("status indicators expose diagnostic reasons as hover text", () => {
 });
 
 check("piecewise expressions support boolean and boundary conditions", () => {
-  sandbox.__debugSetScene(sandbox.importScene("boundary positive = x~False"));
+  sandbox.__debugSetScene(sandbox.importScene("boundary positive = x"));
   const env=sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
   const fn=sandbox.compileExpression("{x>0:1,x<0:-1,0}");
   assert(fn(2,0,env)===1 && fn(-2,0,env)===-1 && fn(0,0,env)===0);
@@ -1079,6 +1088,25 @@ check("piecewise expressions support boolean and boundary conditions", () => {
   assert(Number.isNaN(sandbox.compileExpression("{x>0:1}")(-1,0,env)));
   assert(sandbox.expressionToGlsl("{x>0:1,0}",sandbox.sceneFunctionEnv(true)).includes("?"));
   assert(sandbox.textModeExpression("\\left\\{x=1:0,1\\right\\}")==="{x=1:0,1}");
+});
+
+check("boundaries edit and export as direct expressions", () => {
+  const imported = sandbox.importScene("boundary positive = x+1");
+  sandbox.__debugSetScene(imported);
+  assert(imported.restrictions[0].expression === "x+1", JSON.stringify(imported.restrictions[0]));
+  const html = sandbox.dataRowContent("restrictions", imported.restrictions[0], 0);
+  assert(html.includes("mathquill-field"), html);
+  assert(!html.includes("reference-picker"), html);
+  assert(!html.includes('type="checkbox"'), html);
+  assert(sandbox.exportScene().includes("boundary positive = x+1"), sandbox.exportScene());
+  assert(!sandbox.exportScene().includes("~False"), sandbox.exportScene());
+});
+
+check("legacy boundary booleans preserve their drawn region", () => {
+  const positive = sandbox.importScene("boundary positive = x~False");
+  const negative = sandbox.importScene("boundary negative = x~True");
+  assert(positive.restrictions[0].expression === "x", JSON.stringify(positive.restrictions[0]));
+  assert(negative.restrictions[0].expression === "0-(x)", JSON.stringify(negative.restrictions[0]));
 });
 
 check("points and grid settings round-trip through text", () => {

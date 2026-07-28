@@ -43,7 +43,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260722-saved-preview-recovery3";
+const APP_VERSION = "20260728-boundary-sample-loader-marble";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -216,8 +216,15 @@ const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
 const NODE_COUNT_DISPLAY_CAP = 2 ** 16;
 const DEFAULT_DRAW_FUNCTION = { id: "f1", kind: "variable", expression: "x" };
 const DEFAULT_DRAW_COLOR = { id: "default", label: "default", red: "x", green: "x", blue: "x" };
-const DEFAULT_DRAW_BOUNDARY = { id: "default", label: "default", expression: "1", checkSmaller: false };
+const DEFAULT_DRAW_BOUNDARY = { id: "default", label: "default", expression: "1" };
 const DEFAULT_DRAW_TRANSPARENCY = { id: "default", label: "default", expression: "0" };
+const SAMPLE_SCENE_FILES = {
+  fire: "fire",
+  mandelbrot: "mandelbrot set",
+  tree: "tree",
+  lava: "lava lamp",
+  marble: "marble cube"
+};
 const LEGACY_DEFAULT_COLOR_IDS = new Set(["c1"]);
 const LEGACY_DEFAULT_BOUNDARY_IDS = new Set(["rest"]);
 const FUNCTION_ENTRY_KINDS = new Set(["variable", "slider", "function"]);
@@ -234,7 +241,7 @@ const HELP_TEXT = {
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
   functions: "The Data workspace holds values, colours, boundaries, transparencies, draw layers, points, folders, and comments in one reorderable list.",
   colors: "Colours evaluate red, green, and blue expressions at every coordinate. For example, colour rgb = 255~80+20sin(x)~40 uses one expression per channel.",
-  restrictions: "Boundaries draw only where their referenced value is greater than or equal to zero, or less than or equal to zero when you flip the checkbox.",
+  restrictions: "Boundaries are formulas that draw where their value is greater than or equal to zero. Negate a formula to draw its opposite side.",
   draws: "Draw layers always choose a value to render. Add colour, boundary, or transparency components only when needed; their displayed order is preserved.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
   textLanguage: "Lepton text is the same graph in one copyable script. Colours separate three channel expressions with ~. Draw fields after the value are optional and named, such as colour=sky or transparency=glass.",
@@ -253,7 +260,6 @@ const HELP_TEXT = {
   settingUnboundedDecimals: "How many digits to keep after the decimal point for unbounded time variables while they animate.",
   settingAngleMode: "Chooses whether trig functions read angles as radians or degrees.",
   settingBackgroundColorId: "Choose the color ID used as the solid background when Background color is set to Custom.",
-  boundaryDirection: "Unchecked draws when the function value is greater than or equal to zero. Checked draws when the function value is less than or equal to zero.",
   variableType: "Expression entries are named formulas over x and y. Use them for equations, constants, color channels, and helper math that other entries can reference.",
   sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
   functionType: "Function entries accept named inputs such as wave(x,y). Inside the function body, input names take priority over outer values with the same name.",
@@ -294,7 +300,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "restrictions",
     title: "Step 4: Add a boundary",
-    body: "Boundaries decide where a layer draws. Unchecked draws when the boundary value is >= 0. Checked draws when it is <= 0. Use the default boundary for no restriction."
+    body: "Boundaries are formulas evaluated across the grid. A draw layer appears where its boundary is greater than or equal to zero. Use 0-(formula) for the opposite side, or use the default boundary for no restriction."
   },
   {
     mode: "standard",
@@ -1187,10 +1193,7 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
     `;
   }
   if (kind === "restrictions") {
-    return `
-      <label class="settings-row"><span>Function reference</span>${searchableReference(`restrictions.${index}.expression`, dataEntries(scene.functions), entry.expression, "Boundary function")}</label>
-      <label class="inline-check"><input type="checkbox" data-field="restrictions.${index}.checkSmaller" ${entry.checkSmaller ? "checked" : ""} /> draw when less than or equal to 0 ${helpMark("boundaryDirection")}</label>
-    `;
+    return `<label class="settings-row"><span>function</span>${mathEditor(`restrictions.${index}.expression`, normalizedBoundaryExpression(entry), "Boundary function", true, "draw where this is greater than or equal to 0")}</label>`;
   }
   if (kind === "transparencies") {
     return `<label class="settings-row"><span>function</span>${mathEditor(`transparencies.${index}.expression`, entry.expression, "Transparency function", true, "0 to 1; x is the draw value")}</label>`;
@@ -3685,9 +3688,20 @@ function resolveColorEntry(id) {
     (id === DEFAULT_DRAW_COLOR.id || LEGACY_DEFAULT_COLOR_IDS.has(id) ? DEFAULT_DRAW_COLOR : null);
 }
 
+function normalizedBoundaryExpression(entry) {
+  const expression = String(entry?.expression ?? "1").trim() || "1";
+  return entry?.checkSmaller ? `0-(${expression})` : expression;
+}
+
+function legacyBoundaryExpression(expression, flag = "False") {
+  const normalized = convertDivisionsToFrac(String(expression ?? "1").trim() || "1");
+  return parseLeptonBoolean(flag) ? `0-(${normalized})` : normalized;
+}
+
 function resolveBoundaryEntry(id) {
-  return dataEntries(scene.restrictions).find((entry) => entry.id === id) ??
+  const entry = dataEntries(scene.restrictions).find((item) => item.id === id) ??
     (id === DEFAULT_DRAW_BOUNDARY.id || LEGACY_DEFAULT_BOUNDARY_IDS.has(id) ? DEFAULT_DRAW_BOUNDARY : null);
+  return entry ? { ...entry, expression: normalizedBoundaryExpression(entry) } : null;
 }
 
 function resolveTransparencyEntry(id) {
@@ -3756,7 +3770,7 @@ function defaultEntryForKind(kind) {
     return { id: nextEntryId(scene.colors, "c"), red: "0", green: "0", blue: "0" };
   }
   if (kind === "restrictions") {
-    return { id: nextEntryId(scene.restrictions, "r"), expression: firstDataId(scene.functions), checkSmaller: false };
+    return { id: nextEntryId(scene.restrictions, "r"), expression: "" };
   }
   if (kind === "transparencies") return { id: nextEntryId(scene.transparencies, "a"), expression: "0" };
   if (kind === "draws") {
@@ -3784,7 +3798,7 @@ function convertedEntryForKind(targetKind, sourceEntry, targetSubtype = "variabl
     return { id: sourceId || nextEntryId(scene.colors, "c"), red: expression || "0", green: expression || "0", blue: expression || "0", ...comment };
   }
   if (targetKind === "restrictions") {
-    return { id: sourceId || nextEntryId(scene.restrictions, "r"), expression: expression || firstDataId(scene.functions), checkSmaller: false, ...comment };
+    return { id: sourceId || nextEntryId(scene.restrictions, "r"), expression, ...comment };
   }
   if (targetKind === "transparencies") return { id: sourceId || nextEntryId(scene.transparencies, "a"), expression: expression || "0", ...comment };
   if (targetKind === "draws") {
@@ -4158,7 +4172,7 @@ function renderSceneCpuInto(canvas, options = {}) {
         const boundaryValue = boundary(x, y, env);
         if (fn.kind === "function") env.__locals = previousLocals;
         if (!Number.isFinite(boundaryValue)) continue;
-        if (restriction.checkSmaller ? boundaryValue > 0 : boundaryValue < 0) continue;
+        if (boundaryValue < 0) continue;
 
         if (fn.kind === "function") {
           env.__locals = Object.fromEntries(fn.params.map((param) => [param, param === "x" ? x : param === "y" ? y : 0]));
@@ -4385,7 +4399,7 @@ function buildFragmentShader() {
           blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode, dynamicMap),
           bound: expressionToGlsl(restriction.expression, env, null, [], scene.settings.angleMode, dynamicMap),
           transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode, dynamicMap),
-          boundCheck: restriction.checkSmaller ? "boundValue <= 0.0" : "boundValue >= 0.0"
+          boundCheck: "boundValue >= 0.0"
         };
       } catch {
         return null;
@@ -4898,7 +4912,7 @@ function rewritePointSelectors(expression, build) {
   return output;
 }
 function splitTopLevelText(source, separator){const out=[];let start=0,depth=0;for(let i=0;i<source.length;i++){if("({[".includes(source[i]))depth++;else if(")}]".includes(source[i]))depth--;else if(source[i]===separator&&depth===0){out.push(source.slice(start,i));start=i+1;}}out.push(source.slice(start));return out;}
-function resolvePiecewiseCondition(condition){const boundary=dataEntries(scene.restrictions).find(r=>r.id===condition.trim());if(!boundary)return condition;return `(${boundary.expression})${boundary.checkSmaller?"<=":">="}0`;}
+function resolvePiecewiseCondition(condition){const boundary=resolveBoundaryEntry(condition.trim());if(!boundary)return condition;return `(${boundary.expression})>=0`;}
 
 function normalizeGlslNumbers(expression) {
   return expression.replaceAll(/\b\d+(?:\.\d+)?\b/g, (match) => (match.includes(".") ? match : `${match}.0`));
@@ -7404,10 +7418,7 @@ function exportColorEntry(entry) {
 
 function exportRestrictionEntry(entry) {
   if (isCommentEntry(entry)) return exportStandaloneComment(entry, "restrictions");
-  return appendInlineComment(
-    `boundary ${entry.id} = ${textModeExpression(entry.expression)}~${formatLeptonBoolean(entry.checkSmaller)}`,
-    entry.comment
-  );
+  return appendInlineComment(`boundary ${entry.id} = ${textModeExpression(normalizedBoundaryExpression(entry))}`, entry.comment);
 }
 
 function exportTransparencyEntry(entry) {
@@ -7619,7 +7630,7 @@ function importScene(raw) {
       const [expression = "1", flag = "0"] = rest.split("~");
       flushPendingComments("restrictions");
       currentCommentSection = "restrictions";
-      pushDataEntry(next, "restrictions", withInlineComment({ id, expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
+      pushDataEntry(next, "restrictions", withInlineComment({ id, expression: legacyBoundaryExpression(expression, flag) }, comment));
     } else if (line.startsWith("D~")) {
       const [, equationId, colorId, restrictionId, hidden = "0"] = line.split("~");
       flushPendingComments("draws");
@@ -7698,7 +7709,7 @@ function importScene(raw) {
         const [expression = "1", flag = "False"] = assignment[2].split("~").map((part) => part.trim());
         flushPendingComments("restrictions");
         currentCommentSection = "restrictions";
-        pushDataEntry(next, "restrictions", withInlineComment({ id: assignment[1], expression: convertDivisionsToFrac(expression), checkSmaller: parseLeptonBoolean(flag) }, comment));
+        pushDataEntry(next, "restrictions", withInlineComment({ id: assignment[1], expression: legacyBoundaryExpression(expression, flag) }, comment));
       }
     } else if (/^transparency\s+/i.test(line)) {
       const assignment = line.match(/^transparency\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
@@ -7747,24 +7758,6 @@ function importScene(raw) {
 }
 
 function normalizeSceneReferences(next) {
-  const hasFunction = (id) => dataEntries(next.functions).some((entry) => entry.id === id);
-  const ensureFunction = (preferredId, expression) => {
-    const trimmed = String(expression ?? "").trim();
-    if (hasFunction(trimmed)) return trimmed;
-    let id = preferredId;
-    let suffix = 2;
-    while (hasFunction(id)) {
-      id = `${preferredId}${suffix}`;
-      suffix += 1;
-    }
-    pushDataEntry(next, "functions", { id, kind: "variable", expression: trimmed || "0" });
-    return id;
-  };
-
-  next.restrictions.forEach((restriction) => {
-    if (isCommentEntry(restriction)) return;
-    restriction.expression = ensureFunction(`${restriction.id}_fn`, restriction.expression);
-  });
   next.points.forEach((point) => {
     if (!point.colorId || (point.colorId !== "default" && !dataEntries(next.colors).some((color) => color.id === point.colorId))) point.colorId = "default";
   });
@@ -8494,13 +8487,27 @@ if (typeof URLSearchParams !== "undefined" && window.location && new URLSearchPa
   document.body.classList.add("capture-mode");
 }
 
-loadSceneFromUrl();
-sceneHistory.last = sceneSnapshot();
-renderApp();
+loadSceneFromUrl().then(() => {
+  sceneHistory.last = sceneSnapshot();
+  renderApp();
+});
 
-function loadSceneFromUrl() {
+async function loadSceneFromUrl() {
   try {
     const params = new URLSearchParams(window.location.search);
+    const sampleId = params.get("sample");
+    if (sampleId && SAMPLE_SCENE_FILES[sampleId]) {
+      const sampleVersion = params.get("v") || APP_VERSION;
+      const response = await fetch(`./sample%20code/${encodeURIComponent(SAMPLE_SCENE_FILES[sampleId])}?v=${encodeURIComponent(sampleVersion)}`);
+      if (!response.ok) throw new Error(`Sample request failed (${response.status})`);
+      scene = importScene(await response.text());
+      viewport = sceneViewport();
+      saveViewport();
+      sceneHistory.undo = [];
+      sceneHistory.redo = [];
+      sceneHistory.last = sceneSnapshot();
+      return;
+    }
     const encodedScene = params.get("scene");
     if (!encodedScene) return;
     scene = importScene(encodedScene);

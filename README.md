@@ -51,7 +51,7 @@ set y_min = -10
 set y_max = 10
 expression wave = sin(x)+cos(y)
 colour ocean = 40+20*wave~120+35*wave~210
-boundary visible = 1~False
+boundary visible = 1
 draw(wave,colour=ocean,boundary=visible)
 ```
 

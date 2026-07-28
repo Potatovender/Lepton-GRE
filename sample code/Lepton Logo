@@ -26,13 +26,13 @@ expression outline2 = spine-0.08
 expression outline3 = leg-0.08
 colour rgb = 255*e^(-0.02*x)~230*cos(frac{x}{70})~255
 colour black = 1~1~1
-boundary rest1 = spine~True
-boundary rest2 = leg~True
-boundary rest3 = black~True
-boundary border = f8~False
-boundary outline = outline1~True
-boundary outline2 = outline2~True
-boundary outline3 = outline3~True
+boundary rest1 = 0-(spine)
+boundary rest2 = 0-(leg)
+boundary rest3 = 0-(black)
+boundary border = f8
+boundary outline = 0-(outline1)
+boundary outline2 = 0-(outline2)
+boundary outline3 = 0-(outline3)
 draw(black,colour=black,boundary=outline)
 draw(rad,colour=black,boundary=outline2)
 draw(rad,colour=black,boundary=outline3)
