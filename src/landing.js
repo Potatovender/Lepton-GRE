@@ -288,6 +288,303 @@ folder Discontinuous foliage = {
   colour glintColour = 165~191~94
   transparency glintFade = clamp(1-72*x,0.74,1)
   draw(leafGlints,colour=glintColour,boundary=insideCrown,transparency=glintFade)
+}`,
+  lava: `set x_min = -10
+set x_max = 10
+set y_min = -10
+set y_max = 10
+set max_recursion = 100
+set angle_mode = radians
+set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
+set show_coordinate_grid = False
+set show_grid = False
+set show_x_axis = False
+set show_y_axis = False
+set show_x_numbers = False
+set show_y_numbers = False
+set unbounded_decimal_places = 3
+set random_seed = 491702
+folder Animation = {
+  time bounded_looped t = 0 range 0~24 speed 0.65
+  expression phase = pi*t/12
+}
+folder Shape helpers = {
+  function ellipseLamp(px,py,cx,cy,rx,ry) = 1-frac{(px-cx)^2}{rx^2}-frac{(py-cy)^2}{ry^2}
+  function taperLamp(px,py,y0,y1,w0,w1) = min(min(py-y0,y1-py),w0+(w1-w0)*frac{py-y0}{y1-y0}-abs(px))
+  function lavaBlob(px,py,cx,cy,rx,ry) = frac{1}{e^(frac{(px-cx)^2}{rx^2}+frac{(py-cy)^2}{ry^2})}
+}
+folder Dark room = {
+  expression room = y
+  colour roomColour = 9+2*clamp(x,0,1)~8+1.5*clamp(x,0,1)~14+3*clamp(x,0,1)
+  draw(room,colour=roomColour)
+  expression wallGlow = lavaBlob(x,y,0,-0.2,5.2,7.2)
+  colour wallGlowColour = 92+76*clamp(x,0,1)~20+34*clamp(x,0,1)~28+24*clamp(x,0,1)
+  transparency wallGlowFade = clamp(0.99-0.22*clamp(x,0,1),0.77,1)
+  draw(wallGlow,colour=wallGlowColour,transparency=wallGlowFade)
+  expression table = -7.2-y
+  colour tableColour = 17+7*clamp(x,0,1)~13+5*clamp(x,0,1)~17+6*clamp(x,0,1)
+  transparency tableFade = clamp(1-22*x,0,1)
+  draw(table,colour=tableColour,transparency=tableFade)
+  expression lampShadow = min(table+0.1,ellipseLamp(x,y,0.4,-7.16,4.3,0.55))
+  colour lampShadowColour = 2~2~4
+  transparency lampShadowFade = clamp(1-10*x,0.36,1)
+  draw(lampShadow,colour=lampShadowColour,transparency=lampShadowFade)
+  expression tableGlow = min(table+0.08,ellipseLamp(x,y,0,-7.12,3.1,0.34))
+  colour tableGlowColour = 100~24~22
+  transparency tableGlowFade = clamp(1-7*x,0.76,1)
+  draw(tableGlow,colour=tableGlowColour,transparency=tableGlowFade)
+}
+folder Glass chamber = {
+  expression glassWidth = 1.76-0.052*(y+4.6)
+  expression vessel = min(min(y+4.65,6.25-y),glassWidth-abs(x))
+  boundary vesselInside = vessel~False
+  expression liquidBackdrop = vessel
+  colour liquidBackdropColour = 38+26*clamp(x,0,1)~7+10*clamp(x,0,1)~15+18*clamp(x,0,1)
+  transparency liquidBackdropFade = clamp(0.9-0.28*clamp(x,0,1),0.58,0.92)
+  draw(liquidBackdrop,colour=liquidBackdropColour,transparency=liquidBackdropFade)
+}
+folder Lava motion = {
+  expression lavaAX = 0.36*sin(phase-0.4)+0.13*sin(2*phase)
+  expression lavaAY = -2.65+6.65*(0.5+0.5*sin(phase-1.05))
+  expression lavaBX = -0.48*sin(phase+0.85)+0.1*cos(2*phase)
+  expression lavaBY = -2.45+6.15*(0.5+0.5*sin(phase+1.72))
+  expression lavaCX = 0.62*sin(phase+2.15)
+  expression lavaCY = -2.85+5.8*(0.5+0.5*sin(phase+3.78))
+  expression lavaDX = -0.3+0.37*sin(2*phase+0.3)
+  expression lavaDY = -2.9+6.4*(0.5+0.5*sin(phase+5.1))
+  expression bottomHeat = lavaBlob(x,y,0,-3.95,1.34,0.72)
+  expression topCooling = 0.52*lavaBlob(x,y,0.08,5.35,1.02,0.58)
+  expression movingA = lavaBlob(x+0.055*sin(1.4*y+phase),y,lavaAX,lavaAY,0.64+0.12*sin(phase)^2,1.06+0.22*cos(phase)^2)
+  expression movingB = lavaBlob(x-0.045*sin(1.1*y-phase),y,lavaBX,lavaBY,0.54+0.1*cos(phase)^2,0.92+0.25*sin(phase)^2)
+  expression movingC = lavaBlob(x+0.04*sin(1.8*y+phase),y,lavaCX,lavaCY,0.43+0.08*sin(2*phase)^2,0.72+0.18*cos(phase)^2)
+  expression movingD = lavaBlob(x-0.035*sin(1.6*y-phase),y,lavaDX,lavaDY,0.36+0.07*cos(phase)^2,0.65+0.15*sin(phase)^2)
+  expression lavaField = bottomHeat+topCooling+0.92*movingA+0.82*movingB+0.66*movingC+0.58*movingD-0.61
+  colour lavaBodyColour = 180+104*clamp(x,0,0.62)~19+97*clamp(x,0,0.62)~9+31*clamp(x,0,0.62)
+  transparency lavaBodyFade = clamp(1-26*x,0.015,1)
+  draw(lavaField,colour=lavaBodyColour,boundary=vesselInside,transparency=lavaBodyFade)
+  expression lavaCore = lavaField-0.28
+  colour lavaCoreColour = 255~87+96*clamp(x,0,0.4)~22+28*clamp(x,0,0.4)
+  transparency lavaCoreFade = clamp(1-34*x,0.28,1)
+  draw(lavaCore,colour=lavaCoreColour,boundary=vesselInside,transparency=lavaCoreFade)
+  expression lavaSkin = min(lavaField,0.12-lavaField)
+  colour lavaSkinColour = 255~140~52
+  transparency lavaSkinFade = clamp(1-46*x,0.46,1)
+  draw(lavaSkin,colour=lavaSkinColour,boundary=vesselInside,transparency=lavaSkinFade)
+  expression lavaHotSpot = min(lavaCore,lavaBlob(x,y,lavaAX-0.18,lavaAY+0.16,0.3,0.62)-0.44)
+  colour lavaHotSpotColour = 255~207~104
+  transparency lavaHotSpotFade = clamp(1-38*x,0.58,1)
+  draw(lavaHotSpot,colour=lavaHotSpotColour,boundary=vesselInside,transparency=lavaHotSpotFade)
+}
+folder Glass reflections = {
+  expression glassRim = min(vessel,0.085-vessel)
+  colour glassRimColour = 185+60*clamp(x,0,0.22)~82+65*clamp(x,0,0.22)~101+76*clamp(x,0,0.22)
+  transparency glassRimFade = clamp(1-44*x,0.52,1)
+  draw(glassRim,colour=glassRimColour,transparency=glassRimFade)
+  expression leftReflection = min(vessel,0.095-abs(x+0.78-0.022*y))
+  colour leftReflectionColour = 255~174~177
+  transparency leftReflectionFade = clamp(1-20*x,0.83,1)
+  draw(leftReflection,colour=leftReflectionColour,boundary=vesselInside,transparency=leftReflectionFade)
+  expression softReflection = min(vessel,0.28-abs(x+0.58-0.018*y))
+  colour softReflectionColour = 189~76~91
+  transparency softReflectionFade = clamp(1-6*x,0.91,1)
+  draw(softReflection,colour=softReflectionColour,boundary=vesselInside,transparency=softReflectionFade)
+}
+folder Metal base and cap = {
+  expression base = max(taperLamp(x,y,-7.15,-4.35,2.55,1.7),ellipseLamp(x,y,0,-6.9,2.52,0.58))
+  boundary baseInside = base~False
+  colour baseColour = 36+46*clamp(x,0,0.75)~25+26*clamp(x,0,0.75)~30+28*clamp(x,0,0.75)
+  transparency baseFade = clamp(1-24*x,0,1)
+  draw(base,colour=baseColour,transparency=baseFade)
+  expression baseShade = min(base,0.22-x)
+  colour baseShadeColour = 10~8~13
+  transparency baseShadeFade = clamp(1-9*x,0.42,1)
+  draw(baseShade,colour=baseShadeColour,boundary=baseInside,transparency=baseShadeFade)
+  expression baseHighlight = min(base,0.18-abs(x+0.72))
+  colour baseHighlightColour = 116~62~66
+  transparency baseHighlightFade = clamp(1-12*x,0.71,1)
+  draw(baseHighlight,colour=baseHighlightColour,boundary=baseInside,transparency=baseHighlightFade)
+  expression baseLip = min(base,0.11-abs(y+4.5))
+  colour baseLipColour = 92~51~57
+  transparency baseLipFade = clamp(1-28*x,0.38,1)
+  draw(baseLip,colour=baseLipColour,boundary=baseInside,transparency=baseLipFade)
+  expression cap = max(taperLamp(x,y,6.05,8.25,1.32,0.28),ellipseLamp(x,y,0,6.08,1.34,0.25))
+  boundary capInside = cap~False
+  colour capColour = 38+42*clamp(x,0,0.7)~25+25*clamp(x,0,0.7)~31+27*clamp(x,0,0.7)
+  transparency capFade = clamp(1-25*x,0,1)
+  draw(cap,colour=capColour,transparency=capFade)
+  expression capShade = min(cap,0.16-x)
+  colour capShadeColour = 11~8~13
+  transparency capShadeFade = clamp(1-10*x,0.44,1)
+  draw(capShade,colour=capShadeColour,boundary=capInside,transparency=capShadeFade)
+  expression capHighlight = min(cap,0.12-abs(x+0.48))
+  colour capHighlightColour = 105~57~64
+  transparency capHighlightFade = clamp(1-14*x,0.72,1)
+  draw(capHighlight,colour=capHighlightColour,boundary=capInside,transparency=capHighlightFade)
+}`,
+  marble: `set x_min = -8
+set x_max = 8
+set y_min = -8
+set y_max = 8
+set max_recursion = 100
+set angle_mode = radians
+set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
+set show_coordinate_grid = False
+set show_grid = False
+set show_x_axis = False
+set show_y_axis = False
+set show_x_numbers = False
+set show_y_numbers = False
+set unbounded_decimal_places = 3
+set random_seed = 803417
+folder Rotation controls = {
+  slider yAngle = 0.65 range -3.14~3.14
+  slider xAngle = 0.45 range -1.57~1.57
+  slider zAngle = -0.12 range -3.14~3.14
+}
+folder Rotation and material functions = {
+  function rotateA(u,v,angle) = cos(angle)*u-sin(angle)*v
+  function rotateB(u,v,angle) = sin(angle)*u+cos(angle)*v
+  function marbleLayer(px,py,pz,scale,phase) = 0.52*sin(scale*(0.73*px+0.31*py+0.52*pz)+phase+0.35*sin(scale*(0.27*px-0.81*py+0.44*pz)+1.7*phase))+0.31*sin(scale*(-0.41*px+0.86*py+0.23*pz)-1.3*phase+0.28*cos(scale*(0.64*px+0.17*py-0.71*pz)))+0.17*cos(scale*(0.19*px-0.48*py+0.91*pz)+0.7*phase)
+}
+folder Scene = {
+  expression room = y
+  colour roomColour = 14+2*clamp(x,0,1)~16+2*clamp(x,0,1)~20+3*clamp(x,0,1)
+  draw(room,colour=roomColour)
+  expression backdropGlow = frac{1}{e^(frac{x^2}{34}+frac{(y-0.4)^2}{48})}
+  colour backdropGlowColour = 63+38*clamp(x,0,1)~69+40*clamp(x,0,1)~77+43*clamp(x,0,1)
+  transparency backdropGlowFade = clamp(0.98-0.16*clamp(x,0,1),0.82,1)
+  draw(backdropGlow,colour=backdropGlowColour,transparency=backdropGlowFade)
+  expression basePlane = -4.55-y
+  colour floorColour = 20+12*clamp(x,0,1)~22+13*clamp(x,0,1)~25+15*clamp(x,0,1)
+  transparency floorFade = clamp(1-22*x,0,1)
+  draw(basePlane,colour=floorColour,transparency=floorFade)
+  expression baseShadow = min(basePlane+0.08,1-frac{x^2}{20}-frac{(y+4.5)^2}{0.42})
+  colour floorShadowColour = 2~3~4
+  transparency floorShadowFade = clamp(1-8*x,0.32,1)
+  draw(baseShadow,colour=floorShadowColour,transparency=floorShadowFade)
+}
+folder Ray setup = {
+  expression cubeSize = 2.75
+  expression screenX = x
+  expression screenY = y+0.25
+  expression cameraZ = 10
+  expression rolledOX = rotateA(screenX,screenY,0-zAngle)
+  expression rolledOY = rotateB(screenX,screenY,0-zAngle)
+  expression pitchedOY = rotateA(rolledOY,cameraZ,0-xAngle)
+  expression pitchedOZ = rotateB(rolledOY,cameraZ,0-xAngle)
+  expression rayOX = rotateA(rolledOX,pitchedOZ,0-yAngle)
+  expression rayOY = pitchedOY
+  expression rayOZ = rotateB(rolledOX,pitchedOZ,0-yAngle)
+  expression pitchedDY = rotateA(0,-1,0-xAngle)
+  expression pitchedDZ = rotateB(0,-1,0-xAngle)
+  expression rayDX = rotateA(0,pitchedDZ,0-yAngle)
+  expression rayDY = pitchedDY
+  expression rayDZ = rotateB(0,pitchedDZ,0-yAngle)
+  expression invdx = sign(rayDX+0.0001)*e^(-ln(abs(rayDX)+0.001))
+  expression invdy = sign(rayDY+0.0001)*e^(-ln(abs(rayDY)+0.001))
+  expression invdz = sign(rayDZ+0.0001)*e^(-ln(abs(rayDZ)+0.001))
+  expression slabX0 = (0-cubeSize-rayOX)*invdx
+  expression slabX1 = (cubeSize-rayOX)*invdx
+  expression slabY0 = (0-cubeSize-rayOY)*invdy
+  expression slabY1 = (cubeSize-rayOY)*invdy
+  expression slabZ0 = (0-cubeSize-rayOZ)*invdz
+  expression slabZ1 = (cubeSize-rayOZ)*invdz
+  expression rayNear = max(max(min(slabX0,slabX1),min(slabY0,slabY1)),min(slabZ0,slabZ1))
+  expression rayFar = min(min(max(slabX0,slabX1),max(slabY0,slabY1)),max(slabZ0,slabZ1))
+  expression cubeHit = min(rayFar-rayNear,rayNear)
+  boundary cubeVisible = cubeHit~False
+  expression localX = rayOX+rayDX*rayNear
+  expression localY = rayOY+rayDY*rayNear
+  expression localZ = rayOZ+rayDZ*rayNear
+}
+folder Visible faces = {
+  expression distanceX = abs(abs(localX)-cubeSize)
+  expression distanceY = abs(abs(localY)-cubeSize)
+  expression distanceZ = abs(abs(localZ)-cubeSize)
+  expression faceX = min(cubeHit,min(distanceY-distanceX,distanceZ-distanceX))
+  expression faceY = min(cubeHit,min(distanceX-distanceY,distanceZ-distanceY))
+  expression faceZ = min(cubeHit,min(distanceX-distanceZ,distanceY-distanceZ))
+  expression faceXP = min(faceX,localX)
+  expression faceXN = min(faceX,0-localX)
+  expression faceYP = min(faceY,localY)
+  expression faceYN = min(faceY,0-localY)
+  expression faceZP = min(faceZ,localZ)
+  expression faceZN = min(faceZ,0-localZ)
+  boundary showXP = faceXP~False
+  boundary showXN = faceXN~False
+  boundary showYP = faceYP~False
+  boundary showYN = faceYN~False
+  boundary showZP = faceZP~False
+  boundary showZN = faceZN~False
+}
+folder Object space marble = {
+  expression stoneCloud = 0.5+0.24*marbleLayer(localX,localY,localZ,0.52,0.3)+0.13*marbleLayer(localX,localY,localZ,1.07,1.4)+0.07*marbleLayer(localX,localY,localZ,2.13,2.7)
+  expression veinWarp = 1.05*marbleLayer(localX,localY,localZ,0.61,0.8)+0.43*marbleLayer(localX,localY,localZ,1.49,2.1)+0.17*marbleLayer(localX,localY,localZ,3.21,0.2)
+  expression majorDistance = abs(sin(0.66*localX+0.24*localY+0.41*localZ+1.45*veinWarp)+0.31*sin(1.13*localX-0.57*localY+0.82*localZ+0.39*veinWarp))
+  expression branchDistance = abs(sin(1.72*localX-0.83*localY+1.19*localZ+0.62*veinWarp+0.28*sin(3.1*localY-1.7*localZ))+0.22*sin(2.61*localY+1.37*localZ-0.91*localX))
+  expression hairDistance = abs(sin(4.83*localX+2.91*localY-3.77*localZ+0.31*veinWarp)+0.16*sin(7.13*localZ-5.41*localX+1.83*localY))
+  expression majorInk = e^(-((majorDistance/0.22)^2))
+  expression branchInk = e^(-((branchDistance/0.13)^2))
+  expression hairInk = e^(-((hairDistance/0.068)^2))
+  expression crystalGrain = 0.5+0.5*sin(12.7*localX+9.1*localY-10.9*localZ+1.8*sin(4.4*localX-3.7*localY))
+  expression mineralSpeck = 0.5+0.5*sin(23.17*localX+31.11*localY-27.73*localZ+3.4*sin(11.7*localX-8.9*localY+5.3*localZ))
+}
+folder Rotated lighting and stone surface = {
+  expression rolledLightX = rotateA(-0.42,0.74,0-zAngle)
+  expression rolledLightY = rotateB(-0.42,0.74,0-zAngle)
+  expression pitchedLightY = rotateA(rolledLightY,0.52,0-xAngle)
+  expression pitchedLightZ = rotateB(rolledLightY,0.52,0-xAngle)
+  expression objectLightX = rotateA(rolledLightX,pitchedLightZ,0-yAngle)
+  expression objectLightY = pitchedLightY
+  expression objectLightZ = rotateB(rolledLightX,pitchedLightZ,0-yAngle)
+  expression lightXP = 0.34+0.66*clamp(objectLightX,0,1)
+  expression lightXN = 0.34+0.66*clamp(0-objectLightX,0,1)
+  expression lightYP = 0.34+0.66*clamp(objectLightY,0,1)
+  expression lightYN = 0.34+0.66*clamp(0-objectLightY,0,1)
+  expression lightZP = 0.34+0.66*clamp(objectLightZ,0,1)
+  expression lightZN = 0.34+0.66*clamp(0-objectLightZ,0,1)
+  colour marbleXP = (50+202*x)*lightXP~(55+196*x)*lightXP~(61+190*x)*lightXP
+  colour marbleXN = (50+202*x)*lightXN~(55+196*x)*lightXN~(61+190*x)*lightXN
+  colour marbleYP = (50+202*x)*lightYP~(55+196*x)*lightYP~(61+190*x)*lightYP
+  colour marbleYN = (50+202*x)*lightYN~(55+196*x)*lightYN~(61+190*x)*lightYN
+  colour marbleZP = (50+202*x)*lightZP~(55+196*x)*lightZP~(61+190*x)*lightZP
+  colour marbleZN = (50+202*x)*lightZN~(55+196*x)*lightZN~(61+190*x)*lightZN
+  draw(stoneCloud,colour=marbleXP,boundary=showXP)
+  draw(stoneCloud,colour=marbleXN,boundary=showXN)
+  draw(stoneCloud,colour=marbleYP,boundary=showYP)
+  draw(stoneCloud,colour=marbleYN,boundary=showYN)
+  draw(stoneCloud,colour=marbleZP,boundary=showZP)
+  draw(stoneCloud,colour=marbleZN,boundary=showZN)
+  colour deepMineral = 50+22*x~57+23*x~63+25*x
+  transparency deepMineralFade = clamp(1-0.09*x,0.91,1)
+  draw(majorInk,colour=deepMineral,boundary=cubeVisible,transparency=deepMineralFade)
+  colour branchingMineral = 71+25*x~77+26*x~83+28*x
+  transparency branchingMineralFade = clamp(1-0.06*x,0.94,1)
+  draw(branchInk,colour=branchingMineral,boundary=cubeVisible,transparency=branchingMineralFade)
+  colour hairlineMineral = 63~70~75
+  transparency hairlineMineralFade = clamp(1-0.03*x,0.97,1)
+  draw(hairInk,colour=hairlineMineral,boundary=cubeVisible,transparency=hairlineMineralFade)
+  colour crystalColour = 224~227~228
+  transparency crystalFade = clamp(1-0.035*x,0.965,1)
+  draw(crystalGrain,colour=crystalColour,boundary=cubeVisible,transparency=crystalFade)
+  colour speckColour = 49~56~62
+  transparency speckFade = clamp(1-0.03*x,0.97,1)
+  draw(mineralSpeck,colour=speckColour,boundary=cubeVisible,transparency=speckFade)
+}
+folder Cube edges = {
+  expression edgeX = min(faceX,0.075-min(cubeSize-abs(localY),cubeSize-abs(localZ)))
+  expression edgeY = min(faceY,0.075-min(cubeSize-abs(localX),cubeSize-abs(localZ)))
+  expression edgeZ = min(faceZ,0.075-min(cubeSize-abs(localX),cubeSize-abs(localY)))
+  expression cubeEdges = max(max(edgeX,edgeY),edgeZ)
+  colour edgeColour = 48~54~57
+  transparency edgeFade = clamp(1-54*x,0.36,1)
+  draw(cubeEdges,colour=edgeColour,boundary=cubeVisible,transparency=edgeFade)
 }`
 };
 

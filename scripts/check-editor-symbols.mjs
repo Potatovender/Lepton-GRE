@@ -12,7 +12,9 @@ const sampleSources = await Promise.all([
   readFile("sample code/mandelbrot set", "utf8"),
   readFile("sample code/Lepton Logo", "utf8"),
   readFile("sample code/cinematic clouds", "utf8"),
-  readFile("sample code/tree", "utf8")
+  readFile("sample code/tree", "utf8"),
+  readFile("sample code/lava lamp", "utf8"),
+  readFile("sample code/marble cube", "utf8")
 ]);
 const storage = new Map();
 const headLinks = [];
@@ -118,6 +120,18 @@ check("the Tree Sample is linked from the landing menu", () => {
   assert(indexSource.includes('data-sample="tree"'), "Tree Sample card missing");
   assert(indexSource.includes("Tree Sample"), "Tree Sample label missing");
   assert(landingSource.includes("folder Discontinuous foliage"), "Tree Sample scene missing");
+});
+
+check("the Lava Lamp and Marble Cube samples are linked from the landing menu", () => {
+  assert(indexSource.includes('data-sample="lava"'), "Lava Lamp Sample card missing");
+  assert(indexSource.includes("Lava Lamp Sample"), "Lava Lamp Sample label missing");
+  assert(landingSource.includes("folder Lava motion"), "Lava Lamp Sample scene missing");
+  assert(indexSource.includes('data-sample="marble"'), "Marble Cube Sample card missing");
+  assert(indexSource.includes("Marble Cube Sample"), "Marble Cube Sample label missing");
+  assert(landingSource.includes("folder Object space marble"), "Marble Cube Sample scene missing");
+  assert(landingSource.includes("slider yAngle") && landingSource.includes("slider xAngle") && landingSource.includes("slider zAngle"), "Marble Cube rotation controls missing");
+  assert(landingSource.includes("function rotateA") && landingSource.includes("function rotateB"), "Marble Cube rotation helpers missing");
+  assert(landingSource.includes("expression stoneCloud") && landingSource.includes("expression majorInk"), "Marble Cube continuous material missing");
 });
 
 check("copyable sample files import with the current grammar", () => {

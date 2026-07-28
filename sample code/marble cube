@@ -1,0 +1,162 @@
+set x_min = -8
+set x_max = 8
+set y_min = -8
+set y_max = 8
+set max_recursion = 100
+set angle_mode = radians
+set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
+set show_coordinate_grid = False
+set show_grid = False
+set show_x_axis = False
+set show_y_axis = False
+set show_x_numbers = False
+set show_y_numbers = False
+set unbounded_decimal_places = 3
+set random_seed = 803417
+folder Rotation controls = {
+  slider yAngle = 0.65 range -3.14~3.14
+  slider xAngle = 0.45 range -1.57~1.57
+  slider zAngle = -0.12 range -3.14~3.14
+}
+folder Rotation and material functions = {
+  function rotateA(u,v,angle) = cos(angle)*u-sin(angle)*v
+  function rotateB(u,v,angle) = sin(angle)*u+cos(angle)*v
+  function marbleLayer(px,py,pz,scale,phase) = 0.52*sin(scale*(0.73*px+0.31*py+0.52*pz)+phase+0.35*sin(scale*(0.27*px-0.81*py+0.44*pz)+1.7*phase))+0.31*sin(scale*(-0.41*px+0.86*py+0.23*pz)-1.3*phase+0.28*cos(scale*(0.64*px+0.17*py-0.71*pz)))+0.17*cos(scale*(0.19*px-0.48*py+0.91*pz)+0.7*phase)
+}
+folder Scene = {
+  expression room = y
+  colour roomColour = 14+2*clamp(x,0,1)~16+2*clamp(x,0,1)~20+3*clamp(x,0,1)
+  draw(room,colour=roomColour)
+  expression backdropGlow = frac{1}{e^(frac{x^2}{34}+frac{(y-0.4)^2}{48})}
+  colour backdropGlowColour = 63+38*clamp(x,0,1)~69+40*clamp(x,0,1)~77+43*clamp(x,0,1)
+  transparency backdropGlowFade = clamp(0.98-0.16*clamp(x,0,1),0.82,1)
+  draw(backdropGlow,colour=backdropGlowColour,transparency=backdropGlowFade)
+  expression basePlane = -4.55-y
+  colour floorColour = 20+12*clamp(x,0,1)~22+13*clamp(x,0,1)~25+15*clamp(x,0,1)
+  transparency floorFade = clamp(1-22*x,0,1)
+  draw(basePlane,colour=floorColour,transparency=floorFade)
+  expression baseShadow = min(basePlane+0.08,1-frac{x^2}{20}-frac{(y+4.5)^2}{0.42})
+  colour floorShadowColour = 2~3~4
+  transparency floorShadowFade = clamp(1-8*x,0.32,1)
+  draw(baseShadow,colour=floorShadowColour,transparency=floorShadowFade)
+}
+folder Ray setup = {
+  expression cubeSize = 2.75
+  expression screenX = x
+  expression screenY = y+0.25
+  expression cameraZ = 10
+  expression rolledOX = rotateA(screenX,screenY,0-zAngle)
+  expression rolledOY = rotateB(screenX,screenY,0-zAngle)
+  expression pitchedOY = rotateA(rolledOY,cameraZ,0-xAngle)
+  expression pitchedOZ = rotateB(rolledOY,cameraZ,0-xAngle)
+  expression rayOX = rotateA(rolledOX,pitchedOZ,0-yAngle)
+  expression rayOY = pitchedOY
+  expression rayOZ = rotateB(rolledOX,pitchedOZ,0-yAngle)
+  expression pitchedDY = rotateA(0,-1,0-xAngle)
+  expression pitchedDZ = rotateB(0,-1,0-xAngle)
+  expression rayDX = rotateA(0,pitchedDZ,0-yAngle)
+  expression rayDY = pitchedDY
+  expression rayDZ = rotateB(0,pitchedDZ,0-yAngle)
+  expression invdx = sign(rayDX+0.0001)*e^(-ln(abs(rayDX)+0.001))
+  expression invdy = sign(rayDY+0.0001)*e^(-ln(abs(rayDY)+0.001))
+  expression invdz = sign(rayDZ+0.0001)*e^(-ln(abs(rayDZ)+0.001))
+  expression slabX0 = (0-cubeSize-rayOX)*invdx
+  expression slabX1 = (cubeSize-rayOX)*invdx
+  expression slabY0 = (0-cubeSize-rayOY)*invdy
+  expression slabY1 = (cubeSize-rayOY)*invdy
+  expression slabZ0 = (0-cubeSize-rayOZ)*invdz
+  expression slabZ1 = (cubeSize-rayOZ)*invdz
+  expression rayNear = max(max(min(slabX0,slabX1),min(slabY0,slabY1)),min(slabZ0,slabZ1))
+  expression rayFar = min(min(max(slabX0,slabX1),max(slabY0,slabY1)),max(slabZ0,slabZ1))
+  expression cubeHit = min(rayFar-rayNear,rayNear)
+  boundary cubeVisible = cubeHit~False
+  expression localX = rayOX+rayDX*rayNear
+  expression localY = rayOY+rayDY*rayNear
+  expression localZ = rayOZ+rayDZ*rayNear
+}
+folder Visible faces = {
+  expression distanceX = abs(abs(localX)-cubeSize)
+  expression distanceY = abs(abs(localY)-cubeSize)
+  expression distanceZ = abs(abs(localZ)-cubeSize)
+  expression faceX = min(cubeHit,min(distanceY-distanceX,distanceZ-distanceX))
+  expression faceY = min(cubeHit,min(distanceX-distanceY,distanceZ-distanceY))
+  expression faceZ = min(cubeHit,min(distanceX-distanceZ,distanceY-distanceZ))
+  expression faceXP = min(faceX,localX)
+  expression faceXN = min(faceX,0-localX)
+  expression faceYP = min(faceY,localY)
+  expression faceYN = min(faceY,0-localY)
+  expression faceZP = min(faceZ,localZ)
+  expression faceZN = min(faceZ,0-localZ)
+  boundary showXP = faceXP~False
+  boundary showXN = faceXN~False
+  boundary showYP = faceYP~False
+  boundary showYN = faceYN~False
+  boundary showZP = faceZP~False
+  boundary showZN = faceZN~False
+}
+folder Object space marble = {
+  expression stoneCloud = 0.5+0.24*marbleLayer(localX,localY,localZ,0.52,0.3)+0.13*marbleLayer(localX,localY,localZ,1.07,1.4)+0.07*marbleLayer(localX,localY,localZ,2.13,2.7)
+  expression veinWarp = 1.05*marbleLayer(localX,localY,localZ,0.61,0.8)+0.43*marbleLayer(localX,localY,localZ,1.49,2.1)+0.17*marbleLayer(localX,localY,localZ,3.21,0.2)
+  expression majorDistance = abs(sin(0.66*localX+0.24*localY+0.41*localZ+1.45*veinWarp)+0.31*sin(1.13*localX-0.57*localY+0.82*localZ+0.39*veinWarp))
+  expression branchDistance = abs(sin(1.72*localX-0.83*localY+1.19*localZ+0.62*veinWarp+0.28*sin(3.1*localY-1.7*localZ))+0.22*sin(2.61*localY+1.37*localZ-0.91*localX))
+  expression hairDistance = abs(sin(4.83*localX+2.91*localY-3.77*localZ+0.31*veinWarp)+0.16*sin(7.13*localZ-5.41*localX+1.83*localY))
+  expression majorInk = e^(-((majorDistance/0.22)^2))
+  expression branchInk = e^(-((branchDistance/0.13)^2))
+  expression hairInk = e^(-((hairDistance/0.068)^2))
+  expression crystalGrain = 0.5+0.5*sin(12.7*localX+9.1*localY-10.9*localZ+1.8*sin(4.4*localX-3.7*localY))
+  expression mineralSpeck = 0.5+0.5*sin(23.17*localX+31.11*localY-27.73*localZ+3.4*sin(11.7*localX-8.9*localY+5.3*localZ))
+}
+folder Rotated lighting and stone surface = {
+  expression rolledLightX = rotateA(-0.42,0.74,0-zAngle)
+  expression rolledLightY = rotateB(-0.42,0.74,0-zAngle)
+  expression pitchedLightY = rotateA(rolledLightY,0.52,0-xAngle)
+  expression pitchedLightZ = rotateB(rolledLightY,0.52,0-xAngle)
+  expression objectLightX = rotateA(rolledLightX,pitchedLightZ,0-yAngle)
+  expression objectLightY = pitchedLightY
+  expression objectLightZ = rotateB(rolledLightX,pitchedLightZ,0-yAngle)
+  expression lightXP = 0.34+0.66*clamp(objectLightX,0,1)
+  expression lightXN = 0.34+0.66*clamp(0-objectLightX,0,1)
+  expression lightYP = 0.34+0.66*clamp(objectLightY,0,1)
+  expression lightYN = 0.34+0.66*clamp(0-objectLightY,0,1)
+  expression lightZP = 0.34+0.66*clamp(objectLightZ,0,1)
+  expression lightZN = 0.34+0.66*clamp(0-objectLightZ,0,1)
+  colour marbleXP = (50+202*x)*lightXP~(55+196*x)*lightXP~(61+190*x)*lightXP
+  colour marbleXN = (50+202*x)*lightXN~(55+196*x)*lightXN~(61+190*x)*lightXN
+  colour marbleYP = (50+202*x)*lightYP~(55+196*x)*lightYP~(61+190*x)*lightYP
+  colour marbleYN = (50+202*x)*lightYN~(55+196*x)*lightYN~(61+190*x)*lightYN
+  colour marbleZP = (50+202*x)*lightZP~(55+196*x)*lightZP~(61+190*x)*lightZP
+  colour marbleZN = (50+202*x)*lightZN~(55+196*x)*lightZN~(61+190*x)*lightZN
+  draw(stoneCloud,colour=marbleXP,boundary=showXP)
+  draw(stoneCloud,colour=marbleXN,boundary=showXN)
+  draw(stoneCloud,colour=marbleYP,boundary=showYP)
+  draw(stoneCloud,colour=marbleYN,boundary=showYN)
+  draw(stoneCloud,colour=marbleZP,boundary=showZP)
+  draw(stoneCloud,colour=marbleZN,boundary=showZN)
+  colour deepMineral = 50+22*x~57+23*x~63+25*x
+  transparency deepMineralFade = clamp(1-0.09*x,0.91,1)
+  draw(majorInk,colour=deepMineral,boundary=cubeVisible,transparency=deepMineralFade)
+  colour branchingMineral = 71+25*x~77+26*x~83+28*x
+  transparency branchingMineralFade = clamp(1-0.06*x,0.94,1)
+  draw(branchInk,colour=branchingMineral,boundary=cubeVisible,transparency=branchingMineralFade)
+  colour hairlineMineral = 63~70~75
+  transparency hairlineMineralFade = clamp(1-0.03*x,0.97,1)
+  draw(hairInk,colour=hairlineMineral,boundary=cubeVisible,transparency=hairlineMineralFade)
+  colour crystalColour = 224~227~228
+  transparency crystalFade = clamp(1-0.035*x,0.965,1)
+  draw(crystalGrain,colour=crystalColour,boundary=cubeVisible,transparency=crystalFade)
+  colour speckColour = 49~56~62
+  transparency speckFade = clamp(1-0.03*x,0.97,1)
+  draw(mineralSpeck,colour=speckColour,boundary=cubeVisible,transparency=speckFade)
+}
+folder Cube edges = {
+  expression edgeX = min(faceX,0.075-min(cubeSize-abs(localY),cubeSize-abs(localZ)))
+  expression edgeY = min(faceY,0.075-min(cubeSize-abs(localX),cubeSize-abs(localZ)))
+  expression edgeZ = min(faceZ,0.075-min(cubeSize-abs(localX),cubeSize-abs(localY)))
+  expression cubeEdges = max(max(edgeX,edgeY),edgeZ)
+  colour edgeColour = 48~54~57
+  transparency edgeFade = clamp(1-54*x,0.36,1)
+  draw(cubeEdges,colour=edgeColour,boundary=cubeVisible,transparency=edgeFade)
+}

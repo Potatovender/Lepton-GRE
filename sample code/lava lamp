@@ -1,0 +1,135 @@
+set x_min = -10
+set x_max = 10
+set y_min = -10
+set y_max = 10
+set max_recursion = 100
+set angle_mode = radians
+set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
+set show_coordinate_grid = False
+set show_grid = False
+set show_x_axis = False
+set show_y_axis = False
+set show_x_numbers = False
+set show_y_numbers = False
+set unbounded_decimal_places = 3
+set random_seed = 491702
+folder Animation = {
+  time bounded_looped t = 0 range 0~24 speed 0.65
+  expression phase = pi*t/12
+}
+folder Shape helpers = {
+  function ellipseLamp(px,py,cx,cy,rx,ry) = 1-frac{(px-cx)^2}{rx^2}-frac{(py-cy)^2}{ry^2}
+  function taperLamp(px,py,y0,y1,w0,w1) = min(min(py-y0,y1-py),w0+(w1-w0)*frac{py-y0}{y1-y0}-abs(px))
+  function lavaBlob(px,py,cx,cy,rx,ry) = frac{1}{e^(frac{(px-cx)^2}{rx^2}+frac{(py-cy)^2}{ry^2})}
+}
+folder Dark room = {
+  expression room = y
+  colour roomColour = 9+2*clamp(x,0,1)~8+1.5*clamp(x,0,1)~14+3*clamp(x,0,1)
+  draw(room,colour=roomColour)
+  expression wallGlow = lavaBlob(x,y,0,-0.2,5.2,7.2)
+  colour wallGlowColour = 92+76*clamp(x,0,1)~20+34*clamp(x,0,1)~28+24*clamp(x,0,1)
+  transparency wallGlowFade = clamp(0.99-0.22*clamp(x,0,1),0.77,1)
+  draw(wallGlow,colour=wallGlowColour,transparency=wallGlowFade)
+  expression table = -7.2-y
+  colour tableColour = 17+7*clamp(x,0,1)~13+5*clamp(x,0,1)~17+6*clamp(x,0,1)
+  transparency tableFade = clamp(1-22*x,0,1)
+  draw(table,colour=tableColour,transparency=tableFade)
+  expression lampShadow = min(table+0.1,ellipseLamp(x,y,0.4,-7.16,4.3,0.55))
+  colour lampShadowColour = 2~2~4
+  transparency lampShadowFade = clamp(1-10*x,0.36,1)
+  draw(lampShadow,colour=lampShadowColour,transparency=lampShadowFade)
+  expression tableGlow = min(table+0.08,ellipseLamp(x,y,0,-7.12,3.1,0.34))
+  colour tableGlowColour = 100~24~22
+  transparency tableGlowFade = clamp(1-7*x,0.76,1)
+  draw(tableGlow,colour=tableGlowColour,transparency=tableGlowFade)
+}
+folder Glass chamber = {
+  expression glassWidth = 1.76-0.052*(y+4.6)
+  expression vessel = min(min(y+4.65,6.25-y),glassWidth-abs(x))
+  boundary vesselInside = vessel~False
+  expression liquidBackdrop = vessel
+  colour liquidBackdropColour = 38+26*clamp(x,0,1)~7+10*clamp(x,0,1)~15+18*clamp(x,0,1)
+  transparency liquidBackdropFade = clamp(0.9-0.28*clamp(x,0,1),0.58,0.92)
+  draw(liquidBackdrop,colour=liquidBackdropColour,transparency=liquidBackdropFade)
+}
+folder Lava motion = {
+  expression lavaAX = 0.36*sin(phase-0.4)+0.13*sin(2*phase)
+  expression lavaAY = -2.65+6.65*(0.5+0.5*sin(phase-1.05))
+  expression lavaBX = -0.48*sin(phase+0.85)+0.1*cos(2*phase)
+  expression lavaBY = -2.45+6.15*(0.5+0.5*sin(phase+1.72))
+  expression lavaCX = 0.62*sin(phase+2.15)
+  expression lavaCY = -2.85+5.8*(0.5+0.5*sin(phase+3.78))
+  expression lavaDX = -0.3+0.37*sin(2*phase+0.3)
+  expression lavaDY = -2.9+6.4*(0.5+0.5*sin(phase+5.1))
+  expression bottomHeat = lavaBlob(x,y,0,-3.95,1.34,0.72)
+  expression topCooling = 0.52*lavaBlob(x,y,0.08,5.35,1.02,0.58)
+  expression movingA = lavaBlob(x+0.055*sin(1.4*y+phase),y,lavaAX,lavaAY,0.64+0.12*sin(phase)^2,1.06+0.22*cos(phase)^2)
+  expression movingB = lavaBlob(x-0.045*sin(1.1*y-phase),y,lavaBX,lavaBY,0.54+0.1*cos(phase)^2,0.92+0.25*sin(phase)^2)
+  expression movingC = lavaBlob(x+0.04*sin(1.8*y+phase),y,lavaCX,lavaCY,0.43+0.08*sin(2*phase)^2,0.72+0.18*cos(phase)^2)
+  expression movingD = lavaBlob(x-0.035*sin(1.6*y-phase),y,lavaDX,lavaDY,0.36+0.07*cos(phase)^2,0.65+0.15*sin(phase)^2)
+  expression lavaField = bottomHeat+topCooling+0.92*movingA+0.82*movingB+0.66*movingC+0.58*movingD-0.61
+  colour lavaBodyColour = 180+104*clamp(x,0,0.62)~19+97*clamp(x,0,0.62)~9+31*clamp(x,0,0.62)
+  transparency lavaBodyFade = clamp(1-26*x,0.015,1)
+  draw(lavaField,colour=lavaBodyColour,boundary=vesselInside,transparency=lavaBodyFade)
+  expression lavaCore = lavaField-0.28
+  colour lavaCoreColour = 255~87+96*clamp(x,0,0.4)~22+28*clamp(x,0,0.4)
+  transparency lavaCoreFade = clamp(1-34*x,0.28,1)
+  draw(lavaCore,colour=lavaCoreColour,boundary=vesselInside,transparency=lavaCoreFade)
+  expression lavaSkin = min(lavaField,0.12-lavaField)
+  colour lavaSkinColour = 255~140~52
+  transparency lavaSkinFade = clamp(1-46*x,0.46,1)
+  draw(lavaSkin,colour=lavaSkinColour,boundary=vesselInside,transparency=lavaSkinFade)
+  expression lavaHotSpot = min(lavaCore,lavaBlob(x,y,lavaAX-0.18,lavaAY+0.16,0.3,0.62)-0.44)
+  colour lavaHotSpotColour = 255~207~104
+  transparency lavaHotSpotFade = clamp(1-38*x,0.58,1)
+  draw(lavaHotSpot,colour=lavaHotSpotColour,boundary=vesselInside,transparency=lavaHotSpotFade)
+}
+folder Glass reflections = {
+  expression glassRim = min(vessel,0.085-vessel)
+  colour glassRimColour = 185+60*clamp(x,0,0.22)~82+65*clamp(x,0,0.22)~101+76*clamp(x,0,0.22)
+  transparency glassRimFade = clamp(1-44*x,0.52,1)
+  draw(glassRim,colour=glassRimColour,transparency=glassRimFade)
+  expression leftReflection = min(vessel,0.095-abs(x+0.78-0.022*y))
+  colour leftReflectionColour = 255~174~177
+  transparency leftReflectionFade = clamp(1-20*x,0.83,1)
+  draw(leftReflection,colour=leftReflectionColour,boundary=vesselInside,transparency=leftReflectionFade)
+  expression softReflection = min(vessel,0.28-abs(x+0.58-0.018*y))
+  colour softReflectionColour = 189~76~91
+  transparency softReflectionFade = clamp(1-6*x,0.91,1)
+  draw(softReflection,colour=softReflectionColour,boundary=vesselInside,transparency=softReflectionFade)
+}
+folder Metal base and cap = {
+  expression base = max(taperLamp(x,y,-7.15,-4.35,2.55,1.7),ellipseLamp(x,y,0,-6.9,2.52,0.58))
+  boundary baseInside = base~False
+  colour baseColour = 36+46*clamp(x,0,0.75)~25+26*clamp(x,0,0.75)~30+28*clamp(x,0,0.75)
+  transparency baseFade = clamp(1-24*x,0,1)
+  draw(base,colour=baseColour,transparency=baseFade)
+  expression baseShade = min(base,0.22-x)
+  colour baseShadeColour = 10~8~13
+  transparency baseShadeFade = clamp(1-9*x,0.42,1)
+  draw(baseShade,colour=baseShadeColour,boundary=baseInside,transparency=baseShadeFade)
+  expression baseHighlight = min(base,0.18-abs(x+0.72))
+  colour baseHighlightColour = 116~62~66
+  transparency baseHighlightFade = clamp(1-12*x,0.71,1)
+  draw(baseHighlight,colour=baseHighlightColour,boundary=baseInside,transparency=baseHighlightFade)
+  expression baseLip = min(base,0.11-abs(y+4.5))
+  colour baseLipColour = 92~51~57
+  transparency baseLipFade = clamp(1-28*x,0.38,1)
+  draw(baseLip,colour=baseLipColour,boundary=baseInside,transparency=baseLipFade)
+  expression cap = max(taperLamp(x,y,6.05,8.25,1.32,0.28),ellipseLamp(x,y,0,6.08,1.34,0.25))
+  boundary capInside = cap~False
+  colour capColour = 38+42*clamp(x,0,0.7)~25+25*clamp(x,0,0.7)~31+27*clamp(x,0,0.7)
+  transparency capFade = clamp(1-25*x,0,1)
+  draw(cap,colour=capColour,transparency=capFade)
+  expression capShade = min(cap,0.16-x)
+  colour capShadeColour = 11~8~13
+  transparency capShadeFade = clamp(1-10*x,0.44,1)
+  draw(capShade,colour=capShadeColour,boundary=capInside,transparency=capShadeFade)
+  expression capHighlight = min(cap,0.12-abs(x+0.48))
+  colour capHighlightColour = 105~57~64
+  transparency capHighlightFade = clamp(1-14*x,0.72,1)
+  draw(capHighlight,colour=capHighlightColour,boundary=capInside,transparency=capHighlightFade)
+}
