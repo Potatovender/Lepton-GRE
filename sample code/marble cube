@@ -98,7 +98,12 @@ folder Visible faces = {
   boundary showZN = faceZN
 }
 folder Object space marble = {
-  expression stoneCloud = clamp(0.83+0.1*marbleLayer(localX,localY,localZ,0.43,0.3)-0.34*clamp(1-abs(sin(0.61*localX+0.2*localY+0.37*localZ+2.2*marbleLayer(localX,localY,localZ,0.78,0.8))+0.42*sin(1.17*localX-0.73*localY+0.88*localZ+0.8*marbleLayer(localX,localY,localZ,1.37,2.1)))/0.72,0,1)-0.1*clamp(1-abs(sin(2.03*localX-1.31*localY+1.57*localZ+0.31*sin(3.7*localY-2.2*localZ)))/0.26,0,1),0.28,1)
+  expression calciteCloud = 0.55*sin(0.31*localX+0.23*localY+0.39*localZ)+0.28*cos(0.47*localY-0.29*localZ)+0.17*sin(0.61*localZ-0.19*localX)
+  expression veinWarp = 0.72*sin(0.43*localX-0.31*localY+0.37*localZ)+0.39*cos(0.67*localY+0.29*localZ)+0.21*sin(1.17*localX-0.83*localZ)
+  expression majorDistance = abs(sin(0.39*localX+0.14*localY+0.28*localZ+1.52*veinWarp)+0.2*sin(0.91*localX-0.57*localY+0.7*localZ))
+  expression branchDistance = abs(sin(2.37*localX-1.49*localY+1.91*localZ+0.46*veinWarp+0.27*sin(3.17*localY-2.23*localZ)))
+  expression veinStrength = clamp(0.82+0.1*sin(2.11*localX-1.37*localY+0.83*localZ)+0.08*cos(3.07*localY+1.73*localZ),0.58,1)
+  expression stoneCloud = clamp(0.975+0.025*calciteCloud-veinStrength*(0.78*e^(-((majorDistance/0.15)^2))+0.24*e^(-((majorDistance/0.54)^2))+0.38*e^(-((branchDistance/0.075)^2))+0.09*e^(-((branchDistance/0.27)^2))),0.03,1)
 }
 folder Rotated lighting and stone surface = {
   expression rolledLightX = rotateA(-0.42,0.74,0-zAngle)
@@ -108,18 +113,18 @@ folder Rotated lighting and stone surface = {
   expression objectLightX = rotateA(rolledLightX,pitchedLightZ,0-yAngle)
   expression objectLightY = pitchedLightY
   expression objectLightZ = rotateB(rolledLightX,pitchedLightZ,0-yAngle)
-  expression lightXP = 0.62+0.38*clamp(objectLightX,0,1)
-  expression lightXN = 0.62+0.38*clamp(0-objectLightX,0,1)
-  expression lightYP = 0.62+0.38*clamp(objectLightY,0,1)
-  expression lightYN = 0.62+0.38*clamp(0-objectLightY,0,1)
-  expression lightZP = 0.62+0.38*clamp(objectLightZ,0,1)
-  expression lightZN = 0.62+0.38*clamp(0-objectLightZ,0,1)
-  colour marbleXP = (124+131*x)*lightXP~(128+126*x)*lightXP~(132+120*x)*lightXP
-  colour marbleXN = (124+131*x)*lightXN~(128+126*x)*lightXN~(132+120*x)*lightXN
-  colour marbleYP = (124+131*x)*lightYP~(128+126*x)*lightYP~(132+120*x)*lightYP
-  colour marbleYN = (124+131*x)*lightYN~(128+126*x)*lightYN~(132+120*x)*lightYN
-  colour marbleZP = (124+131*x)*lightZP~(128+126*x)*lightZP~(132+120*x)*lightZP
-  colour marbleZN = (124+131*x)*lightZN~(128+126*x)*lightZN~(132+120*x)*lightZN
+  expression lightXP = 0.76+0.24*clamp(objectLightX,0,1)
+  expression lightXN = 0.76+0.24*clamp(0-objectLightX,0,1)
+  expression lightYP = 0.76+0.24*clamp(objectLightY,0,1)
+  expression lightYN = 0.76+0.24*clamp(0-objectLightY,0,1)
+  expression lightZP = 0.76+0.24*clamp(objectLightZ,0,1)
+  expression lightZN = 0.76+0.24*clamp(0-objectLightZ,0,1)
+  colour marbleXP = (15+240*x)*lightXP~(17+236*x)*lightXP~(20+229*x)*lightXP
+  colour marbleXN = (15+240*x)*lightXN~(17+236*x)*lightXN~(20+229*x)*lightXN
+  colour marbleYP = (15+240*x)*lightYP~(17+236*x)*lightYP~(20+229*x)*lightYP
+  colour marbleYN = (15+240*x)*lightYN~(17+236*x)*lightYN~(20+229*x)*lightYN
+  colour marbleZP = (15+240*x)*lightZP~(17+236*x)*lightZP~(20+229*x)*lightZP
+  colour marbleZN = (15+240*x)*lightZN~(17+236*x)*lightZN~(20+229*x)*lightZN
   draw(stoneCloud,colour=marbleXP,boundary=showXP)
   draw(stoneCloud,colour=marbleXN,boundary=showXN)
   draw(stoneCloud,colour=marbleYP,boundary=showYP)
