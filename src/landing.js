@@ -1,4 +1,4 @@
-const APP_VERSION = "20260728-marble-contrast2";
+const APP_VERSION = "20260728-marble-rotation-fix";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {
@@ -450,7 +450,6 @@ folder Rotation controls = {
 folder Rotation and material functions = {
   function rotateA(u,v,angle) = cos(angle)*u-sin(angle)*v
   function rotateB(u,v,angle) = sin(angle)*u+cos(angle)*v
-  function marbleLayer(px,py,pz,scale,phase) = 0.52*sin(scale*(0.73*px+0.31*py+0.52*pz)+phase+0.35*sin(scale*(0.27*px-0.81*py+0.44*pz)+1.7*phase))+0.31*sin(scale*(-0.41*px+0.86*py+0.23*pz)-1.3*phase+0.28*cos(scale*(0.64*px+0.17*py-0.71*pz)))+0.17*cos(scale*(0.19*px-0.48*py+0.91*pz)+0.7*phase)
 }
 folder Scene = {
   expression room = y
@@ -503,60 +502,22 @@ folder Ray setup = {
   expression localY = rayOY+rayDY*rayNear
   expression localZ = rayOZ+rayDZ*rayNear
 }
-folder Visible faces = {
+folder Surface hit = {
   expression distanceX = abs(abs(localX)-cubeSize)
   expression distanceY = abs(abs(localY)-cubeSize)
   expression distanceZ = abs(abs(localZ)-cubeSize)
   expression faceX = min(cubeHit,min(distanceY-distanceX,distanceZ-distanceX))
   expression faceY = min(cubeHit,min(distanceX-distanceY,distanceZ-distanceY))
   expression faceZ = min(cubeHit,min(distanceX-distanceZ,distanceY-distanceZ))
-  expression faceXP = min(faceX,localX)
-  expression faceXN = min(faceX,0-localX)
-  expression faceYP = min(faceY,localY)
-  expression faceYN = min(faceY,0-localY)
-  expression faceZP = min(faceZ,localZ)
-  expression faceZN = min(faceZ,0-localZ)
-  boundary showXP = faceXP
-  boundary showXN = faceXN
-  boundary showYP = faceYP
-  boundary showYN = faceYN
-  boundary showZP = faceZP
-  boundary showZN = faceZN
 }
 folder Object space marble = {
-  expression calciteCloud = 0.55*sin(0.31*localX+0.23*localY+0.39*localZ)+0.28*cos(0.47*localY-0.29*localZ)+0.17*sin(0.61*localZ-0.19*localX)
   expression veinWarp = 0.72*sin(0.43*localX-0.31*localY+0.37*localZ)+0.39*cos(0.67*localY+0.29*localZ)+0.21*sin(1.17*localX-0.83*localZ)
   expression majorDistance = abs(sin(0.39*localX+0.14*localY+0.28*localZ+1.52*veinWarp)+0.2*sin(0.91*localX-0.57*localY+0.7*localZ))
-  expression branchDistance = abs(sin(2.37*localX-1.49*localY+1.91*localZ+0.46*veinWarp+0.27*sin(3.17*localY-2.23*localZ)))
-  expression veinStrength = clamp(0.82+0.1*sin(2.11*localX-1.37*localY+0.83*localZ)+0.08*cos(3.07*localY+1.73*localZ),0.58,1)
-  expression stoneCloud = clamp(0.975+0.025*calciteCloud-veinStrength*(0.78*e^(-((majorDistance/0.15)^2))+0.24*e^(-((majorDistance/0.54)^2))+0.38*e^(-((branchDistance/0.075)^2))+0.09*e^(-((branchDistance/0.27)^2))),0.03,1)
+  expression stoneCloud = clamp(0.98-frac{0.8}{1+(majorDistance/0.15)^2}-frac{0.2}{1+(majorDistance/0.55)^2},0.03,1)
 }
-folder Rotated lighting and stone surface = {
-  expression rolledLightX = rotateA(-0.42,0.74,0-zAngle)
-  expression rolledLightY = rotateB(-0.42,0.74,0-zAngle)
-  expression pitchedLightY = rotateA(rolledLightY,0.52,0-xAngle)
-  expression pitchedLightZ = rotateB(rolledLightY,0.52,0-xAngle)
-  expression objectLightX = rotateA(rolledLightX,pitchedLightZ,0-yAngle)
-  expression objectLightY = pitchedLightY
-  expression objectLightZ = rotateB(rolledLightX,pitchedLightZ,0-yAngle)
-  expression lightXP = 0.76+0.24*clamp(objectLightX,0,1)
-  expression lightXN = 0.76+0.24*clamp(0-objectLightX,0,1)
-  expression lightYP = 0.76+0.24*clamp(objectLightY,0,1)
-  expression lightYN = 0.76+0.24*clamp(0-objectLightY,0,1)
-  expression lightZP = 0.76+0.24*clamp(objectLightZ,0,1)
-  expression lightZN = 0.76+0.24*clamp(0-objectLightZ,0,1)
-  colour marbleXP = (15+240*x)*lightXP~(17+236*x)*lightXP~(20+229*x)*lightXP
-  colour marbleXN = (15+240*x)*lightXN~(17+236*x)*lightXN~(20+229*x)*lightXN
-  colour marbleYP = (15+240*x)*lightYP~(17+236*x)*lightYP~(20+229*x)*lightYP
-  colour marbleYN = (15+240*x)*lightYN~(17+236*x)*lightYN~(20+229*x)*lightYN
-  colour marbleZP = (15+240*x)*lightZP~(17+236*x)*lightZP~(20+229*x)*lightZP
-  colour marbleZN = (15+240*x)*lightZN~(17+236*x)*lightZN~(20+229*x)*lightZN
-  draw(stoneCloud,colour=marbleXP,boundary=showXP)
-  draw(stoneCloud,colour=marbleXN,boundary=showXN)
-  draw(stoneCloud,colour=marbleYP,boundary=showYP)
-  draw(stoneCloud,colour=marbleYN,boundary=showYN)
-  draw(stoneCloud,colour=marbleZP,boundary=showZP)
-  draw(stoneCloud,colour=marbleZN,boundary=showZN)
+folder Stone surface = {
+  colour marbleSurface = (15+240*x)*(0.88+0.018*y)~(17+236*x)*(0.88+0.018*y)~(20+229*x)*(0.88+0.018*y)
+  draw(stoneCloud,colour=marbleSurface,boundary=cubeVisible)
 }
 folder Cube edges = {
   expression edgeX = min(faceX,0.075-min(cubeSize-abs(localY),cubeSize-abs(localZ)))

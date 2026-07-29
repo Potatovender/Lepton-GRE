@@ -6,7 +6,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260728-marble-contrast2";
+const cacheVersion = "20260728-marble-rotation-fix";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -132,9 +132,9 @@ check("the Lava Lamp and Marble Cube samples are linked from the landing menu", 
   assert(landingSource.includes("slider yAngle") && landingSource.includes("slider xAngle") && landingSource.includes("slider zAngle"), "Marble Cube rotation controls missing");
   assert(landingSource.includes("function rotateA") && landingSource.includes("function rotateB"), "Marble Cube rotation helpers missing");
   assert(landingSource.includes("expression stoneCloud"), "Marble Cube continuous material missing");
-  assert(landingSource.includes("expression majorDistance") && landingSource.includes("expression branchDistance"), "Marble Cube vein fields missing");
-  assert(landingSource.includes("expression veinStrength"), "Marble Cube vein breakup missing");
-  assert(landingSource.includes("(15+240*x)*lightXP"), "Marble Cube high-contrast stone palette missing");
+  assert(landingSource.includes("expression majorDistance"), "Marble Cube vein field missing");
+  assert(landingSource.includes("(15+240*x)*(0.88+0.018*y)"), "Marble Cube high-contrast stone palette missing");
+  assert(landingSource.includes("draw(stoneCloud,colour=marbleSurface,boundary=cubeVisible)"), "Marble Cube unified surface layer missing");
 });
 
 check("file-backed samples use compact URLs instead of embedding their scenes", () => {
