@@ -11,4 +11,4 @@ expression b = 255(e^(-(3(-x+0.99))^2)/3+x/9+0.1)
 expression rest = 1
 colour rgb = r~g~b
 boundary rest = rest
-draw(eq,colour=rgb,boundary=rest)
+draw(eq) {colour=rgb, boundary=rest}

@@ -17,9 +17,9 @@ set show_y_numbers = False
 set unbounded_decimal_places = 3
 set random_seed = 803417
 folder Rotation controls = {
-  slider yAngle = 0.65 range -3.14~3.14
-  slider xAngle = 0.45 range -1.57~1.57
-  slider zAngle = -0.12 range -3.14~3.14
+  slider yAngle = 0.65 {range=-3.14~3.14}
+  slider xAngle = 0.45 {range=-1.57~1.57}
+  slider zAngle = -0.12 {range=-3.14~3.14}
 }
 folder Rotation and material functions = {
   function rotateA(u,v,angle) = cos(angle)*u-sin(angle)*v
@@ -28,19 +28,19 @@ folder Rotation and material functions = {
 folder Scene = {
   expression room = y
   colour roomColour = 14+2*clamp(x,0,1)~16+2*clamp(x,0,1)~20+3*clamp(x,0,1)
-  draw(room,colour=roomColour)
+  draw(room) {colour=roomColour}
   expression backdropGlow = frac{1}{e^(frac{x^2}{34}+frac{(y-0.4)^2}{48})}
   colour backdropGlowColour = 63+38*clamp(x,0,1)~69+40*clamp(x,0,1)~77+43*clamp(x,0,1)
   transparency backdropGlowFade = clamp(0.98-0.16*clamp(x,0,1),0.82,1)
-  draw(backdropGlow,colour=backdropGlowColour,transparency=backdropGlowFade)
+  draw(backdropGlow) {colour=backdropGlowColour, transparency=backdropGlowFade}
   expression basePlane = -4.55-y
   colour floorColour = 20+12*clamp(x,0,1)~22+13*clamp(x,0,1)~25+15*clamp(x,0,1)
   transparency floorFade = clamp(1-22*x,0,1)
-  draw(basePlane,colour=floorColour,transparency=floorFade)
+  draw(basePlane) {colour=floorColour, transparency=floorFade}
   expression baseShadow = min(basePlane+0.08,1-frac{x^2}{20}-frac{(y+4.5)^2}{0.42})
   colour floorShadowColour = 2~3~4
   transparency floorShadowFade = clamp(1-8*x,0.32,1)
-  draw(baseShadow,colour=floorShadowColour,transparency=floorShadowFade)
+  draw(baseShadow) {colour=floorShadowColour, transparency=floorShadowFade}
 }
 folder Ray setup = {
   expression cubeSize = 2.75
@@ -91,7 +91,7 @@ folder Object space marble = {
 }
 folder Stone surface = {
   colour marbleSurface = (15+240*x)*(0.88+0.018*y)~(17+236*x)*(0.88+0.018*y)~(20+229*x)*(0.88+0.018*y)
-  draw(stoneCloud,colour=marbleSurface,boundary=cubeVisible)
+  draw(stoneCloud) {colour=marbleSurface, boundary=cubeVisible}
 }
 folder Cube edges = {
   expression edgeX = min(faceX,0.075-min(cubeSize-abs(localY),cubeSize-abs(localZ)))
@@ -100,5 +100,5 @@ folder Cube edges = {
   expression cubeEdges = max(max(edgeX,edgeY),edgeZ)
   colour edgeColour = 48~54~57
   transparency edgeFade = clamp(1-54*x,0.36,1)
-  draw(cubeEdges,colour=edgeColour,boundary=cubeVisible,transparency=edgeFade)
+  draw(cubeEdges) {colour=edgeColour, boundary=cubeVisible, transparency=edgeFade}
 }

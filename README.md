@@ -52,7 +52,7 @@ set y_max = 10
 expression wave = sin(x)+cos(y)
 colour ocean = 40+20*wave~120+35*wave~210
 boundary visible = 1
-draw(wave,colour=ocean,boundary=visible)
+draw(wave) {colour=ocean, boundary=visible}
 ```
 
 Only the first argument to `draw` is required. Missing colour, boundary, and transparency components use Lepton's virtual defaults.
@@ -71,8 +71,8 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `src/assets/` | Logo, favicon, hero, and sample images. |
 | `scripts/build.mjs` | Dependency-free repository and runtime verification entry point. |
 | `scripts/check-editor-symbols.mjs` | Executable grammar, parser, model, UI-contract, and GLSL regression suite. |
-| `tests/` | Focused Vitest tests for the standalone syntax module. |
-| `sample code/` | Copyable current-language scenes used by tests and documentation. |
+| `tests/` | Focused Vitest tests for the standalone expression-syntax module. |
+| `sample code/` | The single source of truth for copyable landing-page samples. `npm run migrate:samples` upgrades recognized legacy forms after grammar changes. |
 | `docs/` | Architecture, language, development, and design references. |
 
 The production app intentionally has one runtime entry point. Older parallel model/UI implementations were removed so grammar and rendering changes cannot diverge between unused and live code paths.

@@ -43,8 +43,9 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260728-marble-rotation-fix";
+const APP_VERSION = "20260812-refinements-point-selectors";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
+const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
 function ensureLeptonFavicon() {
   const iconHref =
@@ -127,6 +128,13 @@ const GENERATED_GLSL_NAMES = new Set([
   "leptonUnion",
   "leptonIntersect",
   "leptonSubtract",
+  "leptonSurfaceBump",
+  "leptonStrokeBox",
+  "leptonDetailWave",
+  "leptonDetailHash",
+  "leptonDetailFade",
+  "leptonDetailNoise",
+  "leptonDetailTexture",
   "round1",
   "sinh1",
   "cosh1",
@@ -221,6 +229,9 @@ const DEFAULT_DRAW_TRANSPARENCY = { id: "default", label: "default", expression:
 const SAMPLE_SCENE_FILES = {
   fire: "fire",
   mandelbrot: "mandelbrot set",
+  water: "water effect",
+  stars: "star field",
+  sky: "cinematic clouds",
   tree: "tree",
   lava: "lava lamp",
   marble: "marble cube"
@@ -245,8 +256,8 @@ const HELP_TEXT = {
   draws: "Draw layers always choose a value to render. Add colour, boundary, or transparency components only when needed; their displayed order is preserved.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
   textLanguage: "Lepton text is the same graph in one copyable script. Colours separate three channel expressions with ~. Draw fields after the value are optional and named, such as colour=sky or transparency=glass.",
-  applyText: "Apply reads the script in Text mode, rebuilds the graph from it, and redraws the result.",
-  refreshText: "Refresh text rewrites this script from the current Standard editor state. It asks first because unsaved text edits are replaced.",
+  applyText: "Apply to graph reads this Text draft, rebuilds the visual graph, and redraws the result.",
+  refreshText: "Reload from graph replaces this draft with the current Standard editor state. It asks first because unapplied text edits are replaced.",
   backgroundColor: "Default uses the grid background. Custom uses a colour ID from the Data workspace as a solid canvas background.",
   settingXMin: "The left edge of the coordinate window. You can enter numbers or expressions such as -pi.",
   settingXMax: "The right edge of the coordinate window. It must be greater than x minimum when square grid is off.",
@@ -306,13 +317,37 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "draws",
     title: "Step 5: Connect a draw layer",
-    body: "Draw always chooses the value to render. Use + to optionally add colour, boundary, and transparency in any order. Transparency is evaluated like a colour channel: x is the draw value and y is the current vertical coordinate. With none added, Lepton uses its default colour, no boundary restriction, and full opacity."
+    body: "Draw chooses the value to render. When you select a function, Lepton shows an input for each parameter; wave(x,t) can therefore be drawn with the current grid x and time t. Use + for optional colour, boundary, and transparency. With none added, Lepton uses its defaults."
+  },
+  {
+    mode: "standard",
+    tab: "draws",
+    title: "Step 6: Add points and structure",
+    body: "Points can be fixed or draggable, use a colour, show their coordinates, and sample a linked function. Folders, comments, drag handles, search, filters, and sorting help keep larger scenes understandable without changing how they compile."
+  },
+  {
+    mode: "standard",
+    tab: "draws",
+    title: "Step 7: Animate and inspect",
+    body: "Turn a slider into time, choose bounded, looped, or unbounded motion, and set its speed. Play one time value locally or all of them from the play bar. The FPS and shader status help you see whether a scene is expensive while it runs."
+  },
+  {
+    mode: "standard",
+    tab: "draws",
+    title: "Step 8: Set the viewing window",
+    body: "Open the gear on the graph to set bounds, aspect ratio, square units, grid visibility, angle mode, recursion depth, and background colour. The shuffle control changes random() without editing formulas."
   },
   {
     mode: "text",
     tab: "draws",
-    title: "Step 6: Share or bulk edit",
-    body: "Text mode is the same graph as script. Draw components are named, for example draw(eq,colour=sky,transparency=glass). Time sliders can add speed 2 to move two units per second. Apply reads text back into the visual editor."
+    title: "Step 9: Share or bulk edit",
+    body: "Text mode is the same graph as script. Property braces configure an item, such as {range=0~10}, while braces inside an expression form piecewise conditions. Use Apply to graph to compile your draft, or Reload from graph to replace it with the visual editor state."
+  },
+  {
+    mode: "standard",
+    tab: "draws",
+    title: "Step 10: Save and export",
+    body: "The Graph menu creates, saves, loads, and exports graphs. Saved graphs stay in this browser with a compact preview. Lepton warns before discarding unsaved graph or text changes."
   }
 ];
 const listControls = {
@@ -357,6 +392,13 @@ let activeSavedGraphId = null;
 const recoveringSavedGraphThumbnails = new Set();
 let hasUnsavedChanges = false;
 let graphActionFeedback = "";
+let textDraft = null;
+let textDraftDirty = false;
+let textDraftWarningOpen = false;
+let textApplyNotice = "";
+let newGraphConfirmOpen = false;
+let renderJobToken = 0;
+let renderPerformance = { state: "idle", compileMs: 0, sourceLength: 0, cost: "Not compiled" };
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -399,9 +441,11 @@ function renderApp() {
         <canvas class="grid-canvas"></canvas>
         <canvas class="graph-overlay-canvas" aria-hidden="true"></canvas>
         <div class="grid-boundary-overlay" aria-hidden="true"></div>
+        <div class="compile-status ${renderPerformance.state}" data-compile-status aria-live="polite">${compileStatusText()}</div>
         ${diagnostics.hasErrors ? `<div class="render-overlay render-overlay-error">${diagnostics.summary}</div>` : ""}
       </section>
       ${renderSavedGraphsDialog()}
+      ${renderNewGraphConfirmation()}
     </main>
   `;
   if (root.dataset) root.dataset.panelKey = scrollKey;
@@ -409,15 +453,52 @@ function renderApp() {
   bindEvents();
   bindCanvasPan();
   restoreEntryScroll();
-  renderScene(diagnostics);
+  scheduleSceneRender(diagnostics);
   queueMathLayoutReflow();
   requestAnimationFrame(() => forceMathFieldsReflow());
+}
+
+function compileStatusText() {
+  if (renderPerformance.state === "loading") return `<span class="compile-spinner" aria-hidden="true"></span> Compiling graph...`;
+  if (renderPerformance.state === "error") return `Shader failed · ${escapeHtml(renderPerformance.cost)}`;
+  if (renderPerformance.state === "ready") return `${Math.round(renderPerformance.compileMs)} ms compile · ${escapeHtml(renderPerformance.cost)}`;
+  return "Waiting to compile";
+}
+
+function shaderCostEstimate(sourceLength) {
+  if (sourceLength < 20000) return "Low shader cost";
+  if (sourceLength < 100000) return "Medium shader cost";
+  if (sourceLength < 400000) return "High shader cost";
+  return "Very high shader cost";
+}
+
+function updateCompileStatus(next) {
+  renderPerformance = { ...renderPerformance, ...next };
+  const status = root.querySelector?.("[data-compile-status]");
+  if (!status) return;
+  status.className = `compile-status ${renderPerformance.state}`;
+  status.innerHTML = compileStatusText();
+}
+
+function scheduleSceneRender(diagnostics) {
+  const token = ++renderJobToken;
+  updateCompileStatus({ state: "loading", compileMs: 0, sourceLength: 0, cost: "Estimating shader" });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (token !== renderJobToken) return;
+    renderScene(diagnostics);
+  }));
 }
 
 function ensureSceneCollections(target) {
   for (const kind of DATA_ENTRY_KINDS) if (!Array.isArray(target[kind])) target[kind] = [];
   for (const draw of dataEntries(target.draws)) draw.components = normalizeDrawEntry(draw).components;
   for (const entry of dataEntries(target.functions)) if (entry.kind === "slider" && entry.timeRate == null) entry.timeRate = "1";
+  for (const entry of dataEntries(target.functions)) if (entry.kind === "function" && !["expression", "point"].includes(entry.outputType)) entry.outputType = "expression";
+  for (const point of dataEntries(target.points)) {
+    if (point.hidden == null) point.hidden = false;
+    if (point.linkedFunctionId == null) point.linkedFunctionId = "";
+    if (point.showLabel == null) point.showLabel = false;
+  }
   if (!Number.isFinite(Number(target.settings.randomSeed))) target.settings.randomSeed = 1;
   return target;
 }
@@ -436,6 +517,38 @@ function renderGraphActionsMenu() {
       </div>
     </div>
   `;
+}
+
+function renderNewGraphConfirmation() {
+  if (!newGraphConfirmOpen) return "";
+  return `<div class="modal-backdrop" data-action="cancel-new-graph">
+    <section class="modal-card confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="new-graph-title">
+      <header class="modal-header"><h2 id="new-graph-title">Create a new graph?</h2></header>
+      <p>This graph has unsaved changes. Creating a new graph will discard them.</p>
+      <div class="modal-actions">
+        <button class="toolbar-button" data-action="cancel-new-graph" type="button">Cancel</button>
+        <button class="toolbar-button primary" data-action="confirm-new-graph" type="button">Discard and create</button>
+      </div>
+    </section>
+  </div>`;
+}
+
+function resetToNewGraph() {
+  const before = sceneSnapshot();
+  scene = structuredClone(DEFAULT_SCENE);
+  textDraft = null;
+  textDraftDirty = false;
+  textDraftWarningOpen = false;
+  textApplyNotice = "";
+  newGraphConfirmOpen = false;
+  activeSavedGraphId = null;
+  viewport = sceneViewport();
+  if (isValidViewport(viewport)) saveViewport();
+  recordSceneHistory(before);
+  markUnsavedChange();
+  activeTab = "functions";
+  displayMode = "standard";
+  renderApp();
 }
 
 function gearIcon() {
@@ -571,6 +684,7 @@ function normalizeFunctionEntry(entry) {
     kind,
     expression: String(entry?.expression ?? ""),
     params: Array.isArray(entry?.params) ? entry.params.map((param) => String(param).trim()).filter(Boolean) : [],
+    outputType: entry?.outputType === "point" ? "point" : "expression",
     sliderMin: String(entry?.sliderMin ?? "0"),
     sliderMax: String(entry?.sliderMax ?? "10"),
     time: Boolean(entry?.time),
@@ -660,11 +774,24 @@ function envFunctionDefinitions(env) {
 }
 
 function nextSort(sort) {
-  if (sort === "custom") return "dependencies";
-  if (sort === "dependencies") return "az";
+  if (sort === "custom") return "az";
   if (sort === "az") return "za";
-  if (sort === "za") return "group";
   return "custom";
+}
+
+function sortMenu(kind, current) {
+  return `<details class="sort-menu">
+    <summary class="sort-menu-trigger" aria-label="More sorting options">⋯</summary>
+    <div class="sort-menu-popover" role="menu">
+      ${[
+        ["custom", "In order"],
+        ["az", "ID A-Z"],
+        ["za", "ID Z-A"],
+        ["group", "In group"],
+        ["dependencies", "Dependencies"]
+      ].map(([value, label]) => `<button type="button" role="menuitemradio" aria-checked="${current === value}" data-set-entry-sort="${kind}" data-sort-value="${value}">${label}</button>`).join("")}
+    </div>
+  </details>`;
 }
 
 function keyboardMode() {
@@ -806,6 +933,69 @@ function markUnsavedChange() {
 function markSaved() {
   hasUnsavedChanges = false;
   updateSaveButtonState();
+}
+
+function textStatementSignatures(source) {
+  const signatures = [];
+  for (const rawLine of logicalLeptonLines(source)) {
+    const { code } = splitLeptonComment(rawLine);
+    const line = code.trim();
+    if (!line || line === "}" || line === "~~~~~") continue;
+    let match = line.match(/^set\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`set:${match[1].toLowerCase()}`); continue; }
+    match = line.match(/^folder\s+(.+?)\s*=\s*\{$/i);
+    if (match) { signatures.push(`folder:${match[1].trim()}`); continue; }
+    match = line.match(/^(?:variable|expression)\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`expression:${match[1]}`); continue; }
+    match = line.match(/^(?:slider|time)(?:\s+(?:bounded_looped|bounded looped|bounded|unbounded))?\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`slider:${match[1]}`); continue; }
+    match = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*(?:\(|=)/i);
+    if (match) { signatures.push(`function:${match[1]}`); continue; }
+    match = line.match(/^(?:colour|color)\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`colour:${match[1]}`); continue; }
+    match = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`boundary:${match[1]}`); continue; }
+    match = line.match(/^transparency\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`transparency:${match[1]}`); continue; }
+    match = line.match(/^point\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`point:${match[1]}`); continue; }
+    if (/^draw\s*\(/i.test(line)) { signatures.push("draw"); continue; }
+    signatures.push(`unrecognized:${line}`);
+  }
+  return signatures;
+}
+
+function textImportLosses(source, canonicalSource) {
+  const available = new Map();
+  for (const signature of textStatementSignatures(canonicalSource)) available.set(signature, (available.get(signature) ?? 0) + 1);
+  const losses = [];
+  for (const signature of textStatementSignatures(source)) {
+    const count = available.get(signature) ?? 0;
+    if (count > 0) available.set(signature, count - 1);
+    else losses.push(signature.startsWith("unrecognized:") ? signature.slice(13) : signature);
+  }
+  return losses;
+}
+
+function applyTextDraft(switchToStandard = false) {
+  const field = root.querySelector("[data-scene-text]");
+  const source = field?.value ?? textDraft ?? "";
+  const before = sceneSnapshot();
+  const imported = importScene(source);
+  scene = imported;
+  viewport = sceneViewport();
+  if (isValidViewport(viewport)) saveViewport();
+  const canonical = exportScene();
+  const losses = textImportLosses(source, canonical);
+  textDraft = canonical;
+  textDraftDirty = false;
+  textDraftWarningOpen = false;
+  textApplyNotice = losses.length
+    ? `${losses.length} ${losses.length === 1 ? "line was" : "lines were"} not recognized and removed: ${losses.slice(0, 3).join("; ")}${losses.length > 3 ? "..." : ""}`
+    : "Applied to graph.";
+  recordSceneHistory(before);
+  if (switchToStandard) displayMode = "standard";
+  renderApp();
 }
 
 function setGraphActionFeedback(action) {
@@ -1109,19 +1299,22 @@ function renderPanel() {
   const diagnostics = validateScene();
 
   if (displayMode === "text") {
+    if (textDraft == null) textDraft = exportScene();
     return `
       <div class="text-mode-panel">
         ${tutorialCoachmark()}
         <div class="text-language-help">
           <span>${helpDash("Lepton language", "textLanguage")}</span>
         </div>
+        ${textDraftWarningOpen ? `<div class="text-draft-warning" role="alert"><span>You have unapplied text changes.</span><button class="toolbar-button primary" data-action="apply-text-and-standard" type="button">Apply</button><button class="toolbar-button" data-action="discard-text-and-standard" type="button">Discard</button></div>` : ""}
+        ${textApplyNotice ? `<div class="text-apply-notice" role="status">${escapeHtml(textApplyNotice)}</div>` : ""}
         <div class="scene-text-editor">
-          <pre class="scene-text-highlight" data-scene-highlight aria-hidden="true">${highlightLeptonText(exportScene())}</pre>
-          <textarea class="scene-textarea" data-scene-text spellcheck="false">${escapeHtml(exportScene())}</textarea>
+          <pre class="scene-text-highlight" data-scene-highlight aria-hidden="true">${highlightLeptonText(textDraft)}</pre>
+          <textarea class="scene-textarea" data-scene-text spellcheck="false">${escapeHtml(textDraft)}</textarea>
         </div>
         <div class="text-mode-actions">
-          <span class="text-action-wrap"><button class="toolbar-button primary" data-action="apply-text">Apply</button>${helpMark("applyText")}</span>
-          <span class="text-action-wrap"><button class="toolbar-button" data-action="refresh-text">Refresh text</button>${helpMark("refreshText")}</span>
+          <span class="text-action-wrap"><button class="toolbar-button primary" data-action="apply-text">Apply to graph</button>${helpMark("applyText")}</span>
+          <span class="text-action-wrap"><button class="toolbar-button" data-action="refresh-text">Reload from graph</button>${helpMark("refreshText")}</span>
         </div>
         <div class="text-mode-time-controls">
           ${timePlaybackControls()}
@@ -1208,6 +1401,7 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
         <button class="draw-visibility" data-toggle-draw="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button>
       </div>
       <label class="draw-reference-row"><span>value</span>${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}</label>
+      ${drawArgumentControls(index, draw)}
       <div class="draw-components">${components}</div>
       ${missing.length ? `<div class="draw-component-adder">
         <button class="draw-component-add" data-add-draw-component="${index}" type="button" aria-label="Add draw component">+</button>
@@ -1218,14 +1412,28 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
     `;
   }
   if (kind === "points") {
+    const linked = pointLinkedValue(entry);
     return `<div class="point-fields">
+      <div class="point-toolbar"><button class="draw-visibility" data-toggle-point="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button></div>
       <label><span>x</span>${mathEditor(`points.${index}.x`, entry.x, "Point x", true, "x")}</label>
       <label><span>y</span>${mathEditor(`points.${index}.y`, entry.y, "Point y", true, "y")}</label>
       <label><span>colour</span>${searchableReference(`points.${index}.colorId`, drawColorEntries(), entry.colorId ?? "default", "Point color")}</label>
+      <label><span>linked function</span>${searchableReference(`points.${index}.linkedFunctionId`, pointLinkFunctionEntries(), entry.linkedFunctionId ?? "", "Linked function")}</label>
+      <output class="point-linked-value">${entry.linkedFunctionId ? `${escapeHtml(entry.linkedFunctionId)} = ${escapeHtml(formatPointDisplayNumber(linked.value))}` : "No linked value"}</output>
       <label class="inline-check"><input type="checkbox" data-field="points.${index}.draggable" ${entry.draggable ? "checked" : ""}/> draggable</label>
+      <label class="inline-check"><input type="checkbox" data-field="points.${index}.showLabel" ${entry.showLabel ? "checked" : ""}/> show coordinates and value</label>
     </div>`;
   }
   return "";
+}
+
+function drawArgumentControls(drawIndex, draw) {
+  const fn = resolveFunctionEntry(draw.equationId);
+  if (!fn || fn.kind !== "function" || !fn.params.length) return "";
+  const args = drawArgumentsForFunction(draw, fn);
+  return `<div class="draw-arguments">
+    ${fn.params.map((param, index) => `<label class="draw-argument-row"><span>${escapeHtml(param)}</span>${mathEditor(`draws.${drawIndex}.arguments.${index}`, args[index], `Input ${param}`, true, `value for ${param}`)}</label>`).join("")}
+  </div>`;
 }
 
 function colorChannelRow(index, property, label, value, diagnostic = { status: "valid", message: `${label} is valid` }) {
@@ -1233,7 +1441,7 @@ function colorChannelRow(index, property, label, value, diagnostic = { status: "
   return `<label class="channel-row" data-color-channel="${index}.${property}">
     <span class="channel-label">${label}</span>
     ${mathEditor(`colors.${index}.${property}`, value, label, true, `${property} expression`)}
-    <span class="channel-status entry-status ${diagnostic.status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>
+    <button type="button" class="channel-status entry-status ${diagnostic.status}" data-status-message="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></button>
   </label>`;
 }
 
@@ -1438,7 +1646,8 @@ function listControlBar(kind, label) {
           ].map(([value, optionLabel]) => `<option value="${value}" ${state.type === value ? "selected" : ""}>${optionLabel}</option>`).join("")}
         </select>
         <input class="list-search compact-field" data-entry-search="data" value="${escapeHtml(state.query)}" placeholder="search by ID" aria-label="search by ID" />
-        <button class="list-sort compact-field" data-entry-sort="data" type="button" aria-label="Sort data by ID: ${sortLabel(state.sort)}">${sortLabel(state.sort)}</button>
+        <button class="list-sort compact-field" data-entry-sort="data" type="button" aria-label="Cycle common sorting: ${sortLabel(state.sort)}">${sortLabel(state.sort)}</button>
+        ${sortMenu("data", state.sort)}
       </div>
     `;
   }
@@ -1559,6 +1768,7 @@ function directDependencyKeys(item, ordered, byId) {
   } else if (kind === "draws") {
     const draw = normalizeDrawEntry(entry);
     if (draw.equationId) ids.add(draw.equationId);
+    draw.arguments.forEach((source) => addExpression(source));
     draw.components.forEach((component) => {
       if (component.id && component.id !== "default") ids.add(component.id);
     });
@@ -1638,6 +1848,7 @@ function functionEntryForScene(entry) {
     kind: normalized.kind,
     expression: normalized.expression,
     params: normalized.params,
+    outputType: normalized.outputType,
     sliderMin: normalized.sliderMin,
     sliderMax: normalized.sliderMax,
     time: normalized.time,
@@ -1653,10 +1864,13 @@ function functionEntryForScene(entry) {
 
 function functionSignatureContent(entry, index) {
   return `
+    <div class="function-signature-grid">
     <label class="function-params-row">
       <span>inputs</span>
       <input class="compact-field" data-field="functions.${index}.params" value="${escapeHtml(entry.params.join(","))}" placeholder="x,y" aria-label="Function input parameters" />
     </label>
+    <label class="function-output-row"><span>output</span><select class="compact-field" data-field="functions.${index}.outputType" aria-label="Function output type"><option value="expression" ${entry.outputType === "expression" ? "selected" : ""}>expression</option><option value="point" ${entry.outputType === "point" ? "selected" : ""}>point</option></select></label>
+    </div>
   `;
 }
 
@@ -1945,6 +2159,18 @@ function bindEvents() {
     if (event.target?.closest?.("[data-field]")) activateKeyboardTarget(event.target);
   };
   bindSavedGraphThumbnailRecovery();
+  root.querySelectorAll("[data-status-message]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const wasActive = activeHelpTarget === button;
+      hideHelpTooltip();
+      if (wasActive) return;
+      button.dataset.help = button.dataset.statusMessage;
+      activeHelpTarget = button;
+      showHelpTooltip(button);
+    });
+  });
 
   root.querySelector('[data-action="open-save-dialog"]')?.addEventListener("click", () => {
     setGraphActionFeedback("open-save-dialog");
@@ -1973,17 +2199,19 @@ function bindEvents() {
   root.querySelector('[data-action="new-graph"]')?.addEventListener("click", () => {
     setGraphActionFeedback("new-graph");
     syncFields();
-    const before = sceneSnapshot();
-    scene = structuredClone(DEFAULT_SCENE);
-    activeSavedGraphId = null;
-    viewport = sceneViewport();
-    if (isValidViewport(viewport)) saveViewport();
-    recordSceneHistory(before);
-    markUnsavedChange();
-    activeTab = "functions";
-    displayMode = "standard";
-    renderApp();
+    if (hasUnsavedChanges || textDraftDirty) {
+      newGraphConfirmOpen = true;
+      renderApp();
+      return;
+    }
+    resetToNewGraph();
   });
+  root.querySelectorAll('[data-action="cancel-new-graph"]').forEach((target) => target.addEventListener("click", (event) => {
+    if (target.classList.contains("modal-backdrop") && event.target !== target) return;
+    newGraphConfirmOpen = false;
+    renderApp();
+  }));
+  root.querySelector('[data-action="confirm-new-graph"]')?.addEventListener("click", resetToNewGraph);
   root.querySelector('[data-action="open-library"]')?.addEventListener("click", () => {
     setGraphActionFeedback("open-library");
     syncFields();
@@ -2059,7 +2287,14 @@ function bindEvents() {
   root.querySelectorAll("[data-display-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       syncFields();
-      displayMode = button.dataset.displayMode;
+      const nextMode = button.dataset.displayMode;
+      if (displayMode === "text" && nextMode === "standard" && textDraftDirty) {
+        textDraftWarningOpen = true;
+        renderApp();
+        return;
+      }
+      displayMode = nextMode;
+      if (displayMode === "text" && textDraft == null) textDraft = exportScene();
       if (displayMode === "standard") settingsPanelOpen = false;
       if (displayMode === "text") settingsPanelOpen = false;
       renderApp();
@@ -2134,6 +2369,13 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const kind = button.dataset.entrySort;
       listControls[kind].sort = nextSort(listControls[kind].sort);
+      renderApp();
+    });
+  });
+  root.querySelectorAll("[data-set-entry-sort]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const kind = button.dataset.setEntrySort;
+      listControls[kind].sort = button.dataset.sortValue;
       renderApp();
     });
   });
@@ -2258,19 +2500,26 @@ function bindEvents() {
     renderApp();
   });
   root.querySelector('[data-action="apply-text"]')?.addEventListener("click", () => {
-    const text = root.querySelector("[data-scene-text]")?.value ?? "";
-    const before = sceneSnapshot();
-    scene = importScene(text);
-    viewport = sceneViewport();
-    saveViewport();
-    recordSceneHistory(before);
+    applyTextDraft(false);
+  });
+  root.querySelector('[data-action="apply-text-and-standard"]')?.addEventListener("click", () => applyTextDraft(true));
+  root.querySelector('[data-action="discard-text-and-standard"]')?.addEventListener("click", () => {
+    textDraft = exportScene();
+    textDraftDirty = false;
+    textDraftWarningOpen = false;
+    textApplyNotice = "";
+    displayMode = "standard";
     renderApp();
   });
   root.querySelector('[data-action="refresh-text"]')?.addEventListener("click", () => {
     if (!confirmTextRefresh()) return;
     const field = root.querySelector("[data-scene-text]");
-    if (field) field.value = exportScene();
-    resetTextEditHistory(field?.value ?? "");
+    textDraft = exportScene();
+    textDraftDirty = false;
+    textDraftWarningOpen = false;
+    textApplyNotice = "Reloaded from the current graph.";
+    if (field) field.value = textDraft;
+    resetTextEditHistory(textDraft);
     updateTextHighlight();
     triggerBoundaryOverlay();
   });
@@ -2285,7 +2534,10 @@ function bindEvents() {
     });
     sceneTextField.addEventListener("input", () => {
       handleTextEditInput(sceneTextField);
-      markUnsavedChange();
+      textDraft = sceneTextField.value;
+      textDraftDirty = textDraft !== exportScene();
+      textDraftWarningOpen = false;
+      textApplyNotice = "";
       updateTextHighlight();
     });
     sceneTextField.addEventListener("scroll", () => syncTextHighlightScroll());
@@ -2346,40 +2598,8 @@ function bindEvents() {
           const cleanExpr = latexToLeptonText(latex);
           requestAnimationFrame(() => keepHorizontalCaretVisible(el));
 
-          const [collection, rawIndex, property] = fieldName.split(".");
-          const index = Number(rawIndex);
           const before = sceneSnapshot();
-          if (collection === "settings") {
-            updateSettingValue(rawIndex, cleanExpr);
-            viewport = sceneViewport();
-            if (isValidViewport(viewport)) saveViewport();
-            triggerBoundaryOverlay();
-          } else if (collection === "functions" && property === "expression") {
-            const assignment = parseAssignment(cleanExpr);
-            if (assignment) {
-              const entry = functionEntryForScene(scene.functions[index]);
-              const oldId = entry.id;
-              entry.id = assignment.id;
-              entry.expression = assignment.expression;
-              scene.functions[index] = entry;
-              renameSceneReferences("functions", oldId, assignment.id);
-              const idInput = root.querySelector(`[data-field="functions.${index}.id"]`);
-              if (idInput) idInput.value = assignment.id;
-            } else {
-              const entry = functionEntryForScene(scene.functions[index]);
-              entry.expression = cleanExpr;
-              scene.functions[index] = entry;
-            }
-          } else if (collection === "functions") {
-            const entry = functionEntryForScene(scene.functions[index]);
-            entry[property] = cleanExpr;
-            scene.functions[index] = entry;
-            if (["expression", "sliderMin", "sliderMax"].includes(property)) {
-              syncSliderRangeControl(index, entry);
-            }
-          } else {
-            scene[collection][index][property] = cleanExpr;
-          }
+          updateField(el);
           recordSceneHistory(before);
 
           const diagnostics = validateScene();
@@ -2596,6 +2816,17 @@ function bindEvents() {
       syncFields();
       const before = sceneSnapshot();
       toggleDrawHidden(Number(button.dataset.toggleDraw));
+      recordSceneHistory(before);
+      renderApp();
+    });
+  });
+  root.querySelectorAll("[data-toggle-point]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncFields();
+      const before = sceneSnapshot();
+      const point = scene.points[Number(button.dataset.togglePoint)];
+      if (!point || isCommentEntry(point)) return;
+      point.hidden = !point.hidden;
       recordSceneHistory(before);
       renderApp();
     });
@@ -2854,7 +3085,10 @@ function handleTextEditHistoryKeydown(field, event) {
   textEditHistory.last = field.value;
   textEditHistory.restoring = true;
   field.selectionStart = field.selectionEnd = field.value.length;
-  markUnsavedChange();
+  textDraft = field.value;
+  textDraftDirty = textDraft !== exportScene();
+  textDraftWarningOpen = false;
+  textApplyNotice = "";
   updateTextHighlight();
   return true;
 }
@@ -2870,7 +3104,7 @@ function bindHelpTooltips() {
 }
 
 function confirmTextRefresh() {
-  return window.confirm("Are you sure you want to refresh text? You will lose unsaved text edits in this text box.");
+  return window.confirm("Reload from graph? Unapplied edits in this text box will be replaced.");
 }
 
 function scheduleHelpTooltip(target) {
@@ -3238,7 +3472,7 @@ function bindCanvasPan() {
   );
 }
 
-function hitDraggablePoint(event, canvas){const r=canvas.getBoundingClientRect(),vp=displayViewportForSize(viewport,r.width,r.height),env=buildRuntimeEnv(sceneFunctionEnv(true));for(let i=scene.points.length-1;i>=0;i--){const p=scene.points[i];if(!p.draggable)continue;const x=compileExpression(p.x)(0,0,env),y=compileExpression(p.y)(0,0,env),px=(x-vp.xMin)/(vp.xMax-vp.xMin)*r.width,py=r.height-(y-vp.yMin)/(vp.yMax-vp.yMin)*r.height;if(Math.hypot(event.clientX-r.left-px,event.clientY-r.top-py)<=10)return i;}return -1;}
+function hitDraggablePoint(event, canvas){const r=canvas.getBoundingClientRect(),vp=displayViewportForSize(viewport,r.width,r.height),env=buildRuntimeEnv(sceneFunctionEnv(true));for(let i=scene.points.length-1;i>=0;i--){const p=scene.points[i];if(!p.draggable||p.hidden)continue;const x=compileExpression(p.x)(0,0,env),y=compileExpression(p.y)(0,0,env),px=(x-vp.xMin)/(vp.xMax-vp.xMin)*r.width,py=r.height-(y-vp.yMin)/(vp.yMax-vp.yMin)*r.height;if(Math.hypot(event.clientX-r.left-px,event.clientY-r.top-py)<=10)return i;}return -1;}
 function startPointDrag(index,canvas){
   const rect=canvas.getBoundingClientRect();
   const vp=displayViewportForSize(viewport,rect.width,rect.height);
@@ -3323,7 +3557,7 @@ function updateSettingValue(key, value) {
 }
 
 function updateField(field) {
-  const [collection, rawIndex, property] = field.dataset.field.split(".");
+  const [collection, rawIndex, property, ...nestedPath] = field.dataset.field.split(".");
   let value = readFieldValue(field);
   if (property === "id") value = value.trim();
 
@@ -3363,6 +3597,18 @@ function updateField(field) {
     if (["expression", "sliderMin", "sliderMax"].includes(property)) {
       syncSliderRangeControl(Number(rawIndex), entry);
     }
+  } else if (nestedPath.length) {
+    const target = scene[collection][Number(rawIndex)];
+    const path = [property, ...nestedPath];
+    let container = target;
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const key = /^\d+$/.test(path[index]) ? Number(path[index]) : path[index];
+      const nextKey = path[index + 1];
+      if (container[key] == null) container[key] = /^\d+$/.test(nextKey) ? [] : {};
+      container = container[key];
+    }
+    const finalKey = /^\d+$/.test(path.at(-1)) ? Number(path.at(-1)) : path.at(-1);
+    container[finalKey] = value;
   } else {
     scene[collection][Number(rawIndex)][property] = value;
   }
@@ -3399,8 +3645,12 @@ function renameSceneReferences(collection, oldId, newId) {
     });
     scene.restrictions.forEach((entry) => { if (!isCommentEntry(entry)) entry.expression = replace(entry.expression); });
     scene.transparencies.forEach((entry) => { if (!isCommentEntry(entry)) entry.expression = replace(entry.expression); });
-    scene.draws.forEach((entry) => { if (!isCommentEntry(entry) && entry.equationId === oldName) entry.equationId = newName; });
-    scene.points.forEach((entry) => { if (!isCommentEntry(entry)) { entry.x = replace(entry.x); entry.y = replace(entry.y); } });
+    scene.draws.forEach((entry) => {
+      if (isCommentEntry(entry)) return;
+      if (entry.equationId === oldName) entry.equationId = newName;
+      entry.arguments = normalizeDrawEntry(entry).arguments.map(replace);
+    });
+    scene.points.forEach((entry) => { if (!isCommentEntry(entry)) { entry.x = replace(entry.x); entry.y = replace(entry.y); if (entry.linkedFunctionId === oldName) entry.linkedFunctionId = newName; } });
   } else if (collection === "colors") {
     scene.draws.forEach((entry) => { if (!isCommentEntry(entry)) { entry.components = normalizeDrawEntry(entry).components; entry.components.filter((component) => component.type === "color" && component.id === oldName).forEach((component) => { component.id = newName; }); } });
     scene.points.forEach((entry) => { if (!isCommentEntry(entry) && entry.colorId === oldName) entry.colorId = newName; });
@@ -3416,11 +3666,10 @@ function renameSceneReferences(collection, oldId, newId) {
 
 function refreshMountedFieldsAfterRename() {
   root.querySelectorAll?.(".mathquill-field[data-field]").forEach((field) => {
-    const [collection, rawIndex, property] = field.dataset.field.split(".");
+    const [collection] = field.dataset.field.split(".");
     if (collection === "settings") return;
-    const entry = scene[collection]?.[Number(rawIndex)];
-    if (!entry || isCommentEntry(entry) || !(property in entry)) return;
-    const value = Array.isArray(entry[property]) ? entry[property].join(",") : entry[property];
+    const value = sceneFieldValue(field.dataset.field);
+    if (value == null) return;
     const latex = latexSourceFromExpression(String(value ?? ""));
     field.dataset.value = latex;
     const mathField = field.mathquillInstance ?? field.__mathField;
@@ -3451,6 +3700,56 @@ function parseFunctionParams(value) {
     .split(",")
     .map((param) => param.trim())
     .filter(Boolean);
+}
+
+function splitTrailingProperties(source, allowed = null) {
+  const text = String(source ?? "").trim();
+  if (!text.endsWith("}")) return { body: text, properties: {} };
+  let depth = 0;
+  for (let index = text.length - 1; index >= 0; index -= 1) {
+    const char = text[index];
+    if (char === "}") depth += 1;
+    else if (char === "{") {
+      depth -= 1;
+      if (depth !== 0) continue;
+      const content = text.slice(index + 1, -1);
+      const fields = splitTopLevelText(content, ",");
+      const properties = {};
+      let valid = fields.length > 0;
+      for (const field of fields) {
+        const [rawKey, rawValue] = splitFirst(field, "=");
+        const key = rawKey.trim().toLowerCase();
+        if (!rawValue || !key || (allowed && !allowed.has(key))) { valid = false; break; }
+        properties[key] = rawValue.trim();
+      }
+      if (valid) return { body: text.slice(0, index).trimEnd(), properties };
+      break;
+    }
+  }
+  return { body: text, properties: {} };
+}
+
+function logicalLeptonLines(raw) {
+  const physical = String(raw ?? "").replace(/\r\n/g, "\n").split("\n");
+  const logical = [];
+  for (let index = 0; index < physical.length; index += 1) {
+    let line = physical[index];
+    const next = physical[index + 1]?.trimStart() ?? "";
+    if (!/^\s*\{/.test(next) || /^\s*folder\b/i.test(line)) { logical.push(line); continue; }
+    let block = "";
+    let depth = 0;
+    do {
+      index += 1;
+      const part = physical[index] ?? "";
+      block += `${block ? "\n" : ""}${part}`;
+      for (const char of part) {
+        if (char === "{") depth += 1;
+        else if (char === "}") depth -= 1;
+      }
+    } while (index + 1 < physical.length && depth > 0);
+    logical.push(`${line} ${block.replace(/\s+/g, " ").trim()}`);
+  }
+  return logical;
 }
 
 function updateSliderFromPointer(slider, event) {
@@ -3717,7 +4016,45 @@ function normalizeDrawEntry(entry) {
         entry?.restrictionId ? { type: "boundary", id: String(entry.restrictionId) } : null,
         entry?.transparencyId ? { type: "transparency", id: String(entry.transparencyId) } : null
       ].filter(Boolean);
-  return { ...entry, equationId: String(entry?.equationId ?? ""), components, hidden: Boolean(entry?.hidden) };
+  return {
+    ...entry,
+    equationId: String(entry?.equationId ?? ""),
+    arguments: Array.isArray(entry?.arguments) ? entry.arguments.map((argument) => String(argument ?? "")) : [],
+    components,
+    hidden: Boolean(entry?.hidden)
+  };
+}
+
+function drawArgumentsForFunction(draw, fn) {
+  if (!fn || fn.kind !== "function") return [];
+  const saved = normalizeDrawEntry(draw).arguments;
+  return fn.params.map((param, index) => saved[index] ?? (param === "x" || param === "y" ? param : "0"));
+}
+
+function drawTargetText(draw) {
+  const normalized = normalizeDrawEntry(draw);
+  const fn = resolveFunctionEntry(normalized.equationId);
+  if (!fn || fn.kind !== "function") return normalized.equationId;
+  return `${normalized.equationId}(${drawArgumentsForFunction(normalized, fn).map(textModeExpression).join(",")})`;
+}
+
+function parseDrawTarget(source) {
+  const text = String(source ?? "").trim();
+  const call = text.match(/^([A-Za-z_]\w*)\s*\(([\s\S]*)\)$/);
+  if (!call) return { equationId: text, arguments: [] };
+  return {
+    equationId: call[1],
+    arguments: splitFunctionArgs(call[2]).map((argument) => convertDivisionsToFrac(argument.trim()))
+  };
+}
+
+function drawLocalGlslMap(draw, fn, env, dynamicMap = {}) {
+  if (!fn || fn.kind !== "function") return dynamicMap;
+  const args = drawArgumentsForFunction(draw, fn);
+  return {
+    ...dynamicMap,
+    ...Object.fromEntries(fn.params.map((param, index) => [param, expressionToGlsl(args[index], env, null, [], scene.settings.angleMode, dynamicMap)]))
+  };
 }
 
 function drawComponent(draw, type) {
@@ -3725,7 +4062,7 @@ function drawComponent(draw, type) {
 }
 
 function drawFunctionEntries() {
-  const functions = dataEntries(scene.functions).map(normalizeFunctionEntry);
+  const functions = dataEntries(scene.functions).map(normalizeFunctionEntry).filter((entry) => entry.kind !== "function" || entry.outputType === "expression");
   return functions.length ? functions : [DEFAULT_DRAW_FUNCTION];
 }
 
@@ -3762,6 +4099,30 @@ function sceneFunctionEnv(includeDefault = false) {
   return Object.fromEntries(entries);
 }
 
+function pointLinkFunctionEntries() {
+  return [{ id: "", label: "none" }, ...dataEntries(scene.functions).map(normalizeFunctionEntry).filter((entry) => entry.kind === "function" && entry.outputType === "expression" && entry.params.length <= 2)];
+}
+
+function formatPointDisplayNumber(value) {
+  return Number.isFinite(value) ? String(Number(value.toPrecision(7))) : "undefined";
+}
+
+function pointLinkedValue(point, env = null) {
+  const id = String(point?.linkedFunctionId ?? "").trim();
+  if (!id) return { value: NaN, valid: true };
+  const definition = dataEntries(scene.functions).map(normalizeFunctionEntry).find((entry) => entry.id === id && entry.kind === "function" && entry.outputType === "expression");
+  if (!definition || definition.params.length > 2) return { value: NaN, valid: false };
+  try {
+    const runtimeEnv = env ?? buildRuntimeEnv(sceneFunctionEnv(true));
+    const x = compileExpression(point.x)(0, 0, runtimeEnv);
+    const y = compileExpression(point.y)(0, 0, runtimeEnv);
+    const values = [x, y].slice(0, definition.params.length);
+    return { value: runtimeEnv.__call(id, values, x, y, runtimeEnv), valid: true };
+  } catch {
+    return { value: NaN, valid: false };
+  }
+}
+
 function defaultEntryForKind(kind) {
   if (kind === "functions") {
     return { id: nextEntryId(scene.functions, "f"), kind: "variable", expression: "" };
@@ -3781,7 +4142,7 @@ function defaultEntryForKind(kind) {
     };
   }
   if (kind === "folders") return { id: nextEntryId(scene.folders, "folder"), collapsed: false };
-  if (kind === "points") return { id: nextEntryId(scene.points, "p"), x: "0", y: "0", colorId: "default", draggable: true };
+  if (kind === "points") return { id: nextEntryId(scene.points, "p"), x: "0", y: "0", colorId: "default", draggable: true, hidden: false, linkedFunctionId: "", showLabel: false };
   return null;
 }
 
@@ -3810,7 +4171,7 @@ function convertedEntryForKind(targetKind, sourceEntry, targetSubtype = "variabl
     };
   }
   if (targetKind === "points") {
-    return { id: sourceId || nextEntryId(scene.points, "p"), x: "0", y: "0", colorId: "default", draggable: true, ...comment };
+    return { id: sourceId || nextEntryId(scene.points, "p"), x: "0", y: "0", colorId: "default", draggable: true, hidden: false, linkedFunctionId: "", showLabel: false, ...comment };
   }
   return null;
 }
@@ -3996,6 +4357,7 @@ function deleteEntry(kind, index) {
       if (isCommentEntry(draw)) return;
       if (draw.equationId === removed.id) draw.equationId = replacement;
     });
+    scene.points.forEach((point) => { if (!isCommentEntry(point) && point.linkedFunctionId === removed.id) point.linkedFunctionId = ""; });
     scene.colors.forEach((color) => {
       if (isCommentEntry(color)) return;
       if (color.red === removed.id) color.red = replacement;
@@ -4032,22 +4394,27 @@ function renderScene(diagnostics = validateScene()) {
     const viewportIssue = diagnostics.settings?.find((item) => item.status === "invalid");
     if (viewportIssue) {
       drawErrorState(canvas, viewportIssue.message);
+      updateCompileStatus({ state: "error", cost: viewportIssue.message });
       return;
     }
 
     if (renderSceneWebGl(canvas)) {
       drawGraphOverlay();
+      const sourceLength = window.__leptonFragmentSource?.length ?? 0;
+      updateCompileStatus({ state: "ready", compileMs: window.__leptonLastShaderCompileMs ?? 0, sourceLength, cost: shaderCostEstimate(sourceLength) });
       return;
     }
 
     renderSceneCpu(canvas);
     drawGraphOverlay();
+    updateCompileStatus({ state: "ready", compileMs: 0, sourceLength: 0, cost: "CPU fallback" });
   } catch (error) {
     window.__leptonRuntimeError = error.message;
     const overlay = root.querySelector(".render-overlay");
     if (overlay) {
       overlay.textContent = `Render error: ${error.message}`;
     }
+    updateCompileStatus({ state: "error", cost: error.message });
   }
 }
 
@@ -4079,12 +4446,25 @@ function drawGraphOverlay() {
     if(scene.settings.showXAxis!==false&&scene.settings.showXNumbers!==false) for(let x=Math.ceil(vp.xMin/step)*step;x<=vp.xMax;x+=step) ctx.fillText(Number(x.toPrecision(6)),sx(x)+3,axisY-4);
     if(scene.settings.showYAxis!==false&&scene.settings.showYNumbers!==false) for(let y=Math.ceil(vp.yMin/step)*step;y<=vp.yMax;y+=step) ctx.fillText(Number(y.toPrecision(6)),axisX+4,sy(y)-3);
   }
+  drawPointsOverlay(ctx, rect.width, rect.height, vp);
+}
+
+function drawPointsOverlay(ctx, width, height, vp) {
+  const sx = (x) => (x-vp.xMin)/(vp.xMax-vp.xMin)*width;
+  const sy = (y) => height-(y-vp.yMin)/(vp.yMax-vp.yMin)*height;
   const env=buildRuntimeEnv(sceneFunctionEnv(true));
   for(const point of dataEntries(scene.points)){
+    if(point.hidden)continue;
     const x=compileExpression(point.x)(0,0,env),y=compileExpression(point.y)(0,0,env);if(!Number.isFinite(x)||!Number.isFinite(y))continue;
     const color=resolveColorEntry(point.colorId??"default"); let rgb=[37,99,235];
     if(color){try{rgb=[compileExpression(color.red)(x,y,env),compileExpression(color.green)(x,y,env),compileExpression(color.blue)(x,y,env)].map(channel);}catch{} }
     ctx.beginPath();ctx.arc(sx(x),sy(y),6,0,Math.PI*2);ctx.fillStyle=`rgb(${rgb.join(",")})`;ctx.fill();ctx.strokeStyle="#fff";ctx.stroke();
+    if(point.showLabel){
+      const linked=pointLinkedValue(point,env); const parts=[`${point.id} = (${formatPointDisplayNumber(x)}, ${formatPointDisplayNumber(y)})`];
+      if(point.linkedFunctionId)parts.push(`${point.linkedFunctionId} = ${formatPointDisplayNumber(linked.value)}`);
+      const label=parts.join(" · "); ctx.font="12px system-ui"; const metrics=ctx.measureText(label); const lx=Math.min(width-metrics.width-14,sx(x)+10),ly=Math.max(16,sy(y)-10);
+      ctx.fillStyle="rgba(255,255,255,.9)";ctx.fillRect(lx-4,ly-12,metrics.width+8,17);ctx.fillStyle="#172033";ctx.fillText(label,lx,ly);
+    }
   }
 }
 
@@ -4149,8 +4529,10 @@ function renderSceneCpuInto(canvas, options = {}) {
     let blue;
     let boundary;
     let transparencyValue;
+    let drawArguments = [];
     try {
       evaluate = compileExpression(fn.expression, fn.kind === "function" ? new Set(fn.params) : new Set());
+      drawArguments = drawArgumentsForFunction(draw, fn).map((argument) => compileExpression(argument));
       red = compileExpression(color.red);
       green = compileExpression(color.green);
       blue = compileExpression(color.blue);
@@ -4165,17 +4547,13 @@ function renderSceneCpuInto(canvas, options = {}) {
         const x = xPoints[xi];
         const y = yPoints[yi];
         if (shouldClip && (x < clipViewport.xMin || x > clipViewport.xMax || y < clipViewport.yMin || y > clipViewport.yMax)) continue;
-        const previousLocals = env.__locals;
-        if (fn.kind === "function") {
-          env.__locals = Object.fromEntries(fn.params.map((param) => [param, param === "x" ? x : param === "y" ? y : 0]));
-        }
         const boundaryValue = boundary(x, y, env);
-        if (fn.kind === "function") env.__locals = previousLocals;
         if (!Number.isFinite(boundaryValue)) continue;
         if (boundaryValue < 0) continue;
 
+        const previousLocals = env.__locals;
         if (fn.kind === "function") {
-          env.__locals = Object.fromEntries(fn.params.map((param) => [param, param === "x" ? x : param === "y" ? y : 0]));
+          env.__locals = Object.fromEntries(fn.params.map((param, index) => [param, drawArguments[index](x, y, env)]));
         }
         const z = evaluate(x, y, env);
         if (fn.kind === "function") env.__locals = previousLocals;
@@ -4214,9 +4592,17 @@ function renderSceneWebGlInto(canvas, options = {}) {
 
   const shaderKey = webGlShaderCacheKey();
   let cached = webGlRenderCache.get(canvas);
+  window.__leptonLastShaderCompileMs = 0;
   if (!cached || cached.gl !== gl || cached.shaderKey !== shaderKey) {
+    const compileStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
     const fragmentSource = buildFragmentShader();
     window.__leptonFragmentSource = fragmentSource;
+    if (fragmentSource.length > MAX_SAFE_FRAGMENT_SOURCE_LENGTH) {
+      window.__leptonShaderLog = `Generated shader exceeds the ${(MAX_SAFE_FRAGMENT_SOURCE_LENGTH / 1000000).toFixed(1)} MB safety budget.`;
+      showShaderError(window.__leptonShaderLog, fragmentSource.length);
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      return options.fallbackOnFailure === true ? false : true;
+    }
     const vertexSource = `
       attribute vec2 a_position;
       void main() {
@@ -4253,6 +4639,8 @@ function renderSceneWebGlInto(canvas, options = {}) {
       }
     };
     webGlRenderCache.set(canvas, cached);
+    const compileEndedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+    window.__leptonLastShaderCompileMs = compileEndedAt - compileStartedAt;
     window.__leptonShaderBuildCount = (window.__leptonShaderBuildCount ?? 0) + 1;
   }
   if (!cached?.program) {
@@ -4392,8 +4780,9 @@ function buildFragmentShader() {
         return null;
       }
       try {
+        const localMap = drawLocalGlslMap(draw, fn, env, dynamicMap);
         return {
-          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, { ...dynamicMap, ...(fn.kind === "function" ? defaultParamGlslMap(fn.params) : {}) }),
+          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, localMap),
           red: expressionToGlsl(color.red, env, "z", [], scene.settings.angleMode, dynamicMap),
           green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode, dynamicMap),
           blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode, dynamicMap),
@@ -4463,6 +4852,56 @@ function buildFragmentShader() {
     float leptonIntersect(float a, float b) { return max(a, b); }
     float leptonSubtract(float a, float b) { return max(-a, b); }
     float leptonRandom(vec2 value) { return fract(sin(dot(value, vec2(12.9898, 78.233)) + u_random_seed * 0.000173) * 43758.5453123); }
+    float leptonSurfaceBump(float px, float py, float cx, float cy, float gamma) {
+      vec2 delta = vec2(px - cx, py - cy);
+      return exp(-gamma * dot(delta, delta));
+    }
+    float leptonStrokeBox(
+      float px, float py, float cx, float cy,
+      float tx, float ty, float nxv, float nyv,
+      float halfLength, float halfWidth
+    ) {
+      vec2 delta = vec2(px - cx, py - cy);
+      return max(
+        abs(tx * delta.x + ty * delta.y) - halfLength,
+        abs(nxv * delta.x + nyv * delta.y) - halfWidth
+      );
+    }
+    float leptonDetailWave(float px, float py, float fx, float fy, float phase) {
+      return sin(3.141592653589793 * (fx * px + fy * py) + phase);
+    }
+    float leptonDetailHash(float px, float py) {
+      float hash = 157.0 * floor(px) + 1223.0 * floor(py);
+      return (hash - floor(hash / 4093.0) * 4093.0) / 4093.0;
+    }
+    float leptonDetailFade(float value) {
+      return value * value * (3.0 - 2.0 * value);
+    }
+    float leptonDetailNoise(float px, float py) {
+      vec2 cell = floor(vec2(px, py));
+      vec2 fraction = vec2(px, py) - cell;
+      vec2 fade = vec2(leptonDetailFade(fraction.x), leptonDetailFade(fraction.y));
+      float top = mix(
+        leptonDetailHash(cell.x, cell.y),
+        leptonDetailHash(cell.x + 1.0, cell.y),
+        fade.x
+      );
+      float bottom = mix(
+        leptonDetailHash(cell.x, cell.y + 1.0),
+        leptonDetailHash(cell.x + 1.0, cell.y + 1.0),
+        fade.x
+      );
+      return mix(top, bottom, fade.y);
+    }
+    float leptonDetailTexture(float px, float py, float sx, float sy, float ox, float oy) {
+      float tx = sx * px + ox;
+      float ty = sy * py + oy;
+      return 2.0 * (
+        0.55 * leptonDetailNoise(tx, ty) +
+        0.28 * leptonDetailNoise(2.03 * tx + 3.1, 2.03 * ty - 1.7) +
+        0.17 * leptonDetailNoise(4.09 * tx - 2.4, 4.09 * ty + 4.3)
+      ) - 1.0;
+    }
 
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
@@ -4672,10 +5111,17 @@ function compileExpression(source, localNames = new Set()) {
   js = rewritePointSelectors(js, (point, coordinate) => `point("${point.id}",${coordinate})`);
   const functionEnv = sceneFunctionEnv(true);
   const rewriteRuntimeFunctionCalls = (expression) => rewriteCustomFunctionCalls(expression, functionEnv, (entry, args) => {
-    if (args.length !== entry.params.length) {
+    if (entry.outputType === "point") throw new Error(`Point function ${entry.id} must be expanded into a point output or receiving function inputs`);
+    const expandedArgs = expandPointArguments(args, functionEnv);
+    if (expandedArgs.length !== entry.params.length) {
       throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
     }
-    return `call("${entry.id}", [${args.map(rewriteRuntimeFunctionCalls).join(",")}], x, y)`;
+    return `call("${entry.id}", [${expandedArgs.map(rewriteRuntimeFunctionCalls).join(",")}], x, y)`;
+  });
+  js = rewritePointFunctionSelectors(js, functionEnv, (entry, args, coordinate) => {
+    const expandedArgs = expandPointArguments(args, functionEnv);
+    if (expandedArgs.length !== entry.params.length) throw new Error(`Function ${entry.id} expects ${entry.params.length} scalar inputs after point expansion`);
+    return `pointcall("${entry.id}",${coordinate},[${expandedArgs.map(rewriteRuntimeFunctionCalls).join(",")}],x,y)`;
   });
   js = rewriteRuntimeFunctionCalls(js);
   js = convertPowers(js)
@@ -4688,7 +5134,7 @@ function compileExpression(source, localNames = new Set()) {
   js = rewriteBareIdentifiers(
     js,
     (name) => localNames.has(name) ? `local("${name}")` : `ref("${name}", x, y)`,
-    new Set(["Math", "E", "PI", "call", "local", "point"]),
+    new Set(["Math", "E", "PI", "call", "pointcall", "local", "point"]),
     localNames
   );
 
@@ -4739,6 +5185,7 @@ function compileExpression(source, localNames = new Set()) {
       const call = (name, values, rx, ry) => {
         return env.__call ? env.__call(name, values, rx, ry, env) : NaN;
       };
+      const pointcall = (name, component, values, rx, ry) => env.__pointCall ? env.__pointCall(name, component, values, rx, ry, env) : NaN;
       const point = (name, coordinate) => env.__point ? env.__point(name, coordinate, env) : NaN;
       return ${js};
     `
@@ -4771,7 +5218,7 @@ function buildRuntimeEnv(expressions) {
     value: (name, values, x, y, env) => {
       const definition = definitions[name];
       const runtime = env.__runtime ?? { depth: 0, maxDepth: recursionLimit() };
-      if (!definition || definition.kind !== "function") return NaN;
+      if (!definition || definition.kind !== "function" || definition.outputType === "point") return NaN;
       if (values.length !== definition.params.length) return NaN;
       if (runtime.depth >= runtime.maxDepth) return 0;
       const previousLocals = env.__locals;
@@ -4786,6 +5233,21 @@ function buildRuntimeEnv(expressions) {
     },
     enumerable: false,
     configurable: true
+  });
+  Object.defineProperty(runtimeEnv, "__pointCall", {
+    value: (name, component, values, x, y, env) => {
+      const definition = definitions[name];
+      const runtime = env.__runtime ?? { depth: 0, maxDepth: recursionLimit() };
+      if (!definition || definition.kind !== "function" || definition.outputType !== "point" || values.length !== definition.params.length) return NaN;
+      if (runtime.depth >= runtime.maxDepth) return 0;
+      const components = pointExpressionComponents(definition.expression, expressions, [...(env.__pointStack ?? []), name]);
+      if (!components) return NaN;
+      const previousLocals = env.__locals;
+      env.__locals = Object.fromEntries(definition.params.map((param, index) => [param, values[index]]));
+      runtime.depth += 1;
+      try { return compileExpression(components[component], new Set(definition.params))(x, y, env); }
+      finally { runtime.depth -= 1; env.__locals = previousLocals; }
+    }, enumerable: false, configurable: true
   });
   Object.defineProperty(runtimeEnv, "__point", {
     value: (name, coordinate, env) => {
@@ -4832,6 +5294,101 @@ function rewriteCustomFunctionCalls(expression, env, build) {
   return output;
 }
 
+function directCustomFunctionCall(source, env) {
+  const text = stripWrappingGroup(String(source ?? "").trim());
+  const match = text.match(/^([A-Za-z_]\w*)\s*\(/);
+  if (!match) return null;
+  const open = text.indexOf("(", match[1].length);
+  const close = matchingParen(text, open);
+  const entry = envFunctionDefinitions(env)[match[1]];
+  if (!entry || close !== text.length - 1) return null;
+  return { entry, args: splitFunctionArgs(text.slice(open + 1, close)).map((arg) => arg.trim()).filter(Boolean) };
+}
+
+function topLevelPointBinary(source, operator) {
+  const text = String(source ?? "").trim();
+  let round = 0, brace = 0, square = 0;
+  for (let index = text.length - 1; index > 0; index -= 1) {
+    const char = text[index];
+    if (char === ")") round += 1; else if (char === "(") round -= 1;
+    else if (char === "}") brace += 1; else if (char === "{") brace -= 1;
+    else if (char === "]") square += 1; else if (char === "[") square -= 1;
+    else if (char === operator && round === 0 && brace === 0 && square === 0 && !(operator === "+" && isUnaryOperator(text, index))) {
+      return [text.slice(0, index), text.slice(index + 1)];
+    }
+  }
+  return null;
+}
+
+function pointExpressionComponents(source, env, stack = []) {
+  let text = String(source ?? "").trim();
+  if (text.startsWith("(") && matchingParen(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+  if (text.startsWith("[") && matchingSquareBracket(text, 0) === text.length - 1) {
+    const components = splitTopLevelText(text.slice(1, -1), ",").map((part) => part.trim());
+    if (components.length !== 2) throw new Error("Point output must contain exactly two coordinates");
+    return components;
+  }
+  for (const operator of ["+", "*"]) {
+    const split = topLevelPointBinary(text, operator);
+    if (!split) continue;
+    const left = pointExpressionComponents(split[0], env, stack);
+    const right = pointExpressionComponents(split[1], env, stack);
+    if (!left && !right) continue;
+    const leftParts = left ?? [split[0], split[0]];
+    const rightParts = right ?? [split[1], split[1]];
+    return [0, 1].map((index) => `((${leftParts[index]})${operator}(${rightParts[index]}))`);
+  }
+  const call = directCustomFunctionCall(text, env);
+  if (!call || call.entry.outputType !== "point") return null;
+  if (stack.includes(call.entry.id) || stack.length >= recursionLimit()) return ["0", "0"];
+  const expanded = expandPointArguments(call.args, env, stack);
+  if (expanded.length !== call.entry.params.length) throw new Error(`Function ${call.entry.id} expects ${call.entry.params.length} scalar inputs after point expansion`);
+  return [0, 1].map((component) => `pointcall("${call.entry.id}",${component},[${expanded.join(",")}],x,y)`);
+}
+
+function expandPointArguments(args, env, stack = []) {
+  return args.flatMap((arg) => pointExpressionComponents(arg, env, stack) ?? [arg]);
+}
+
+function pointExpressionComponentsGlsl(source, env, zName, stack, angleMode, localMap) {
+  let text = String(source ?? "").trim();
+  if (text.startsWith("(") && matchingParen(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+  if (text.startsWith("[") && matchingSquareBracket(text, 0) === text.length - 1) {
+    const components = splitTopLevelText(text.slice(1, -1), ",").map((part) => part.trim());
+    if (components.length !== 2) throw new Error("Point output must contain exactly two coordinates");
+    return components.map((part) => expressionToGlsl(part, env, zName, stack, angleMode, localMap));
+  }
+  for (const operator of ["+", "*"]) {
+    const split = topLevelPointBinary(text, operator);
+    if (!split) continue;
+    const left = pointExpressionComponentsGlsl(split[0], env, zName, stack, angleMode, localMap);
+    const right = pointExpressionComponentsGlsl(split[1], env, zName, stack, angleMode, localMap);
+    if (!left && !right) continue;
+    const leftParts = left ?? [expressionToGlsl(split[0], env, zName, stack, angleMode, localMap), expressionToGlsl(split[0], env, zName, stack, angleMode, localMap)];
+    const rightParts = right ?? [expressionToGlsl(split[1], env, zName, stack, angleMode, localMap), expressionToGlsl(split[1], env, zName, stack, angleMode, localMap)];
+    return [0, 1].map((index) => `((${leftParts[index]})${operator}(${rightParts[index]}))`);
+  }
+  const call = directCustomFunctionCall(text, env);
+  if (!call || call.entry.outputType !== "point") return null;
+  if (stack.includes(call.entry.id) || stack.length >= recursionLimit()) return ["0.0", "0.0"];
+  const expandedArgs = call.args.flatMap((arg) => pointExpressionComponentsGlsl(arg, env, zName, stack, angleMode, localMap) ?? [expressionToGlsl(arg, env, zName, stack, angleMode, localMap)]);
+  if (expandedArgs.length !== call.entry.params.length) throw new Error(`Function ${call.entry.id} expects ${call.entry.params.length} scalar inputs after point expansion`);
+  const nextLocals = { ...localMap, ...Object.fromEntries(call.entry.params.map((param, index) => [param, `(${expandedArgs[index]})`])) };
+  const components = pointExpressionComponentsGlsl(call.entry.expression, env, zName, [...stack, call.entry.id], angleMode, nextLocals);
+  if (!components) throw new Error(`Point function ${call.entry.id} must return [x,y]`);
+  return components;
+}
+
+function matchingSquareBracket(source, openIndex) {
+  let depth = 0;
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === "[") depth += 1;
+    else if (source[index] === "]") depth -= 1;
+    if (depth === 0) return index;
+  }
+  return -1;
+}
+
 function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode = "radians", localMap = {}) {
   if (stack.length > recursionLimit()) {
     return recursionBaseGlsl(zName);
@@ -4849,11 +5406,19 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
     if (stack.includes(pointKey) || stack.length >= recursionLimit()) return "(0.0/0.0)";
     return `(${expressionToGlsl(coordinate === 0 ? point.x : point.y, env, zName, [...stack, pointKey], angleMode, localMap)})`;
   });
+  expression = rewritePointFunctionSelectors(expression, env, (entry, args, coordinate) => {
+    const components = pointExpressionComponentsGlsl(`${entry.id}(${args.join(",")})`, env, zName, stack, angleMode, localMap);
+    if (!components) throw new Error(`Point function ${entry.id} must return [x,y]`);
+    return `(${components[coordinate]})`;
+  });
   expression = rewriteCustomFunctionCalls(expression, env, (entry, args) => {
-    if (args.length !== entry.params.length) {
+    if (entry.outputType === "point") throw new Error(`Point function ${entry.id} must be expanded into a point output or receiving function inputs`);
+    const expandedArgs = args.flatMap((arg) => pointExpressionComponentsGlsl(arg, env, zName, stack, angleMode, localMap) ?? [expressionToGlsl(arg, env, zName, stack, angleMode, localMap)]);
+    if (expandedArgs.length !== entry.params.length) {
       throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
     }
-    const expandedArgs = args.map((arg) => expressionToGlsl(arg, env, zName, stack, angleMode, localMap));
+    const nativeCall = nativeItgeGlslCall(entry, expandedArgs);
+    if (nativeCall) return nativeCall;
     const nextLocalMap = { ...localMap, ...Object.fromEntries(entry.params.map((param, index) => [param, `(${expandedArgs[index]})`])) };
     return `(${expressionToGlsl(entry.expression, env, zName, [...stack, entry.id], angleMode, nextLocalMap)})`;
   });
@@ -4896,6 +5461,57 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
   return expression;
 }
 
+const NATIVE_ITGE_FUNCTIONS = new Map([
+  ["surfaceBump", {
+    params: "px,py,cx,cy,gamma",
+    expression: "e^(-gamma*((px-cx)^2+(py-cy)^2))",
+    glsl: "leptonSurfaceBump"
+  }],
+  ["strokeBox", {
+    params: "px,py,cx,cy,tx,ty,nxv,nyv,halfLength,halfWidth",
+    expression: "max(abs(tx*(px-cx)+ty*(py-cy))-halfLength,abs(nxv*(px-cx)+nyv*(py-cy))-halfWidth)",
+    glsl: "leptonStrokeBox"
+  }],
+  ["detailWave", {
+    params: "px,py,fx,fy,phase",
+    expression: "sin(pi*(fx*px+fy*py)+phase)",
+    glsl: "leptonDetailWave"
+  }],
+  ["detailBump", {
+    params: "px,py,cx,cy,gamma",
+    expression: "e^(-gamma*((px-cx)^2+(py-cy)^2))",
+    glsl: "leptonSurfaceBump"
+  }],
+  ["detailHash", {
+    params: "px,py",
+    expression: "(157*floor(px)+1223*floor(py)-floor((157*floor(px)+1223*floor(py))/4093)*4093)/4093",
+    glsl: "leptonDetailHash"
+  }],
+  ["detailFade", {
+    params: "v",
+    expression: "v^2*(3-2*v)",
+    glsl: "leptonDetailFade"
+  }],
+  ["detailNoise", {
+    params: "px,py",
+    expression: "(detailHash(floor(px),floor(py))*(1-detailFade(px-floor(px)))+detailHash(floor(px)+1,floor(py))*detailFade(px-floor(px)))*(1-detailFade(py-floor(py)))+(detailHash(floor(px),floor(py)+1)*(1-detailFade(px-floor(px)))+detailHash(floor(px)+1,floor(py)+1)*detailFade(px-floor(px)))*detailFade(py-floor(py))",
+    glsl: "leptonDetailNoise"
+  }],
+  ["detailTexture", {
+    params: "px,py,sx,sy,ox,oy",
+    expression: "2*(0.55*detailNoise(sx*px+ox,sy*py+oy)+0.28*detailNoise(2.03*(sx*px+ox)+3.1,2.03*(sy*py+oy)-1.7)+0.17*detailNoise(4.09*(sx*px+ox)-2.4,4.09*(sy*py+oy)+4.3))-1",
+    glsl: "leptonDetailTexture"
+  }]
+]);
+
+function nativeItgeGlslCall(entry, args) {
+  const native = NATIVE_ITGE_FUNCTIONS.get(entry?.id);
+  if (!native || entry.params.join(",") !== native.params) return null;
+  const expression = normalizeExpressionDisplayText(entry.expression).replaceAll(/\s+/g, "");
+  if (expression !== native.expression) return null;
+  return `${native.glsl}(${args.join(",")})`;
+}
+
 function parsePiecewiseExpression(source) {
   const text=String(source??"").trim(); if(!text.startsWith("{")||!text.endsWith("}"))return null;
   const parts=splitTopLevelText(text.slice(1,-1),","); const branches=[]; let fallback="";
@@ -4908,6 +5524,42 @@ function rewritePointSelectors(expression, build) {
   for (const point of points) {
     const id = point.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     output = output.replaceAll(new RegExp(`\\b${id}\\s*(?:\\.\\s*([xy])|\\[\\s*([01])\\s*\\])`, "g"), (_, axis, index) => build(point, axis ? (axis === "x" ? 0 : 1) : Number(index)));
+  }
+  return output;
+}
+function rewritePointFunctionSelectors(expression, env, build) {
+  const definitions = envFunctionDefinitions(env);
+  let output = "";
+  let index = 0;
+  while (index < expression.length) {
+    const match = expression.slice(index).match(/^[A-Za-z_]\w*/);
+    const entry = match ? definitions[match[0]] : null;
+    if (!match || entry?.outputType !== "point") {
+      output += expression[index] ?? "";
+      index += 1;
+      continue;
+    }
+    const open = index + match[0].length;
+    if (expression[open] !== "(") {
+      output += expression[index];
+      index += 1;
+      continue;
+    }
+    const close = matchingParen(expression, open);
+    if (close === -1) {
+      output += expression.slice(index);
+      break;
+    }
+    const selector = expression.slice(close + 1).match(/^\s*(?:\.\s*([xy])|\[\s*([01])\s*\])/);
+    if (!selector) {
+      output += expression.slice(index, close + 1);
+      index = close + 1;
+      continue;
+    }
+    const coordinate = selector[1] ? (selector[1] === "x" ? 0 : 1) : Number(selector[2]);
+    const args = splitFunctionArgs(expression.slice(open + 1, close)).map((argument) => argument.trim()).filter(Boolean);
+    output += build(entry, args, coordinate);
+    index = close + 1 + selector[0].length;
   }
   return output;
 }
@@ -5039,6 +5691,7 @@ function validateScene() {
     folders: duplicateEntryIds(scene.folders ?? []),
     points: duplicateEntryIds(scene.points ?? [])
   };
+  const valueKindCollisions = duplicateFunctionKinds(scene.functions);
   const diagnostics = {
     functions: [],
     colors: [],
@@ -5064,9 +5717,10 @@ function validateScene() {
     const idResult = validateEntryId(entry.id, label, env, entry.kind === "slider" || entry.kind === "variable");
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, label, duplicateIds.functions);
+    const kindCollision = valueKindCollisions.has(entry.id.trim()) ? { status: "invalid", message: `Name "${entry.id}" cannot be shared by an expression, slider, and function` } : null;
     if (entry.kind === "slider") {
       return combineDiagnostics([
-        duplicateDiagnostic,
+        duplicateDiagnostic, kindCollision,
         idResult,
         sliderCoordinateDiagnostic(entry),
         timeVariableDiagnostic(entry, timeVariableCount),
@@ -5079,14 +5733,16 @@ function validateScene() {
     }
     if (entry.kind === "function") {
       const params = new Set(entry.params);
+      const outputDiagnostic = validateFunctionOutput(entry, env);
       return combineDiagnostics([
-        duplicateDiagnostic,
+        duplicateDiagnostic, kindCollision,
         idResult,
         validateFunctionParams(entry, env),
-        validateExpression(entry.expression, env, [entry.id], params)
+        outputDiagnostic,
+        entry.outputType === "point" ? null : validateExpression(entry.expression, env, [entry.id], params)
       ]);
     }
-    return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, env, [entry.id])]);
+    return combineDiagnostics([duplicateDiagnostic, kindCollision, idResult, validateExpression(entry.expression, env, [entry.id])]);
   });
   diagnostics.colors = scene.colors.map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
@@ -5136,7 +5792,9 @@ function validateScene() {
     if (!restriction) missing.push("boundary");
     if (!transparency) missing.push("transparency");
     if (missing.length) return { status: "invalid", message: `Missing ${missing.join(", ")}` };
+    if (normalizeFunctionEntry(fn).outputType === "point") return { status: "invalid", message: "Draw layers require an expression-output value" };
     const affected = combineDiagnostics([
+      ...(fn.kind === "function" ? drawArgumentsForFunction(entry, fn).map((argument) => validateExpression(argument, drawEnv)) : []),
       validateExpression(fn.expression, drawEnv, [fn.id], fn.kind === "function" ? new Set(fn.params) : new Set()),
       validateExpression(color.red, drawEnv),
       validateExpression(color.green, drawEnv),
@@ -5162,7 +5820,8 @@ function validateScene() {
     validateExpression(entry.y, env),
     resolveColorEntry(entry.colorId ?? "default")
       ? { status: "valid", message: "Point color is valid" }
-      : { status: "invalid", message: `Missing point color: ${entry.colorId}` }
+      : { status: "invalid", message: `Missing point color: ${entry.colorId}` },
+    pointLinkDiagnostic(entry, env)
   ]));
 
   const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.transparencies, ...diagnostics.draws, ...diagnostics.points, ...diagnostics.folders, ...diagnostics.settings];
@@ -5173,6 +5832,27 @@ function validateScene() {
   diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   latestDiagnostics = diagnostics;
   return diagnostics;
+}
+
+function validateFunctionOutput(entry, env) {
+  if (entry.outputType !== "point") return { status: "valid", message: "Function returns an expression" };
+  try {
+    const components = pointExpressionComponents(entry.expression, env, [entry.id]);
+    if (!components || components.length !== 2) return { status: "invalid", message: `Point function "${entry.id}" must return [x,y] or point-valued +/* arithmetic` };
+    const locals = new Set(entry.params);
+    return combineDiagnostics(components.map((component) => validateExpression(component, env, [entry.id], locals)));
+  } catch (error) {
+    return { status: "invalid", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function pointLinkDiagnostic(point, env) {
+  if (!point.linkedFunctionId) return { status: "valid", message: "Point has no linked function" };
+  const definition = envEntry(env, point.linkedFunctionId);
+  if (!definition || definition.kind !== "function") return { status: "invalid", message: `Missing linked function: ${point.linkedFunctionId}` };
+  if (definition.outputType === "point") return { status: "invalid", message: "Point links require an expression-output function" };
+  if (definition.params.length > 2) return { status: "invalid", message: `Linked function ${definition.id} needs ${definition.params.length} inputs; a point supplies at most x and y` };
+  return { status: "valid", message: `Linked value uses ${definition.id}(${definition.params.slice(0,2).join(",")}) at this point` };
 }
 
 function validateFolderName(name) {
@@ -5305,6 +5985,16 @@ function duplicateEntryIds(entries) {
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return new Set([...counts].filter(([, count]) => count > 1).map(([id]) => id));
+}
+
+function duplicateFunctionKinds(entries) {
+  const kinds = new Map();
+  for (const rawEntry of dataEntries(entries)) {
+    const entry = normalizeFunctionEntry(rawEntry);
+    if (!entry.id) continue;
+    const set = kinds.get(entry.id) ?? new Set(); set.add(entry.kind); kinds.set(entry.id, set);
+  }
+  return new Set([...kinds].filter(([, set]) => set.size > 1).map(([id]) => id));
 }
 
 function duplicateIdDiagnostic(id, label, duplicates) {
@@ -7397,11 +8087,15 @@ function exportFunctionEntry(rawEntry, section = "functions") {
   const expression = textModeExpression(entry.expression);
   let line = "";
   if (entry.kind === "slider") {
-    const range = entry.time && normalizeTimeMode(entry.timeMode) === "unbounded" ? "" : ` range ${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`;
-    const speed = entry.time ? ` speed ${textModeExpression(entry.timeRate)}` : "";
-    line = entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${range}${speed}` : `slider ${entry.id} = ${expression}${range}`;
+    const properties = [];
+    if (!(entry.time && normalizeTimeMode(entry.timeMode) === "unbounded")) properties.push(`range=${textModeExpression(entry.sliderMin)}~${textModeExpression(entry.sliderMax)}`);
+    if (entry.time) properties.push(`speed=${textModeExpression(entry.timeRate)}`);
+    const suffix = properties.length ? ` {${properties.join(", ")}}` : "";
+    line = entry.time ? `time ${entry.timeMode} ${entry.id} = ${expression}${suffix}` : `slider ${entry.id} = ${expression}${suffix}`;
   } else if (entry.kind === "function") {
-    line = `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
+    line = entry.outputType === "point"
+      ? `function ${entry.id}(${entry.params.join(",")}) -> point = ${expression}`
+      : `function ${entry.id}(${entry.params.join(",")}) = ${expression}`;
   } else {
     line = `expression ${entry.id} = ${expression}`;
   }
@@ -7429,20 +8123,27 @@ function exportTransparencyEntry(entry) {
 function exportDrawEntry(entry) {
   if (isCommentEntry(entry)) return exportStandaloneComment(entry, "draws");
   const draw = normalizeDrawEntry(entry);
-  const fields = [draw.equationId];
+  const fields = [];
   for (const component of draw.components) {
     const key = component.type === "color" ? "colour" : component.type;
     fields.push(`${key}=${component.id}`);
   }
   if (draw.hidden) fields.push("visible=False");
   return appendInlineComment(
-    `draw(${fields.join(",")})`,
+    `draw(${drawTargetText(draw)})${fields.length ? ` {${fields.join(", ")}}` : ""}`,
     entry.comment
   );
 }
 
 function exportPointEntry(entry) {
-  return appendInlineComment(`point ${entry.id} = (${textModeExpression(entry.x)},${textModeExpression(entry.y)})~${formatLeptonBoolean(entry.draggable)}~${entry.colorId ?? "default"}`, entry.comment);
+  const properties = [
+    `draggable=${formatLeptonBoolean(entry.draggable)}`,
+    `visible=${formatLeptonBoolean(!entry.hidden)}`,
+    `colour=${entry.colorId ?? "default"}`
+  ];
+  if (entry.linkedFunctionId) properties.push(`link=${entry.linkedFunctionId}`);
+  if (entry.showLabel) properties.push("show_label=True");
+  return appendInlineComment(`point ${entry.id} = [${textModeExpression(entry.x)},${textModeExpression(entry.y)}] {${properties.join(", ")}}`, entry.comment);
 }
 
 function exportStandaloneComment(entry, section = "functions") {
@@ -7593,7 +8294,7 @@ function importScene(raw) {
     }
   };
 
-  for (const rawLine of raw.replace(/\r\n/g, "\n").split("\n")) {
+  for (const rawLine of logicalLeptonLines(raw)) {
     const { code, comment } = splitLeptonComment(rawLine);
     const line = code.trim();
     if (!line) {
@@ -7662,7 +8363,14 @@ function importScene(raw) {
       if (assignment) {
         const time = assignment[1].toLowerCase() === "time";
         const timeMode = normalizeTimeMode(assignment[2]);
-        const range = splitSliderRange(assignment[4]);
+        const propertyBlock = splitTrailingProperties(assignment[4], new Set(["range", "speed"]));
+        const range = splitSliderRange(propertyBlock.body);
+        if (propertyBlock.properties.range) {
+          const [minimum = "0", maximum = "10"] = splitTopLevelText(propertyBlock.properties.range, "~").map((part) => part.trim());
+          range.sliderMin = minimum;
+          range.sliderMax = maximum;
+        }
+        if (propertyBlock.properties.speed) range.timeRate = propertyBlock.properties.speed;
         flushPendingComments("functions");
         currentCommentSection = "functions";
         pushDataEntry(next, "functions", withInlineComment({
@@ -7677,7 +8385,7 @@ function importScene(raw) {
         }, comment));
       }
     } else if (/^(function|map)\s+/i.test(line)) {
-      const callAssignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=\s*(.+)$/i);
+      const callAssignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*(expression|point))?\s*=\s*(.+)$/i);
       if (callAssignment) {
         flushPendingComments("functions");
         currentCommentSection = "functions";
@@ -7685,7 +8393,8 @@ function importScene(raw) {
           id: callAssignment[1],
           kind: "function",
           params: parseFunctionParams(callAssignment[2]),
-          expression: convertDivisionsToFrac(callAssignment[3].trim())
+          outputType: callAssignment[3]?.toLowerCase() === "point" ? "point" : "expression",
+          expression: convertDivisionsToFrac(callAssignment[4].trim())
         }, comment));
       } else {
         const assignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
@@ -7719,14 +8428,18 @@ function importScene(raw) {
         pushDataEntry(next, "transparencies", withInlineComment({ id: assignment[1], expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
       }
     } else if (/^draw\s*\(/i.test(line)) {
-      const call = line.match(/^draw\s*\((.*)\)\s*$/i);
+      const propertyBlock = splitTrailingProperties(line, new Set(["colour", "color", "boundary", "restriction", "transparency", "visible"]));
+      const call = propertyBlock.body.match(/^draw\s*\((.*)\)\s*$/i);
       if (call) {
         const args = splitFunctionArgs(call[1]).map((part) => part.trim());
-        const equationId = args.shift() ?? "";
+        const target = parseDrawTarget(args.shift() ?? "");
         let hidden = false;
         const components = [];
-        if (args.some((part) => part.includes("="))) {
-          for (const part of args) {
+        const namedParts = Object.keys(propertyBlock.properties).length
+          ? Object.entries(propertyBlock.properties).map(([key, value]) => `${key}=${value}`)
+          : args.some((part) => part.includes("=")) ? args : [];
+        if (namedParts.length) {
+          for (const part of namedParts) {
             const [rawKey, rawValue] = splitFirst(part, "=");
             const key = rawKey.trim().toLowerCase();
             const value = rawValue.trim();
@@ -7743,11 +8456,25 @@ function importScene(raw) {
         }
         flushPendingComments("draws");
         currentCommentSection = "draws";
-        pushDataEntry(next, "draws", withInlineComment({ equationId, components, hidden }, comment));
+        pushDataEntry(next, "draws", withInlineComment({ equationId: target.equationId, arguments: target.arguments, components, hidden }, comment));
       }
     } else if (/^point\s+/i.test(line)) {
-      const match = line.match(/^point\s+([A-Za-z_]\w*)\s*=\s*\((.+),(.+)\)\s*~\s*(True|False)(?:\s*~\s*([A-Za-z_]\w*|default))?$/i);
-      if (match) pushDataEntry(next, "points", withInlineComment({ id: match[1], x: match[2].trim(), y: match[3].trim(), draggable: parseLeptonBoolean(match[4]), colorId: match[5] || "default" }, comment));
+      const modern = line.match(/^point\s+([A-Za-z_]\w*)\s*=\s*\[([\s\S]+)\]\s*(\{[\s\S]*\})?$/i);
+      if (modern) {
+        const coordinates = splitTopLevelText(modern[2], ",").map((part) => part.trim());
+        const properties = splitTrailingProperties(`${modern[3] ?? ""}`, new Set(["draggable", "visible", "colour", "color", "link", "show_label"])).properties;
+        if (coordinates.length === 2) pushDataEntry(next, "points", withInlineComment({
+          id: modern[1], x: coordinates[0], y: coordinates[1],
+          draggable: parseLeptonBoolean(properties.draggable ?? "False"),
+          hidden: !parseLeptonBoolean(properties.visible ?? "True"),
+          colorId: properties.colour ?? properties.color ?? "default",
+          linkedFunctionId: properties.link ?? "",
+          showLabel: parseLeptonBoolean(properties.show_label ?? "False")
+        }, comment));
+      } else {
+        const match = line.match(/^point\s+([A-Za-z_]\w*)\s*=\s*\((.+),(.+)\)\s*~\s*(True|False)(?:\s*~\s*([A-Za-z_]\w*|default))?$/i);
+        if (match) pushDataEntry(next, "points", withInlineComment({ id: match[1], x: match[2].trim(), y: match[3].trim(), draggable: parseLeptonBoolean(match[4]), hidden: false, colorId: match[5] || "default", linkedFunctionId: "", showLabel: false }, comment));
+      }
     }
   }
   flushPendingComments(currentCommentSection);
@@ -7760,6 +8487,9 @@ function importScene(raw) {
 function normalizeSceneReferences(next) {
   next.points.forEach((point) => {
     if (!point.colorId || (point.colorId !== "default" && !dataEntries(next.colors).some((color) => color.id === point.colorId))) point.colorId = "default";
+    point.hidden = Boolean(point.hidden);
+    point.linkedFunctionId = String(point.linkedFunctionId ?? "");
+    point.showLabel = Boolean(point.showLabel);
   });
   next.draws = next.draws.map((draw) => isCommentEntry(draw) ? draw : normalizeDrawEntry(draw));
   if (next.settings.backgroundColor !== "0" && !dataEntries(next.colors).some((color) => color.id === next.settings.backgroundColor)) {
@@ -7776,9 +8506,14 @@ function stripChannelPrefix(value) {
 function normalizeExpressionText(value) {
   const display = normalizeExpressionDisplayText(value);
   const pointSelectors = [];
-  const protectedDisplay = rewritePointSelectors(display, (point, coordinate) => {
+  let protectedDisplay = rewritePointSelectors(display, (point, coordinate) => {
     const token = `leptonpointselector${pointSelectors.length}`;
     pointSelectors.push({ token, value: `${point.id}.${coordinate === 0 ? "x" : "y"}` });
+    return token;
+  });
+  protectedDisplay = rewritePointFunctionSelectors(protectedDisplay, sceneFunctionEnv(true), (entry, args, coordinate) => {
+    const token = `leptonpointselector${pointSelectors.length}`;
+    pointSelectors.push({ token, value: `${entry.id}(${args.join(",")}).${coordinate === 0 ? "x" : "y"}` });
     return token;
   });
   let normalized = latexToExpression(protectedDisplay);
@@ -8045,7 +8780,7 @@ function collectTextDeclaredIdentifiers(source) {
   const ids = new Set();
   String(source ?? "").split("\n").forEach((line) => {
     const { code } = splitLeptonComment(line);
-    const declaration = code.match(/^\s*(?:variable|expression|slider|function|map|colour|color|boundary|restriction|transparency)\s+([A-Za-z_]\w*)/i);
+    const declaration = code.match(/^\s*(?:variable|expression|slider|function|map|colour|color|boundary|restriction|transparency|point)\s+([A-Za-z_]\w*)/i);
     if (declaration) ids.add(declaration[1]);
     const time = code.match(/^\s*time\s+(?:bounded|unbounded|bounded_looped)\s+([A-Za-z_]\w*)/i);
     if (time) ids.add(time[1]);
@@ -8063,22 +8798,28 @@ function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
   if (folder) {
     return `${escapeHtml(folder[1])}<span class="syntax-keyword">${folder[2]}</span>${escapeHtml(folder[3])}<span class="syntax-variable">${escapeHtml(folder[4])}</span><span class="syntax-operator">${escapeHtml(folder[5])}</span>${escapeHtml(folder[6])}`;
   }
-  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|map|colour|color|boundary|restriction|transparency)(\b)/i);
+  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|map|colour|color|boundary|restriction|transparency|point)(\b)/i);
   if (declaration) {
     const prefix = escapeHtml(declaration[1]);
     const keyword = declaration[2].toLowerCase();
     const rest = line.slice(declaration[1].length + keyword.length);
     const functionParams = ["function", "map"].includes(keyword) ? parseFunctionParams(line.match(/^\s*(?:function|map)\s+[A-Za-z_]\w*\s*\(([^)]*)\)/i)?.[1] ?? "") : [];
+    const propertySplit = ["slider", "time", "point"].includes(keyword)
+      ? splitTrailingProperties(rest)
+      : { body: rest, properties: {} };
+    const propertyStart = Object.keys(propertySplit.properties).length ? rest.lastIndexOf("{") : -1;
     return `${prefix}<span class="syntax-keyword">${declaration[2]}</span>${highlightLeptonTokens(rest, {
       ...context,
       markFirstNameAsSetting: keyword === "set",
       mathDefinition: ["variable", "expression", "slider", "time", "function", "map"].includes(keyword),
-      localIds: new Set(functionParams)
+      localIds: new Set(functionParams),
+      propertyStart
     })}`;
   }
   const draw = line.match(/^(\s*)(draw)(\s*\()(.*)$/i);
   if (draw) {
-    return `${escapeHtml(draw[1])}<span class="syntax-keyword">${draw[2]}</span><span class="syntax-operator">${escapeHtml(draw[3])}</span>${highlightLeptonTokens(draw[4], context)}`;
+    const propertyStart = draw[4].lastIndexOf("{");
+    return `${escapeHtml(draw[1])}<span class="syntax-keyword">${draw[2]}</span><span class="syntax-operator">${escapeHtml(draw[3])}</span>${highlightLeptonTokens(draw[4], { ...context, propertyStart })}`;
   }
   return highlightLeptonTokens(line, context);
 }
@@ -8112,6 +8853,8 @@ function highlightLeptonTokens(source, context = { declaredIds: new Set() }) {
         cls = "syntax-boolean";
       } else if (FUNCTION_TEXT_NAMES.has(token)) {
         cls = "syntax-function";
+      } else if (context.propertyStart >= 0 && index >= context.propertyStart) {
+        cls = "syntax-property";
       } else if (!context.declaredIds?.has(token) && (token === "pi" || token === "e")) {
         cls = "syntax-number";
       }
@@ -8122,8 +8865,11 @@ function highlightLeptonTokens(source, context = { declaredIds: new Set() }) {
     }
     const char = source[index];
     if (char === "=" && context.mathDefinition) afterDefinitionEquals = true;
-    if ("=~,+-*/^():".includes(char)) {
-      output += `<span class="syntax-operator">${escapeHtml(char)}</span>`;
+    if ("=~,+-*/^():{}[]".includes(char)) {
+      const braceClass = "{}".includes(char)
+        ? (context.propertyStart >= 0 && index >= context.propertyStart ? "syntax-property-brace" : "syntax-piecewise-brace")
+        : "syntax-operator";
+      output += `<span class="${braceClass}">${escapeHtml(char)}</span>`;
     } else {
       output += escapeHtml(char);
     }
@@ -8215,6 +8961,7 @@ function exportCurrentGraphImage() {
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = size.width;
   exportCanvas.height = size.height;
+  let downloadCanvas = exportCanvas;
   const viewportIssue = diagnostics.settings?.find((item) => item.status === "invalid");
   if (viewportIssue || !isValidViewport(exportViewport)) {
     drawErrorCanvas(exportCanvas, viewportIssue?.message ?? "Invalid export viewport");
@@ -8230,6 +8977,15 @@ function exportCurrentGraphImage() {
     });
     if (!exportedWithGl) {
       drawErrorCanvas(exportCanvas, "Export needs GLSL-compatible expressions");
+    } else {
+      const composed = document.createElement("canvas");
+      composed.width = size.width; composed.height = size.height;
+      const context = composed.getContext("2d");
+      if (context) {
+        context.drawImage(exportCanvas, 0, 0);
+        drawPointsOverlay(context, size.width, size.height, exportViewport);
+        downloadCanvas = composed;
+      }
     }
   }
   requestAnimationFrame(() => {
@@ -8243,10 +8999,10 @@ function exportCurrentGraphImage() {
       link.remove();
     };
 
-    if (typeof exportCanvas.toBlob === "function") {
-      exportCanvas.toBlob((blob) => {
+    if (typeof downloadCanvas.toBlob === "function") {
+      downloadCanvas.toBlob((blob) => {
         if (!blob) {
-          download(exportCanvas.toDataURL("image/png"));
+          download(downloadCanvas.toDataURL("image/png"));
           return;
         }
         const url = URL.createObjectURL(blob);
@@ -8255,7 +9011,7 @@ function exportCurrentGraphImage() {
       }, "image/png");
       return;
     }
-    download(exportCanvas.toDataURL("image/png"));
+    download(downloadCanvas.toDataURL("image/png"));
   });
 }
 
@@ -8465,14 +9221,116 @@ window.__leptonDebug = {
   serializeMathField,
   exportCanvasSizeForViewport,
   exportViewportForImage,
+  renderSceneToPixels,
+  loadScene(source) {
+    const previousScene = scene;
+    const previousViewport = viewport;
+    scene = importScene(String(source ?? ""));
+    viewport = sceneViewport();
+    if (!isValidViewport(viewport)) {
+      scene = previousScene;
+      viewport = previousViewport;
+      throw new Error("The generated scene has an invalid viewport.");
+    }
+    const diagnostics = validateScene();
+    if (diagnostics.hasErrors) {
+      scene = previousScene;
+      viewport = previousViewport;
+      throw new Error(`The generated scene is invalid: ${diagnostics.summary}`);
+    }
+    sceneHistory.undo = [];
+    sceneHistory.redo = [];
+    sceneHistory.last = sceneSnapshot();
+    // Embedded ItGE previews only need the existing renderer canvas. Building
+    // thousands of hidden editor rows for a 40–90k source was the live-preview
+    // crash: DOM construction, math layout, and WebGL compilation peaked at
+    // the same time. Keep the full editor behavior outside capture mode.
+    if (document.body.classList.contains("capture-mode")) renderScene(diagnostics);
+    else renderApp();
+    return true;
+  },
+  estimateExpressionAstSize: (source) => estimateExpandedNodeCount(String(source ?? "")),
   moveMixedDataEntry,
   scene: () => structuredClone(scene)
 };
+
+let reusablePixelCaptureCanvas = null;
+
+function renderSceneToPixels(source, width, height) {
+  const sourceText = String(source ?? "");
+  const pixelWidth = Math.floor(Number(width));
+  const pixelHeight = Math.floor(Number(height));
+  if (!Number.isFinite(pixelWidth) || !Number.isFinite(pixelHeight) || pixelWidth < 1 || pixelHeight < 1 || pixelWidth > 4096 || pixelHeight > 4096) {
+    throw new Error("Render dimensions must be integers from 1 to 4096.");
+  }
+
+  const previousScene = scene;
+  const previousViewport = viewport;
+  let captureCanvas = null;
+  try {
+    scene = importScene(sourceText);
+    viewport = sceneViewport();
+    if (!isValidViewport(viewport)) throw new Error("The generated scene has an invalid viewport.");
+    const diagnostics = validateScene();
+    if (diagnostics.hasErrors) throw new Error(`The generated scene is invalid: ${diagnostics.summary}`);
+    captureCanvas = reusablePixelCaptureCanvas ?? document.createElement("canvas");
+    reusablePixelCaptureCanvas = captureCanvas;
+    const rendered = renderSceneWebGlInto(captureCanvas, {
+      cssWidth: pixelWidth,
+      cssHeight: pixelHeight,
+      dpr: 1,
+      visibleViewport: viewport,
+      updateOverlay: false,
+      synchronous: true,
+      fallbackOnFailure: true
+    });
+    if (!rendered) throw new Error("Lepton could not render the generated scene with WebGL.");
+
+    const readback = document.createElement("canvas");
+    readback.width = pixelWidth;
+    readback.height = pixelHeight;
+    const context = readback.getContext("2d", { willReadFrequently: true });
+    context.drawImage(captureCanvas, 0, 0);
+    const image = context.getImageData(0, 0, pixelWidth, pixelHeight);
+    return { width: image.width, height: image.height, data: new Uint8ClampedArray(image.data) };
+  } finally {
+    scene = previousScene;
+    viewport = previousViewport;
+    // Large generated equation sets compile into correspondingly large WebGL
+    // programs. Keeping those contexts alive across a curriculum batch caused
+    // the tab to become unresponsive even though each individual render fit in
+    // memory. Reclaim only heavy capture contexts; ordinary graph rendering
+    // keeps the fast reusable path.
+    if (captureCanvas && sourceText.length > 30000) {
+      releaseCaptureWebGlCanvas(captureCanvas);
+      reusablePixelCaptureCanvas = null;
+    }
+  }
+}
+
+function releaseCaptureWebGlCanvas(canvas) {
+  if (!canvas) return;
+  const cached = webGlRenderCache.get(canvas);
+  const gl = cached?.gl ?? canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+  if (gl) {
+    if (cached?.program) gl.deleteProgram(cached.program);
+    if (cached?.buffer) gl.deleteBuffer(cached.buffer);
+    webGlRenderCache.delete(canvas);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+  }
+  canvas.width = 1;
+  canvas.height = 1;
+}
 
 window.addEventListener("resize", () => {
   reflowMathLayout(root);
   requestAnimationFrame(() => reflowMathLayout(root));
   renderScene();
+});
+window.addEventListener("beforeunload", (event) => {
+  if (!hasUnsavedChanges && !textDraftDirty) return;
+  event.preventDefault();
+  event.returnValue = "";
 });
 document.addEventListener("keydown", handleGlobalHistoryKeydown);
 document.addEventListener("selectionchange", () => requestAnimationFrame(handleDocumentSelectionScroll));

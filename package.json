@@ -17,6 +17,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "verify": "npm run build && npm test && npm run typecheck",
+    "migrate:samples": "node scripts/migrate-samples.mjs --write",
+    "check:samples": "node scripts/migrate-samples.mjs",
     "update:mathquill": "node scripts/download-mathquill.mjs"
   },
   "devDependencies": {

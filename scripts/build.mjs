@@ -21,6 +21,10 @@ const requiredFiles = [
   "src/assets/sample-lava-lamp.png",
   "src/assets/sample-marble-cube.png",
   "sample code/fire",
+  "sample code/mandelbrot set",
+  "sample code/water effect",
+  "sample code/star field",
+  "sample code/cinematic clouds",
   "sample code/tree",
   "sample code/lava lamp",
   "sample code/marble cube",
@@ -55,7 +59,6 @@ for (const asset of ["src/browser-preview-live.js", "src/styles.css", "src/asset
     throw new Error(`app.html does not reference ${asset}`);
   }
 }
-
 const readme = await readFile("README.md", "utf8");
 for (const document of ["docs/ARCHITECTURE.md", "docs/DEVELOPMENT.md", "docs/LEPTON_LANGUAGE.md", "CONTRIBUTING.md"]) {
   if (!readme.includes(document)) {
@@ -73,6 +76,7 @@ await run(process.execPath, ["--check", "src/browser-preview-live.js"]);
 await run(process.execPath, ["--check", "src/math/expression-syntax.js"]);
 await run(process.execPath, ["--check", "src/landing.js"]);
 await run(process.execPath, ["scripts/check-editor-symbols.mjs"]);
+await run(process.execPath, ["scripts/migrate-samples.mjs"]);
 
 console.log("Build verification passed.");
 

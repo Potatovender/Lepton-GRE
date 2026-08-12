@@ -6,7 +6,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260728-marble-rotation-fix";
+const cacheVersion = "20260812-refinements-point-selectors";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -14,7 +14,9 @@ const sampleSources = await Promise.all([
   readFile("sample code/cinematic clouds", "utf8"),
   readFile("sample code/tree", "utf8"),
   readFile("sample code/lava lamp", "utf8"),
-  readFile("sample code/marble cube", "utf8")
+  readFile("sample code/marble cube", "utf8"),
+  readFile("sample code/water effect", "utf8"),
+  readFile("sample code/star field", "utf8")
 ]);
 const storage = new Map();
 const headLinks = [];
@@ -105,45 +107,50 @@ check("HTML shells and runtime modules share one cache version", () => {
 });
 
 check("bundled sample scripts use named draw fields and time speeds", () => {
-  assert(!/draw\([^\n]*,[^=\n]+,[^=\n]+,(?:False|True)\)/.test(landingSource), "legacy positional draw remains in landing samples");
-  assert(landingSource.includes("draw(eq,colour=rgb,boundary=rest)"), "named sample draw missing");
-  assert(landingSource.includes("time unbounded t = 0 speed 1"), "sample time speed missing");
+  assert(sampleSources.every((sample) => !/draw\([^\n]*,(?:colour|color|boundary|transparency)=/.test(sample)), "legacy inline draw properties remain in sample files");
+  assert(sampleSources.every((sample) => !/^variable\s+/m.test(sample)), "legacy variable declaration remains in sample files");
+  assert(sampleSources.some((sample) => sample.includes("time unbounded t = 0 {speed=1}")), "modern time speed missing");
 });
 
 check("the Sky Sample is linked from the landing menu", () => {
   assert(indexSource.includes('data-sample="sky"'), "Sky Sample card missing");
   assert(indexSource.includes("Sky Sample"), "Sky Sample label missing");
-  assert(landingSource.includes("time unbounded t = 10269.973 speed 1"), "Sky Sample scene missing");
+  assert(landingSource.includes('sky: "cinematic clouds"'), "Sky Sample file mapping missing");
 });
 
 check("the Tree Sample is linked from the landing menu", () => {
   assert(indexSource.includes('data-sample="tree"'), "Tree Sample card missing");
   assert(indexSource.includes("Tree Sample"), "Tree Sample label missing");
-  assert(landingSource.includes("folder Discontinuous foliage"), "Tree Sample scene missing");
+  assert(landingSource.includes('tree: "tree"'), "Tree Sample file mapping missing");
 });
 
 check("the Lava Lamp and Marble Cube samples are linked from the landing menu", () => {
   assert(indexSource.includes('data-sample="lava"'), "Lava Lamp Sample card missing");
   assert(indexSource.includes("Lava Lamp Sample"), "Lava Lamp Sample label missing");
-  assert(landingSource.includes("folder Lava motion"), "Lava Lamp Sample scene missing");
+  assert(landingSource.includes('lava: "lava lamp"'), "Lava Lamp file mapping missing");
   assert(indexSource.includes('data-sample="marble"'), "Marble Cube Sample card missing");
   assert(indexSource.includes("Marble Cube Sample"), "Marble Cube Sample label missing");
-  assert(landingSource.includes("folder Object space marble"), "Marble Cube Sample scene missing");
-  assert(landingSource.includes("slider yAngle") && landingSource.includes("slider xAngle") && landingSource.includes("slider zAngle"), "Marble Cube rotation controls missing");
-  assert(landingSource.includes("function rotateA") && landingSource.includes("function rotateB"), "Marble Cube rotation helpers missing");
-  assert(landingSource.includes("expression stoneCloud"), "Marble Cube continuous material missing");
-  assert(landingSource.includes("expression majorDistance"), "Marble Cube vein field missing");
-  assert(landingSource.includes("(15+240*x)*(0.88+0.018*y)"), "Marble Cube high-contrast stone palette missing");
-  assert(landingSource.includes("draw(stoneCloud,colour=marbleSurface,boundary=cubeVisible)"), "Marble Cube unified surface layer missing");
+  assert(landingSource.includes('marble: "marble cube"'), "Marble Cube file mapping missing");
 });
 
 check("file-backed samples use compact URLs instead of embedding their scenes", () => {
-  assert(landingSource.includes('["fire", "mandelbrot", "tree", "lava", "marble"]'), "Compact sample link list missing");
+  assert(landingSource.includes("const SAMPLE_SCENE_FILES"), "Sample file manifest missing");
   assert(landingSource.includes("?sample=${encodeURIComponent(sampleId)}"), "Compact sample URL missing");
   assert(source.includes('tree: "tree"'), "Tree sample loader mapping missing");
   assert(source.includes('lava: "lava lamp"'), "Lava sample loader mapping missing");
   assert(source.includes('marble: "marble cube"'), "Marble sample loader mapping missing");
   assert(source.includes("fetch(`./sample%20code/"), "Sample file fetch missing");
+});
+
+check("draw layers preserve explicit function arguments", () => {
+  const imported = sandbox.importScene(`function wave(a,b) = a+b
+draw(wave(x,2*y)) {visible=False}`);
+  const draw = imported.draws[0];
+  assert(draw.equationId === "wave", JSON.stringify(draw));
+  assert(JSON.stringify(draw.arguments) === JSON.stringify(["x", "2*y"]), JSON.stringify(draw));
+  sandbox.__debugSetScene(imported);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("draw(wave(x,2*y)) {visible=False}"), exported);
 });
 
 check("copyable sample files import with the current grammar", () => {
@@ -640,7 +647,7 @@ S:angle_mode~radians`);
 
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
-  assert(exported.includes("draw(eq,colour=rgb,boundary=rest,visible=False)"), exported);
+  assert(exported.includes("draw(eq) {colour=rgb, boundary=rest, visible=False}"), exported);
 });
 
 check("new Lepton language exports settings first without section dividers", () => {
@@ -662,7 +669,7 @@ set background_color = 0`);
   assert(exported.includes("\nexpression f1 = x+y"), exported);
   assert(exported.includes("\ncolour c1 = f1~f1~f1"), exported);
   assert(exported.includes("\nboundary r1 = f1"), exported);
-  assert(exported.includes("\ndraw(f1,colour=c1,boundary=r1)"), exported);
+  assert(exported.includes("\ndraw(f1) {colour=c1, boundary=r1}"), exported);
 });
 
 check("new Lepton language accepts expression aliases booleans and invalid angle fallback", () => {
@@ -690,7 +697,7 @@ draw(f,c1,r1,False)`);
   sandbox.__debugSetScene(imported);
   const exported = sandbox.exportScene();
   assert(exported.includes("\nexpression y = 100"), exported);
-  assert(exported.includes("\nslider speed = 5 range -2~8"), exported);
+  assert(exported.includes("\nslider speed = 5 {range=-2~8}"), exported);
   assert(exported.includes("\ntime unbounded t = 0"), exported);
   assert(!exported.includes("\ntime unbounded t = 0 range"), exported);
   assert(exported.includes("\nfunction f(x,y) = x+y"), exported);
@@ -765,7 +772,7 @@ time bounded_looped t = 0 range 0~10 speed rate`);
   sandbox.__debugPlayTime("t");
   sandbox.advanceTimeVariables(0.5);
   assert(Math.abs(Number(imported.functions[1].expression)-1)<1e-9, imported.functions[1].expression);
-  assert(sandbox.exportScene().includes("time bounded_looped t = 1 range 0~10 speed rate"), sandbox.exportScene());
+  assert(sandbox.exportScene().includes("time bounded_looped t = 1 {range=0~10, speed=rate}"), sandbox.exportScene());
   const invalid = sandbox.importScene(`expression coordinateRate = x+1
 time unbounded t = 0 speed coordinateRate`);
   sandbox.__debugSetScene(invalid);
@@ -823,7 +830,7 @@ draw(eq,rgb,rest,False) // inline draw`);
   assert(exported.includes("// helper note\nexpression eq = x+y // inline equation"), exported);
   assert(exported.includes("// palette note\ncolour rgb = eq~eq~eq // inline colour"), exported);
   assert(exported.includes("// gate note\nboundary rest = 1 // inline boundary"), exported);
-  assert(exported.includes("// layer note\ndraw(eq,colour=rgb,boundary=rest) // inline draw"), exported);
+  assert(exported.includes("// layer note\ndraw(eq) {colour=rgb, boundary=rest} // inline draw"), exported);
   assert(!exported.includes("// functions:"), exported);
   assert(!exported.includes("// colors:"), exported);
   assert(!exported.includes("// bounds:"), exported);
@@ -1118,7 +1125,7 @@ check("points and grid settings round-trip through text", () => {
   assert(imported.points[0].x==="2" && imported.points[0].draggable===true && imported.points[0].colorId==="default");
   assert(imported.settings.showCoordinateGrid===false);
   assert(imported.settings.showGrid===false);
-  const text=sandbox.exportScene(); assert(text.includes("point p1 = (2,3)~True~default"),text); assert(text.includes("set show_coordinate_grid = False"),text);
+  const text=sandbox.exportScene(); assert(text.includes("point p1 = [2,3] {draggable=True, visible=True, colour=default}"),text); assert(text.includes("set show_coordinate_grid = False"),text);
 });
 
 check("point coordinates compile through property and index selectors", () => {
@@ -1131,6 +1138,82 @@ check("point coordinates compile through property and index selectors", () => {
   assert(indexValue===6,`index selector returned ${indexValue}`);
   const glsl=sandbox.expressionToGlsl("p1.x+p1[1]",sandbox.sceneFunctionEnv(true));
   assert(glsl.includes("2.0"),glsl);
+});
+
+check("point function results compile through property and index selectors", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`function pair(a,b) -> point = [a+1,b*2]
+expression selected = pair(2,3).x+pair(2,3).y+pair(4,5)[0]+pair(4,5)[1]`));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  const value = sandbox.compileExpression("selected")(0,0,env);
+  assert(value === 24, `point function selectors returned ${value}`);
+  const propertyGlsl = sandbox.expressionToGlsl("pair(x,y).x+pair(x,y).y", sandbox.sceneFunctionEnv(true));
+  const indexGlsl = sandbox.expressionToGlsl("pair(x,y)[0]+pair(x,y)[1]", sandbox.sceneFunctionEnv(true));
+  assert(!propertyGlsl.includes("pair") && propertyGlsl.includes("x"), propertyGlsl);
+  assert(!indexGlsl.includes("pair") && indexGlsl.includes("y"), indexGlsl);
+});
+
+check("brace properties and point-valued functions round-trip and evaluate", () => {
+  const imported = sandbox.importScene(`time bounded t = 2
+{range=0~10,
+speed=2}
+function pair(x,y) -> point = [x+1,y*2]
+function combine(a,b,c,d) = a+b+c+d
+function magnitude(a,b) = sqrt(a^2+b^2)
+expression expanded = combine(pair(1,2),pair(3,4))
+point focus = [2,3] {draggable=True, visible=False, colour=default, link=magnitude, show_label=True}`);
+  const pair = imported.functions.find((entry) => entry.id === "pair");
+  assert(pair.outputType === "point", JSON.stringify(pair));
+  assert(imported.functions.find((entry) => entry.id === "t").timeRate === "2", JSON.stringify(imported.functions));
+  const point = imported.points[0];
+  assert(point.hidden === true && point.linkedFunctionId === "magnitude" && point.showLabel === true, JSON.stringify(point));
+  sandbox.__debugSetScene(imported);
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  assert(sandbox.compileExpression("expanded")(0,0,env) === 18, "point arguments did not expand in order");
+  const glsl = sandbox.expressionToGlsl("combine(pair(1,2),pair(3,4))", sandbox.sceneFunctionEnv(true));
+  assert(!glsl.includes("pair") && glsl.includes("1.0"), glsl);
+  const exported = sandbox.exportScene();
+  assert(exported.includes("time bounded t = 2 {range=0~10, speed=2}"), exported);
+  assert(exported.includes("function pair(x,y) -> point = [x+1,y*2]"), exported);
+  assert(exported.includes("point focus = [2,3] {draggable=True, visible=False, colour=default, link=magnitude, show_label=True}"), exported);
+});
+
+check("point arithmetic broadcasts scalars and multiplies point components", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`function base(x,y) -> point = [x,y]
+function shifted(x,y) -> point = base(x,y)+2
+function scaled(x,y) -> point = shifted(x,y)*base(3,4)
+function sum(a,b) = a+b
+expression result = sum(scaled(1,2))`));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  assert(sandbox.compileExpression("result")(0,0,env) === 25, "expected [9,16] to sum to 25");
+});
+
+check("point arguments flatten from every valid parameter position", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`function pair(x,y) -> point = [x,y]
+function four(a,b,c,d) = 1000*a+100*b+10*c+d
+expression first = four(pair(1,2),3,4)
+expression middle = four(1,pair(2,3),4)
+expression last = four(1,2,pair(3,4))`));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
+  assert(sandbox.compileExpression("first")(0,0,env) === 1234, "leading point argument flattened incorrectly");
+  assert(sandbox.compileExpression("middle")(0,0,env) === 1234, "middle point argument flattened incorrectly");
+  assert(sandbox.compileExpression("last")(0,0,env) === 1234, "trailing point argument flattened incorrectly");
+});
+
+check("expressions and functions cannot share an identifier", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`expression shared = x
+function shared(a) = a+1`));
+  const diagnostics = sandbox.validateScene().functions;
+  assert(diagnostics.every((item) => item.status === "invalid"), JSON.stringify(diagnostics));
+  assert(diagnostics.some((item) => item.message.toLowerCase().includes("duplicated")), JSON.stringify(diagnostics));
+});
+
+check("linked points evaluate scalar functions at their coordinates", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`function magnitude(a,b) = sqrt(a^2+b^2)
+point focus = [3,4] {link=magnitude, show_label=True}`));
+  const point = sandbox.__debugScene.points[0];
+  const linked = sandbox.pointLinkedValue(point);
+  assert(linked.value === 5, JSON.stringify(linked));
+  assert(sandbox.validateScene().points[0].status === "valid", JSON.stringify(sandbox.validateScene().points[0]));
 });
 
 check("point dragging keeps the live canvas and commits after release", () => {
@@ -1201,7 +1284,7 @@ draw(eq,transparency=glass,colour=rgb,boundary=gate)`;
   assert(sandbox.validateScene().transparencies[0].status === "valid", JSON.stringify(sandbox.validateScene().transparencies[0]));
   const exported = sandbox.exportScene();
   assert(exported.includes("transparency glass = 1.4"), exported);
-  assert(exported.includes("draw(eq,transparency=glass,colour=rgb,boundary=gate)"), exported);
+  assert(exported.includes("draw(eq) {transparency=glass, colour=rgb, boundary=gate}"), exported);
   const shader = sandbox.buildFragmentShader();
   assert(shader.includes("1.0 - clamp(1.4, 0.0, 1.0)") && shader.includes("mix(color, layerColor, opacity)"), shader);
 });
@@ -1240,12 +1323,12 @@ check("deleted default IDs are reused without creating extra rows", () => {
   assert(sandbox.__debugScene.functions[remade.index].id === "f2");
 });
 
-check("sort control cycles through grouped order", () => {
-  assert(sandbox.nextSort("custom") === "dependencies");
-  assert(sandbox.nextSort("dependencies") === "az");
+check("sort control cycles common modes and exposes the full menu", () => {
+  assert(sandbox.nextSort("custom") === "az");
   assert(sandbox.nextSort("az") === "za");
-  assert(sandbox.nextSort("za") === "group");
-  assert(sandbox.nextSort("group") === "custom");
+  assert(sandbox.nextSort("za") === "custom");
+  assert(sandbox.sortMenu("data", "custom").includes("Dependencies"));
+  assert(sandbox.sortMenu("data", "custom").includes("In group"));
   assert(sandbox.sortLabel("dependencies") === "Dependencies");
   assert(sandbox.sortLabel("group") === "In group");
 });
@@ -1480,7 +1563,7 @@ check("refresh text requires confirmation", () => {
     return false;
   };
   assert(sandbox.confirmTextRefresh() === false, "confirmation should cancel");
-  assert(message.includes("lose unsaved text edits"), message);
+  assert(message.includes("Unapplied edits") && message.includes("replaced"), message);
   sandbox.window.confirm = previousConfirm;
 });
 

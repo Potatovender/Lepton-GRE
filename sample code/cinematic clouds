@@ -16,16 +16,16 @@ set show_x_numbers = True
 set show_y_numbers = True
 set unbounded_decimal_places = 3
 set random_seed = 1684643011
-time unbounded t = 10269.973 speed 1
+time unbounded t = 10269.973 {speed=1}
 folder easy stuff = {
   folder Sky = {
     expression skyfield = y+0.08*sin(0.09*x+0.03*t)+0.04*sin(0.037*x*y)
     colour skycolor = 100+frac{125*1}{e^(frac{x^2}{16})}+18*clamp(0-x,0,1)~122+frac{44*1}{e^(frac{x^2}{20})}-2*abs(x)+clamp(0-x,0,4)~186-frac{64}{e^(frac{x^2}{196})}
-    draw(skyfield,colour=skycolor)
+    draw(skyfield) {colour=skycolor}
   }
   folder sun = {
     expression sunvalue = frac{10}{x^2+(y-2)^2}
-    draw(sunvalue,colour=background,transparency=sun)
+    draw(sunvalue) {colour=background, transparency=sun}
     colour background = 255*x~175*x~100*x
     transparency sun = 1-frac{x}{10}
   }
@@ -47,8 +47,8 @@ folder Distant clouds = {
   transparency farCloudFade = clamp(1-1.42*clamp(x,0,0.72),0.18,1)
   colour farGlowColour = 255~184+48*clamp(x,0,1)~126+64*clamp(x,0,1)
   transparency farGlowFade = clamp(1-2.1*clamp(x,0,0.48),0.22,1)
-  draw(farCloud,colour=farCloudColour,transparency=farCloudFade)
-  draw(farGlow,colour=farGlowColour,transparency=farGlowFade)
+  draw(farCloud) {colour=farCloudColour, transparency=farCloudFade}
+  draw(farGlow) {colour=farGlowColour, transparency=farGlowFade}
 }
 folder Foreground billows = {
   expression cloudMain = cloudDensity(x+0.24*sin(pi*frac{t}{5}),y,t)
@@ -63,8 +63,8 @@ folder Foreground billows = {
   transparency cloudScatterFade = clamp(1-2.7*clamp(x,0,0.36),0.08,1)
   colour cloudRimColour = 255~219~174
   transparency cloudRimFade = clamp(1-5.8*clamp(x,0,0.17),0.04,1)
-  draw(cloudMain,colour=cloudBaseColour,transparency=cloudBaseFade)
-  draw(cloudCavity,colour=cloudCavityColour,transparency=cloudCavityFade)
-  draw(cloudScatter,colour=cloudScatterColour,transparency=cloudScatterFade)
-  draw(cloudRim,colour=cloudRimColour,transparency=cloudRimFade)
+  draw(cloudMain) {colour=cloudBaseColour, transparency=cloudBaseFade}
+  draw(cloudCavity) {colour=cloudCavityColour, transparency=cloudCavityFade}
+  draw(cloudScatter) {colour=cloudScatterColour, transparency=cloudScatterFade}
+  draw(cloudRim) {colour=cloudRimColour, transparency=cloudRimFade}
 }

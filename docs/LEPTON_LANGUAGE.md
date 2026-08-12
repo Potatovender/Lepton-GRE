@@ -57,7 +57,7 @@ expression rings = sin(4*radius)
 ### Sliders
 
 ```text
-slider amount = 5 range 0~10
+slider amount = 5 {range=0~10}
 ```
 
 The value, minimum, and maximum are scalar expressions. Coordinate-dependent slider values are allowed with a warning; inverted ranges are errors.
@@ -65,9 +65,11 @@ The value, minimum, and maximum are scalar expressions. Coordinate-dependent sli
 ### Time Sliders
 
 ```text
-time bounded t = 0 range 0~10 speed 1
-time bounded_looped phase = 0 range 0~6.283 speed 0.5
-time unbounded clock = 0 speed 1
+time bounded t = 0 {range=0~10, speed=1}
+time bounded_looped phase = 0
+{range=0~6.283,
+ speed=0.5}
+time unbounded clock = 0 {speed=1}
 ```
 
 `bounded` bounces at each endpoint. `bounded_looped` wraps from maximum to minimum. `unbounded` has no range. Speed must resolve without `x` or `y` and is measured in units per second.
@@ -80,6 +82,16 @@ expression circle = distance(x,y)-4
 ```
 
 Function parameters are local and shadow outer values with the same name. Calls must provide exactly the declared number of arguments.
+
+Functions return expressions by default and may explicitly return a point:
+
+```text
+function offset(a,b) -> point = [a+1,b-1]
+function total(a,b,c,d) = a+b+c+d
+expression flattened = total(offset(x,y),offset(2,3))
+```
+
+Point addition and multiplication operate component by component. A scalar mixed with a point is applied to both coordinates. When a point-valued call is passed to another function, it fills two consecutive scalar parameters in x-then-y order. Functions and expressions share one identifier namespace and cannot use the same ID.
 
 ## Colours
 
@@ -112,22 +124,31 @@ Transparency is clamped from `0` (opaque) to `1` (fully transparent). Like colou
 ## Points
 
 ```text
-point focus = (2,3)~True~default
+function sample(a,b) = a^2+b^2
+point focus = [2,3] {draggable=True, visible=True, colour=default, link=sample, show_label=True}
 expression px = focus.x+focus[0]
 expression py = focus.y+focus[1]
+expression functionCoordinate = offset(x,y).x+offset(x,y)[1]
 ```
 
-The boolean controls dragging and the final value names a colour or `default`. Point coordinates are expressions and update while a draggable point moves.
+Point components can be selected as `.x`/`.y` or `[0]`/`[1]`. Both forms work on named points and point-returning function calls; the indexed form is designed to extend naturally to larger vectors and lists later. Properties control dragging, visibility, colour, a linked expression-output function, and whether the graph displays the coordinates and linked value. A linked function receives the point's x and y coordinates in parameter order. Point overlays and visible labels are included in image exports.
 
 ## Draw Layers
 
 ```text
 draw(rings)
-draw(rings,colour=sunset)
-draw(circle,boundary=inside,transparency=fade,visible=False)
+function wave(a,phase) = sin(a+phase)
+draw(wave(x,clock))
+draw(rings) {colour=sunset}
+draw(circle)
+{boundary=inside,
+ transparency=fade,
+ visible=False}
 ```
 
-The first value is required. Optional named components are `colour`/`color`, `boundary`/`restriction`, `transparency`, and `visible`. Component order is preserved. Missing components use default grayscale `x~x~x`, unrestricted boundary `1`, and opacity `0`.
+The first value is required. A parameterized function is written as a call, and each argument may be any expression. The Standard editor exposes one input field per declared parameter. Writing only `draw(wave)` remains accepted for older scenes and supplies `x`, `y`, then `0` to successive parameters.
+
+Optional named components are `colour`/`color`, `boundary`/`restriction`, `transparency`, and `visible`. Property braces configure the draw layer and are distinct from piecewise braces inside an expression. Component order is preserved. Missing components use default grayscale `x~x~x`, unrestricted boundary `1`, and opacity `0`.
 
 ## Piecewise Expressions
 
@@ -174,4 +195,6 @@ Multi-argument functions:
 
 ## Legacy Import
 
-Legacy `F:`, `C:`, `R:`, `D~`, `S:`, and `~~~~~` input remains accepted. New exports always use the keyword grammar documented above.
+Legacy `F:`, `C:`, `R:`, `D~`, `S:`, `~~~~~`, positional draw fields, parenthesized points, and trailing `range`/`speed` input remain accepted. New exports always use the keyword and brace-property grammar documented above.
+
+The maintained scenes in `sample code/` always use the current grammar. Run `npm run migrate:samples` after a major syntax change, and `npm run check:samples` to ensure no migratable legacy form remains.

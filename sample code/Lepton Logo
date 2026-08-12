@@ -33,10 +33,10 @@ boundary border = f8
 boundary outline = 0-(outline1)
 boundary outline2 = 0-(outline2)
 boundary outline3 = 0-(outline3)
-draw(black,colour=black,boundary=outline)
-draw(rad,colour=black,boundary=outline2)
-draw(rad,colour=black,boundary=outline3)
-draw(rad,colour=rgb,boundary=rest1)
-draw(rad,colour=rgb,boundary=rest2)
-draw(rad,colour=rgb,boundary=rest3)
-draw(f8,colour=black,boundary=border)
+draw(black) {colour=black, boundary=outline}
+draw(rad) {colour=black, boundary=outline2}
+draw(rad) {colour=black, boundary=outline3}
+draw(rad) {colour=rgb, boundary=rest1}
+draw(rad) {colour=rgb, boundary=rest2}
+draw(rad) {colour=rgb, boundary=rest3}
+draw(f8) {colour=black, boundary=border}

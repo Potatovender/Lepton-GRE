@@ -19,23 +19,23 @@ set random_seed = 184729
 folder Environment = {
   expression sky = y
   colour skyColour = 126+2.1*x~169+2.2*x~207+2*x
-  draw(sky,colour=skyColour)
+  draw(sky) {colour=skyColour}
   expression atmosphericGlow = frac{1}{e^(frac{(x+5.7)^2+(y-6.2)^2}{15})}
   colour glowColour = 255~225~165
   transparency glowFade = 1-0.34*clamp(x,0,1)
-  draw(atmosphericGlow,colour=glowColour,transparency=glowFade)
+  draw(atmosphericGlow) {colour=glowColour, transparency=glowFade}
   expression ground = -6.75-y+0.09*sin(0.73*x)+0.035*sin(2.3*x)
   colour groundColour = 46+15*clamp(x,0,1)~64+21*clamp(x,0,1)~35+9*clamp(x,0,1)
   transparency groundFade = clamp(1-18*x,0,1)
-  draw(ground,colour=groundColour,transparency=groundFade)
+  draw(ground) {colour=groundColour, transparency=groundFade}
   expression groundDetail = ground+0.07*sin(5.7*x+1.3*y)+0.035*sin(13.1*x-2.1*y)-0.08
   colour groundDetailColour = 77~82~43
   transparency groundDetailFade = clamp(1-19*x,0.72,1)
-  draw(groundDetail,colour=groundDetailColour,transparency=groundDetailFade)
+  draw(groundDetail) {colour=groundDetailColour, transparency=groundDetailFade}
   expression groundShadow = min(ground+0.08,ellipse2(x,y,1.1,-6.72,3.8,0.42))
   colour groundShadowColour = 22~29~18
   transparency groundShadowFade = clamp(1-9*x,0.45,1)
-  draw(groundShadow,colour=groundShadowColour,transparency=groundShadowFade)
+  draw(groundShadow) {colour=groundShadowColour, transparency=groundShadowFade}
 }
 folder Geometry and noise = {
   function hash2(px,py) = sin(127.1*px+311.7*py)*43758.5453-floor(sin(127.1*px+311.7*py)*43758.5453)
@@ -57,27 +57,27 @@ folder Trunk structure = {
   boundary woodInside = wood
   colour woodBase = 63+23*clamp(x,0,0.8)+1.3*y~39+14*clamp(x,0,0.8)+0.8*y~23+8*clamp(x,0,0.8)+0.45*y
   transparency woodOpacity = clamp(1-24*x,0,1)
-  draw(wood,colour=woodBase,transparency=woodOpacity)
+  draw(wood) {colour=woodBase, transparency=woodOpacity}
   expression woodShade = min(wood,0.18-(x-trunkAxis))
   colour woodShadeColour = 30+12*clamp(x,0,0.5)~18+7*clamp(x,0,0.5)~12+4*clamp(x,0,0.5)
   transparency woodShadeFade = clamp(1-8*x,0.5,1)
-  draw(woodShade,colour=woodShadeColour,boundary=woodInside,transparency=woodShadeFade)
+  draw(woodShade) {colour=woodShadeColour, boundary=woodInside, transparency=woodShadeFade}
   expression woodLight = min(wood,0.16+(x-trunkAxis))
   colour woodLightColour = 116+24*clamp(x,0,0.45)~73+17*clamp(x,0,0.45)~40+10*clamp(x,0,0.45)
   transparency woodLightFade = clamp(1-10*x,0.69,1)
-  draw(woodLight,colour=woodLightColour,boundary=woodInside,transparency=woodLightFade)
+  draw(woodLight) {colour=woodLightColour, boundary=woodInside, transparency=woodLightFade}
   expression barkCracks = min(wood,0.024+0.025*sin(34*x+1.9*y+2.6*sin(0.58*y))+0.011*sin(79*x-4.1*y))
   colour barkCrackColour = 23~14~9
   transparency barkCrackFade = clamp(1-38*x,0.35,1)
-  draw(barkCracks,colour=barkCrackColour,boundary=woodInside,transparency=barkCrackFade)
+  draw(barkCracks) {colour=barkCrackColour, boundary=woodInside, transparency=barkCrackFade}
   expression barkScales = min(wood,noise2(14*x+2.1,2.4*y-3.7)-0.57)
   colour barkScaleColour = 87~53~29
   transparency barkScaleFade = clamp(1-32*x,0.7,1)
-  draw(barkScales,colour=barkScaleColour,boundary=woodInside,transparency=barkScaleFade)
+  draw(barkScales) {colour=barkScaleColour, boundary=woodInside, transparency=barkScaleFade}
   expression knots = min(wood,max(max(ellipse2(x,y,-0.15,-3.15,0.13,0.25),ellipse2(x,y,0.1,-0.75,0.1,0.18)),ellipse2(x,y,-0.02,1.25,0.08,0.15)))
   colour knotColour = 24~14~9
   transparency knotFade = clamp(1-42*x,0.12,1)
-  draw(knots,colour=knotColour,boundary=woodInside,transparency=knotFade)
+  draw(knots) {colour=knotColour, boundary=woodInside, transparency=knotFade}
 }
 folder Discontinuous foliage = {
   expression crownEnvelope = max(max(max(ellipse2(x,y,-4.35,3.35,2.05,1.8),ellipse2(x,y,-3.25,5.35,2.35,2.1)),max(ellipse2(x,y,-1.25,6.85,2.5,2.0),ellipse2(x,y,1.15,7.05,2.65,1.95))),max(max(ellipse2(x,y,3.35,5.6,2.45,2.05),ellipse2(x,y,4.55,3.5,1.95,1.75)),max(ellipse2(x,y,1.8,3.85,3.05,2.25),ellipse2(x,y,-1.55,3.8,3.0,2.25))))
@@ -86,37 +86,37 @@ folder Discontinuous foliage = {
   expression deepLeaves = min(crownMask,fbm2(1.34*x+1.7,1.29*y-4.1)-0.365+0.018*sin(4.3*x-2.7*y))
   colour deepLeafColour = 12+50*clamp(x,0,0.55)+1.8*y~33+84*clamp(x,0,0.55)+3.1*y~16+42*clamp(x,0,0.55)+1.2*y
   transparency deepLeafFade = clamp(1-31*x,0.05,1)
-  draw(deepLeaves,colour=deepLeafColour,boundary=insideCrown,transparency=deepLeafFade)
+  draw(deepLeaves) {colour=deepLeafColour, boundary=insideCrown, transparency=deepLeafFade}
   expression undersideLeaves = min(deepLeaves,4.7-y)
   colour undersideColour = 12+25*clamp(x,0,0.45)~27+47*clamp(x,0,0.45)~14+24*clamp(x,0,0.45)
   transparency undersideFade = clamp(1-24*x,0.34,1)
-  draw(undersideLeaves,colour=undersideColour,boundary=insideCrown,transparency=undersideFade)
+  draw(undersideLeaves) {colour=undersideColour, boundary=insideCrown, transparency=undersideFade}
   expression middleLeaves = min(crownMask+0.025,fbm2(2.27*x-7.1,2.19*y+3.8)-0.465+0.026*sin(7.7*x+5.1*y))
   colour middleLeafColour = 33+78*clamp(x,0,0.43)+1.5*y~77+103*clamp(x,0,0.43)+2.4*y~31+65*clamp(x,0,0.43)+1*y
   transparency middleLeafFade = clamp(1-38*x,0.27,1)
-  draw(middleLeaves,colour=middleLeafColour,boundary=insideCrown,transparency=middleLeafFade)
+  draw(middleLeaves) {colour=middleLeafColour, boundary=insideCrown, transparency=middleLeafFade}
   expression smallLeaves = min(crownMask+0.045,fbm2(4.55*x+3.2,4.31*y-8.5)-0.555+0.018*sin(16.1*x-13.7*y))
   colour smallLeafColour = 72+97*clamp(x,0,0.35)+0.5*y~127+108*clamp(x,0,0.35)+0.7*y~52+75*clamp(x,0,0.35)
   transparency smallLeafFade = clamp(1-52*x,0.43,1)
-  draw(smallLeaves,colour=smallLeafColour,boundary=insideCrown,transparency=smallLeafFade)
+  draw(smallLeaves) {colour=smallLeafColour, boundary=insideCrown, transparency=smallLeafFade}
   expression sunLeaves = min(crownMask+0.06,fbm2(3.15*x-6.9,3.03*y+7.7)-0.585-0.025*x+0.017*y)
   colour sunLeafColour = 112+91*clamp(x,0,0.3)~151+76*clamp(x,0,0.3)~59+55*clamp(x,0,0.3)
   transparency sunLeafFade = clamp(1-58*x,0.56,1)
-  draw(sunLeaves,colour=sunLeafColour,boundary=insideCrown,transparency=sunLeafFade)
+  draw(sunLeaves) {colour=sunLeafColour, boundary=insideCrown, transparency=sunLeafFade}
   expression edgeLeaves = min(crownMask,0.075-crownMask+0.035*(noise2(7.7*x,7.3*y)-0.46))
   colour edgeLeafColour = 112+83*clamp(x,0,0.25)~148+73*clamp(x,0,0.25)~60+51*clamp(x,0,0.25)
   transparency edgeLeafFade = clamp(1-56*x,0.5,1)
-  draw(edgeLeaves,colour=edgeLeafColour,boundary=insideCrown,transparency=edgeLeafFade)
+  draw(edgeLeaves) {colour=edgeLeafColour, boundary=insideCrown, transparency=edgeLeafFade}
   expression peripheralLeaves = min(crownMask+0.13,fbm2(5.65*x-3.3,5.37*y+9.4)-0.61+0.02*sin(19.3*x-14.1*y))
   colour peripheralLeafColour = 76+81*clamp(x,0,0.28)~126+86*clamp(x,0,0.28)~49+58*clamp(x,0,0.28)
   transparency peripheralLeafFade = clamp(1-61*x,0.5,1)
-  draw(peripheralLeaves,colour=peripheralLeafColour,transparency=peripheralLeafFade)
+  draw(peripheralLeaves) {colour=peripheralLeafColour, transparency=peripheralLeafFade}
   expression individualLeaves = min(crownMask+0.17,max(leafCell(0.86*x+0.5*y+0.07*sin(1.7*y),-0.5*x+0.86*y,3.1),leafCell(0.94*x-0.34*y,0.34*x+0.94*y+0.06*sin(1.3*x),3.55)-0.08))
   colour individualLeafColour = 55+95*clamp(x,0,0.32)+0.6*y~107+103*clamp(x,0,0.32)+0.9*y~40+66*clamp(x,0,0.32)
   transparency individualLeafFade = clamp(1-48*x,0.24,1)
-  draw(individualLeaves,colour=individualLeafColour,transparency=individualLeafFade)
+  draw(individualLeaves) {colour=individualLeafColour, transparency=individualLeafFade}
   expression leafGlints = min(crownMask,fbm2(7.8*x+2.4,7.45*y-5.1)-0.675-0.022*x+0.014*y)
   colour glintColour = 165~191~94
   transparency glintFade = clamp(1-72*x,0.74,1)
-  draw(leafGlints,colour=glintColour,boundary=insideCrown,transparency=glintFade)
+  draw(leafGlints) {colour=glintColour, boundary=insideCrown, transparency=glintFade}
 }

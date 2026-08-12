@@ -1,0 +1,19 @@
+set x_min = -12
+set x_max = 12
+set y_min = -8
+set y_max = 8
+set max_recursion = 40
+set angle_mode = radians
+set background_color = 0
+set ensure_square_grid = True
+set aspect_ratio = 1:1
+set draw_only_inside_boundary = False
+time unbounded t = 0 {speed=1}
+expression eq = sin(sqrt(x^2+y^2)*4-t*2)+0.7*cos(x*2-y*1.5+t)+0.35*sin(y*3+t*1.2)
+expression r = 105+65*sin(eq+t*0.2)
+expression g = 145+85*cos(x/2+t*0.35)
+expression b = 215+35*sin(y/2+t*0.45)
+expression rest = 1
+colour rgb = r~g~b
+boundary rest = rest
+draw(eq) {colour=rgb, boundary=rest}
