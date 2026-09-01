@@ -1,4 +1,4 @@
-const APP_VERSION = "20260812-refinements-point-selectors";
+const APP_VERSION = "20260901-boundary-grid-caret";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

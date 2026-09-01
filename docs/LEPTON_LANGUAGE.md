@@ -106,12 +106,16 @@ Channels are separated by `~`, accept full expressions, and are clamped to displ
 ```text
 boundary inside = 0-circle
 boundary outside = circle
+boundary below = y {when=lte}
+boundary clipped = and(inside,below)
 ```
 
-A boundary draws where its expression is greater than or equal to zero. Negate the
-expression to draw the opposite region. Boundary expressions are edited directly,
-just like colour channels and transparency expressions. A boundary ID can also be
-used as a piecewise condition.
+A boundary draws where its expression is greater than or equal to zero by default.
+Use `{when=lte}` to draw where it is less than or equal to zero; the Standard editor
+provides the same choice directly. Boundary expressions are edited like colour and
+transparency expressions. Named boundaries can be composed with `and(a,b)`,
+`or(a,b)`, `not(a)`, `xand(a,b)`, and `xor(a,b)`. A boundary ID can also be used as a
+piecewise condition.
 
 ## Transparency
 

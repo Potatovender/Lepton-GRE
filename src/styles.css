@@ -2345,6 +2345,17 @@ textarea.compact-field,
   gap: 6px;
 }
 
+.boundary-controls {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.boundary-comparison-row select {
+  min-width: 0;
+  font-size: 12px;
+}
+
 .settings-row-math,
 .settings-row-ratio {
   min-width: 0;

@@ -43,7 +43,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260812-refinements-point-selectors";
+const APP_VERSION = "20260901-boundary-grid-caret";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -112,6 +112,11 @@ const BUILTIN_NAMES = new Set([
   "union",
   "intersect",
   "subtract",
+  "and",
+  "or",
+  "not",
+  "xand",
+  "xor",
   "random",
   "sec",
   "csc",
@@ -128,6 +133,11 @@ const GENERATED_GLSL_NAMES = new Set([
   "leptonUnion",
   "leptonIntersect",
   "leptonSubtract",
+  "leptonAnd",
+  "leptonOr",
+  "leptonNot",
+  "leptonXand",
+  "leptonXor",
   "leptonSurfaceBump",
   "leptonStrokeBox",
   "leptonDetailWave",
@@ -188,6 +198,11 @@ const LATEX_FUNCTIONS = {
   union: { internal: "union", args: 2, display: "union" },
   intersect: { internal: "intersect", args: 2, display: "intersect" },
   subtract: { internal: "subtract", args: 2, display: "subtract" },
+  and: { internal: "and", args: 2, display: "and" },
+  or: { internal: "or", args: 2, display: "or" },
+  not: { internal: "not", args: 1, display: "not" },
+  xand: { internal: "xand", args: 2, display: "xand" },
+  xor: { internal: "xor", args: 2, display: "xor" },
   random: { internal: "random", args: 0, display: "random" },
   frac: { internal: "frac", args: 2, display: "frac" }
 };
@@ -252,7 +267,7 @@ const HELP_TEXT = {
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
   functions: "The Data workspace holds values, colours, boundaries, transparencies, draw layers, points, folders, and comments in one reorderable list.",
   colors: "Colours evaluate red, green, and blue expressions at every coordinate. For example, colour rgb = 255~80+20sin(x)~40 uses one expression per channel.",
-  restrictions: "Boundaries are formulas that draw where their value is greater than or equal to zero. Negate a formula to draw its opposite side.",
+  restrictions: "Boundaries are formulas that define where a layer is drawn. Choose greater than or equal to zero or less than or equal to zero, and combine named boundaries with and, or, not, xand, or xor.",
   draws: "Draw layers always choose a value to render. Add colour, boundary, or transparency components only when needed; their displayed order is preserved.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
   textLanguage: "Lepton text is the same graph in one copyable script. Colours separate three channel expressions with ~. Draw fields after the value are optional and named, such as colour=sky or transparency=glass.",
@@ -311,7 +326,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "restrictions",
     title: "Step 4: Add a boundary",
-    body: "Boundaries are formulas evaluated across the grid. A draw layer appears where its boundary is greater than or equal to zero. Use 0-(formula) for the opposite side, or use the default boundary for no restriction."
+    body: "Boundaries are formulas evaluated across the grid. Choose which side of zero should draw, or use the default boundary for no restriction. Named boundaries can be combined with and(a,b), or(a,b), not(a), xand(a,b), and xor(a,b)."
   },
   {
     mode: "standard",
@@ -1386,7 +1401,16 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
     `;
   }
   if (kind === "restrictions") {
-    return `<label class="settings-row"><span>function</span>${mathEditor(`restrictions.${index}.expression`, normalizedBoundaryExpression(entry), "Boundary function", true, "draw where this is greater than or equal to 0")}</label>`;
+    const comparison = entry.checkSmaller ? "lte" : "gte";
+    return `<div class="boundary-controls">
+      <label class="settings-row"><span>function</span>${mathEditor(`restrictions.${index}.expression`, entry.expression, "Boundary function", true, "enter boundary function here")}</label>
+      <label class="settings-row boundary-comparison-row"><span>draw condition</span>
+        <select class="compact-field" data-boundary-comparison="${index}" aria-label="Boundary draw condition">
+          <option value="gte" ${comparison === "gte" ? "selected" : ""}>greater than or equal to 0</option>
+          <option value="lte" ${comparison === "lte" ? "selected" : ""}>less than or equal to 0</option>
+        </select>
+      </label>
+    </div>`;
   }
   if (kind === "transparencies") {
     return `<label class="settings-row"><span>function</span>${mathEditor(`transparencies.${index}.expression`, entry.expression, "Transparency function", true, "0 to 1; x is the draw value")}</label>`;
@@ -2319,9 +2343,20 @@ function bindEvents() {
   });
   root.querySelector('[data-action="toggle-coordinate-grid"]')?.addEventListener("click", () => {
     const before = sceneSnapshot();
-    scene.settings.showCoordinateGrid = scene.settings.showCoordinateGrid === false;
+    toggleCoordinateGrid();
     recordSceneHistory(before);
     renderApp();
+  });
+  root.querySelectorAll("[data-boundary-comparison]").forEach((field) => {
+    field.addEventListener("change", () => {
+      const index = Number(field.dataset.boundaryComparison);
+      const entry = scene.restrictions[index];
+      if (!entry || isCommentEntry(entry)) return;
+      const before = sceneSnapshot();
+      entry.checkSmaller = field.value === "lte";
+      recordSceneHistory(before);
+      renderApp();
+    });
   });
 
   root.querySelector('[data-action="tutorial"]')?.addEventListener("click", () => {
@@ -2588,7 +2623,7 @@ function bindEvents() {
 
     const mathField = MQ.MathField(el, {
       autoCommands: "sqrt sum",
-      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan random",
+      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan random union intersect subtract and or not xand xor",
       handlers: {
         edit: () => {
           if (el.dataset.initializing === "true" || !el.contains(document.activeElement)) return;
@@ -2614,11 +2649,8 @@ function bindEvents() {
     mathField.latex(initialValue);
     mathField.reflow?.();
     requestAnimationFrame(() => {
-      el.dataset.initializing = "true";
-      mathField.latex(initialValue);
       mathField.reflow?.();
       keepHorizontalCaretVisible(el);
-      delete el.dataset.initializing;
     });
     delete el.dataset.initializing;
     el.__mathField = mathField;
@@ -3196,7 +3228,12 @@ function filterReferencePicker(field) {
 
 function updateReferenceField(field, value) {
   const [collection, rawIndex, ...path] = String(field ?? "").split(".");
-  if (!collection || rawIndex == null || !path.length) return;
+  if (!collection || rawIndex == null) return;
+  if (collection === "settings") {
+    updateSettingValue(rawIndex, value);
+    return;
+  }
+  if (!path.length) return;
   const index = Number(rawIndex);
   if (!Number.isInteger(index) || !scene[collection]?.[index]) return;
   let target = scene[collection][index];
@@ -3212,11 +3249,7 @@ function forceMathFieldsReflow() {
   root.querySelectorAll(".mathquill-field[data-field]").forEach((field) => {
     const mathField = field.mathquillInstance;
     if (!mathField) return;
-    const latex = field.dataset.value ?? mathField.latex();
-    field.dataset.initializing = "true";
-    mathField.latex(latex);
     mathField.reflow?.();
-    delete field.dataset.initializing;
     keepHorizontalCaretVisible(field);
   });
   queueMathLayoutReflow();
@@ -3656,6 +3689,9 @@ function renameSceneReferences(collection, oldId, newId) {
     scene.points.forEach((entry) => { if (!isCommentEntry(entry) && entry.colorId === oldName) entry.colorId = newName; });
     if (scene.settings.backgroundColor === oldName) scene.settings.backgroundColor = newName;
   } else if (collection === "restrictions") {
+    scene.restrictions.forEach((entry) => {
+      if (!isCommentEntry(entry)) entry.expression = replace(entry.expression);
+    });
     scene.draws.forEach((entry) => { if (!isCommentEntry(entry)) { entry.components = normalizeDrawEntry(entry).components; entry.components.filter((component) => component.type === "boundary" && component.id === oldName).forEach((component) => { component.id = newName; }); } });
   } else if (collection === "transparencies") {
     scene.draws.forEach((entry) => { if (!isCommentEntry(entry)) { entry.components = normalizeDrawEntry(entry).components; entry.components.filter((component) => component.type === "transparency" && component.id === oldName).forEach((component) => { component.id = newName; }); } });
@@ -3994,7 +4030,7 @@ function normalizedBoundaryExpression(entry) {
 
 function legacyBoundaryExpression(expression, flag = "False") {
   const normalized = convertDivisionsToFrac(String(expression ?? "1").trim() || "1");
-  return parseLeptonBoolean(flag) ? `0-(${normalized})` : normalized;
+  return { expression: normalized, checkSmaller: parseLeptonBoolean(flag) };
 }
 
 function resolveBoundaryEntry(id) {
@@ -4099,6 +4135,25 @@ function sceneFunctionEnv(includeDefault = false) {
   return Object.fromEntries(entries);
 }
 
+function boundaryExpressionEnv(includeDefault = false) {
+  const env = sceneFunctionEnv(includeDefault);
+  for (const entry of dataEntries(scene.restrictions)) {
+    const id = String(entry.id ?? "").trim();
+    if (!id) continue;
+    env[id] = {
+      id,
+      kind: "variable",
+      expression: normalizedBoundaryExpression(entry)
+    };
+  }
+  return env;
+}
+
+function toggleCoordinateGrid() {
+  scene.settings.showCoordinateGrid = scene.settings.showCoordinateGrid === false;
+  return scene.settings.showCoordinateGrid;
+}
+
 function pointLinkFunctionEntries() {
   return [{ id: "", label: "none" }, ...dataEntries(scene.functions).map(normalizeFunctionEntry).filter((entry) => entry.kind === "function" && entry.outputType === "expression" && entry.params.length <= 2)];
 }
@@ -4131,7 +4186,7 @@ function defaultEntryForKind(kind) {
     return { id: nextEntryId(scene.colors, "c"), red: "0", green: "0", blue: "0" };
   }
   if (kind === "restrictions") {
-    return { id: nextEntryId(scene.restrictions, "r"), expression: "" };
+    return { id: nextEntryId(scene.restrictions, "r"), expression: "", checkSmaller: false };
   }
   if (kind === "transparencies") return { id: nextEntryId(scene.transparencies, "a"), expression: "0" };
   if (kind === "draws") {
@@ -4505,7 +4560,7 @@ function renderSceneCpuInto(canvas, options = {}) {
   const backgroundColor = resolveBackgroundColor();
   drawGrid(ctx, cssWidth, cssHeight, backgroundColor.custom ? backgroundColor.rgb : null);
 
-  const env = buildRuntimeEnv(sceneFunctionEnv(true));
+  const env = buildRuntimeEnv(boundaryExpressionEnv(true));
   const visibleViewport = options.visibleViewport ?? displayViewportForSize(viewport, cssWidth, cssHeight);
   if (options.updateOverlay !== false) updateBoundaryOverlay(canvas, visibleViewport);
   const clipViewport = scene.settings.drawOnlyInsideBoundary ? sceneViewport() : null;
@@ -4760,6 +4815,7 @@ function buildFragmentShader() {
   }
 
   const env = sceneFunctionEnv(true);
+  const boundaryEnv = boundaryExpressionEnv(true);
   const dynamicMap = timeUniformGlslMap();
   const layers = dataEntries(scene.draws)
     .map((draw) => {
@@ -4774,7 +4830,7 @@ function buildFragmentShader() {
         validateExpression(color.red, env).status === "invalid" ||
         validateExpression(color.green, env).status === "invalid" ||
         validateExpression(color.blue, env).status === "invalid" ||
-        validateExpression(restriction.expression, env).status === "invalid" ||
+        validateExpression(restriction.expression, boundaryEnv).status === "invalid" ||
         validateExpression(transparency.expression, env).status === "invalid"
       ) {
         return null;
@@ -4786,7 +4842,7 @@ function buildFragmentShader() {
           red: expressionToGlsl(color.red, env, "z", [], scene.settings.angleMode, dynamicMap),
           green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode, dynamicMap),
           blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode, dynamicMap),
-          bound: expressionToGlsl(restriction.expression, env, null, [], scene.settings.angleMode, dynamicMap),
+          bound: expressionToGlsl(restriction.expression, boundaryEnv, null, [], scene.settings.angleMode, dynamicMap),
           transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode, dynamicMap),
           boundCheck: "boundValue >= 0.0"
         };
@@ -4851,6 +4907,11 @@ function buildFragmentShader() {
     float leptonUnion(float a, float b) { return min(a, b); }
     float leptonIntersect(float a, float b) { return max(a, b); }
     float leptonSubtract(float a, float b) { return max(-a, b); }
+    float leptonAnd(float a, float b) { return min(a, b); }
+    float leptonOr(float a, float b) { return max(a, b); }
+    float leptonNot(float a) { return -a; }
+    float leptonXor(float a, float b) { return max(min(a, -b), min(-a, b)); }
+    float leptonXand(float a, float b) { return max(min(a, b), min(-a, -b)); }
     float leptonRandom(vec2 value) { return fract(sin(dot(value, vec2(12.9898, 78.233)) + u_random_seed * 0.000173) * 43758.5453123); }
     float leptonSurfaceBump(float px, float py, float cx, float cy, float gamma) {
       vec2 delta = vec2(px - cx, py - cy);
@@ -5147,6 +5208,11 @@ function compileExpression(source, localNames = new Set()) {
       const union = (a, b) => Math.min(a, b);
       const intersect = (a, b) => Math.max(a, b);
       const subtract = (a, b) => Math.max(-a, b);
+      const and = (a, b) => Math.min(a, b);
+      const or = (a, b) => Math.max(a, b);
+      const not = (a) => -a;
+      const xor = (a, b) => Math.max(Math.min(a, -b), Math.min(-a, b));
+      const xand = (a, b) => Math.max(Math.min(a, b), Math.min(-a, -b));
       const random = () => {
         const seed = Number(env.__randomSeed ?? 1);
         const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.000173) * 43758.5453123;
@@ -5441,6 +5507,11 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
     .replaceAll(/\bunion\b/g, "leptonUnion")
     .replaceAll(/\bintersect\b/g, "leptonIntersect")
     .replaceAll(/\bsubtract\b/g, "leptonSubtract")
+    .replaceAll(/\band\b/g, "leptonAnd")
+    .replaceAll(/\bor\b/g, "leptonOr")
+    .replaceAll(/\bnot\b/g, "leptonNot")
+    .replaceAll(/\bxand\b/g, "leptonXand")
+    .replaceAll(/\bxor\b/g, "leptonXor")
     .replaceAll(/\brandom\s*\(\s*\)/g, "leptonRandom(vec2(x,y))")
     .replaceAll(/\bpi\b/g, "3.141592653589793")
     .replaceAll(/\be\b/g, "2.718281828459045");
@@ -5683,6 +5754,8 @@ function rewriteBareIdentifiers(expression, replace, extraReserved, overrideName
 function validateScene() {
   const env = sceneFunctionEnv();
   const drawEnv = sceneFunctionEnv(true);
+  const boundaryEnv = boundaryExpressionEnv();
+  const drawBoundaryEnv = boundaryExpressionEnv(true);
   const duplicateIds = {
     functions: duplicateEntryIds(scene.functions),
     colors: duplicateEntryIds(scene.colors),
@@ -5767,7 +5840,7 @@ function validateScene() {
     const idResult = validateEntryId(entry.id, "Boundary", env, false);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Boundary", duplicateIds.restrictions);
-    return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, env)]);
+    return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, boundaryEnv, [entry.id])]);
   });
   diagnostics.transparencies = (scene.transparencies ?? []).map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
@@ -5799,7 +5872,7 @@ function validateScene() {
       validateExpression(color.red, drawEnv),
       validateExpression(color.green, drawEnv),
       validateExpression(color.blue, drawEnv),
-      validateExpression(restriction.expression, drawEnv),
+      validateExpression(restriction.expression, drawBoundaryEnv),
       validateExpression(transparency.expression, drawEnv)
     ]);
     return affected.status === "invalid"
@@ -5829,7 +5902,13 @@ function validateScene() {
   const firstInfo = all.find((item) => item.status === "info");
   const firstWarning = all.find((item) => item.status === "warning");
   diagnostics.hasErrors = Boolean(firstError);
-  diagnostics.summary = firstError ? firstError.message : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
+  const firstFunctionError = diagnostics.functions.findIndex((item) => item.status === "invalid");
+  const firstColorError = diagnostics.colors.findIndex((item) => item.status === "invalid");
+  const firstBoundaryError = diagnostics.restrictions.findIndex((item) => item.status === "invalid");
+  const errorOwner = firstFunctionError >= 0 ? `function ${scene.functions[firstFunctionError]?.id ?? firstFunctionError}`
+    : firstColorError >= 0 ? `colour ${scene.colors[firstColorError]?.id ?? firstColorError}`
+      : firstBoundaryError >= 0 ? `boundary ${scene.restrictions[firstBoundaryError]?.id ?? firstBoundaryError}` : "";
+  diagnostics.summary = firstError ? `${errorOwner ? `${errorOwner}: ` : ""}${firstError.message}` : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
   latestDiagnostics = diagnostics;
   return diagnostics;
 }
@@ -6880,7 +6959,15 @@ const STANDARD_LATEX_COMMANDS = {
   cot: "\\cot",
   min: "\\min",
   max: "\\max",
-  clamp: "\\operatorname{clamp}"
+  clamp: "\\operatorname{clamp}",
+  union: "\\operatorname{union}",
+  intersect: "\\operatorname{intersect}",
+  subtract: "\\operatorname{subtract}",
+  and: "\\operatorname{and}",
+  or: "\\operatorname{or}",
+  not: "\\operatorname{not}",
+  xand: "\\operatorname{xand}",
+  xor: "\\operatorname{xor}"
 };
 
 function tokenizeLatex(source) {
@@ -8112,7 +8199,8 @@ function exportColorEntry(entry) {
 
 function exportRestrictionEntry(entry) {
   if (isCommentEntry(entry)) return exportStandaloneComment(entry, "restrictions");
-  return appendInlineComment(`boundary ${entry.id} = ${textModeExpression(normalizedBoundaryExpression(entry))}`, entry.comment);
+  const comparison = entry.checkSmaller ? " {when=lte}" : "";
+  return appendInlineComment(`boundary ${entry.id} = ${textModeExpression(entry.expression)}${comparison}`, entry.comment);
 }
 
 function exportTransparencyEntry(entry) {
@@ -8331,7 +8419,7 @@ function importScene(raw) {
       const [expression = "1", flag = "0"] = rest.split("~");
       flushPendingComments("restrictions");
       currentCommentSection = "restrictions";
-      pushDataEntry(next, "restrictions", withInlineComment({ id, expression: legacyBoundaryExpression(expression, flag) }, comment));
+      pushDataEntry(next, "restrictions", withInlineComment({ id, ...legacyBoundaryExpression(expression, flag) }, comment));
     } else if (line.startsWith("D~")) {
       const [, equationId, colorId, restrictionId, hidden = "0"] = line.split("~");
       flushPendingComments("draws");
@@ -8415,10 +8503,13 @@ function importScene(raw) {
     } else if (/^(boundary|restriction)\s+/i.test(line)) {
       const assignment = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
       if (assignment) {
-        const [expression = "1", flag = "False"] = assignment[2].split("~").map((part) => part.trim());
+        const propertyBlock = splitTrailingProperties(assignment[2], new Set(["when"]));
+        const [expression = "1", flag = "False"] = propertyBlock.body.split("~").map((part) => part.trim());
+        const boundary = legacyBoundaryExpression(expression, flag);
+        if (propertyBlock.properties.when) boundary.checkSmaller = /^(lte|less|less_than_or_equal|<=0)$/i.test(propertyBlock.properties.when);
         flushPendingComments("restrictions");
         currentCommentSection = "restrictions";
-        pushDataEntry(next, "restrictions", withInlineComment({ id: assignment[1], expression: legacyBoundaryExpression(expression, flag) }, comment));
+        pushDataEntry(next, "restrictions", withInlineComment({ id: assignment[1], ...boundary }, comment));
       }
     } else if (/^transparency\s+/i.test(line)) {
       const assignment = line.match(/^transparency\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
@@ -9247,6 +9338,19 @@ window.__leptonDebug = {
     // the same time. Keep the full editor behavior outside capture mode.
     if (document.body.classList.contains("capture-mode")) renderScene(diagnostics);
     else renderApp();
+    return true;
+  },
+  clearScene() {
+    // ItGE can begin another expensive reconstruction while this capture
+    // iframe still owns the previous shader. Replacing it with the tiny
+    // default scene makes renderSceneWebGlInto delete the old program and
+    // buffer before the next worker reaches its memory peak.
+    scene = structuredClone(DEFAULT_SCENE);
+    viewport = sceneViewport();
+    sceneHistory.undo = [];
+    sceneHistory.redo = [];
+    sceneHistory.last = sceneSnapshot();
+    renderScene(validateScene());
     return true;
   },
   estimateExpressionAstSize: (source) => estimateExpandedNodeCount(String(source ?? "")),

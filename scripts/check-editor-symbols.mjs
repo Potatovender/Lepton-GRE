@@ -6,7 +6,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260812-refinements-point-selectors";
+const cacheVersion = "20260901-boundary-grid-caret";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -682,7 +682,8 @@ draw(f1,c1,r1,true)`);
   assert(imported.settings.angleMode === "radians", JSON.stringify(imported.settings));
   assert(imported.settings.maxRecursion === 33, JSON.stringify(imported.settings));
   assert(imported.colors[0].id === "c1", JSON.stringify(imported.colors));
-  assert(imported.restrictions[0].expression === "0-(f1)", JSON.stringify(imported.restrictions));
+  assert(imported.restrictions[0].expression === "f1", JSON.stringify(imported.restrictions));
+  assert(imported.restrictions[0].checkSmaller === true, JSON.stringify(imported.restrictions));
   assert(imported.draws[0].hidden === true, JSON.stringify(imported.draws));
 });
 
@@ -1108,6 +1109,9 @@ check("boundaries edit and export as direct expressions", () => {
   assert(html.includes("mathquill-field"), html);
   assert(!html.includes("reference-picker"), html);
   assert(!html.includes('type="checkbox"'), html);
+  assert(html.includes('data-boundary-comparison="0"'), html);
+  assert(html.includes("greater than or equal to 0"), html);
+  assert(html.includes("less than or equal to 0"), html);
   assert(sandbox.exportScene().includes("boundary positive = x+1"), sandbox.exportScene());
   assert(!sandbox.exportScene().includes("~False"), sandbox.exportScene());
 });
@@ -1116,7 +1120,75 @@ check("legacy boundary booleans preserve their drawn region", () => {
   const positive = sandbox.importScene("boundary positive = x~False");
   const negative = sandbox.importScene("boundary negative = x~True");
   assert(positive.restrictions[0].expression === "x", JSON.stringify(positive.restrictions[0]));
-  assert(negative.restrictions[0].expression === "0-(x)", JSON.stringify(negative.restrictions[0]));
+  assert(positive.restrictions[0].checkSmaller === false, JSON.stringify(positive.restrictions[0]));
+  assert(negative.restrictions[0].expression === "x", JSON.stringify(negative.restrictions[0]));
+  assert(negative.restrictions[0].checkSmaller === true, JSON.stringify(negative.restrictions[0]));
+  sandbox.__debugSetScene(negative);
+  assert(sandbox.resolveBoundaryEntry("negative").expression === "0-(x)", JSON.stringify(sandbox.resolveBoundaryEntry("negative")));
+});
+
+check("modern boundary comparison syntax round-trips", () => {
+  const imported = sandbox.importScene("boundary below = y {when=lte}");
+  sandbox.__debugSetScene(imported);
+  assert(imported.restrictions[0].expression === "y", JSON.stringify(imported.restrictions[0]));
+  assert(imported.restrictions[0].checkSmaller === true, JSON.stringify(imported.restrictions[0]));
+  assert(sandbox.exportScene().includes("boundary below = y {when=lte}"), sandbox.exportScene());
+});
+
+check("named boundaries compose through CPU validation and GLSL", () => {
+  const imported = sandbox.importScene(`expression value = x+y
+boundary right = x
+boundary upper = y
+boundary lower = y {when=lte}
+boundary quadrant = and(right,upper)
+boundary either = or(right,upper)
+boundary outsideRight = not(right)
+boundary exactlyOne = xor(right,upper)
+boundary agreement = xand(right,upper)
+boundary strip = and(right,lower)
+draw(value) {boundary=quadrant}`);
+  sandbox.__debugSetScene(imported);
+  const env = sandbox.boundaryExpressionEnv(true);
+  const runtime = sandbox.buildRuntimeEnv(env);
+  const evaluate = (id, x, y) => {
+    const entry = imported.restrictions.find((candidate) => candidate.id === id);
+    return sandbox.compileExpression(sandbox.normalizedBoundaryExpression(entry))(x, y, runtime);
+  };
+  assert(evaluate("quadrant", 2, 3) >= 0 && evaluate("quadrant", -2, 3) < 0, "and failed");
+  assert(evaluate("either", -2, 3) >= 0 && evaluate("either", -2, -3) < 0, "or failed");
+  assert(evaluate("outsideRight", -2, 0) >= 0 && evaluate("outsideRight", 2, 0) < 0, "not failed");
+  assert(evaluate("exactlyOne", -2, 3) >= 0 && evaluate("exactlyOne", 2, 3) < 0, "xor failed");
+  assert(evaluate("agreement", 2, 3) >= 0 && evaluate("agreement", -2, 3) < 0, "xand failed");
+  assert(evaluate("strip", 2, -3) >= 0 && evaluate("strip", 2, 3) < 0, "lte boundary reference failed");
+  const diagnostics = sandbox.validateScene();
+  assert(!diagnostics.hasErrors, diagnostics.summary);
+  const glsl = sandbox.expressionToGlsl("and(right,not(upper))", env);
+  assert(glsl.includes("leptonAnd") && glsl.includes("leptonNot"), glsl);
+  assert(sandbox.buildFragmentShader().includes("leptonAnd"), "composed boundary was omitted from shader");
+});
+
+check("renaming a boundary updates composed boundary references", () => {
+  const imported = sandbox.importScene("boundary first = x\nboundary combined = and(first,y)");
+  sandbox.__debugSetScene(imported);
+  assert(sandbox.renameSceneReferences("restrictions", "first", "right"), "rename failed");
+  assert(imported.restrictions[1].expression === "and(right,y)", JSON.stringify(imported.restrictions));
+});
+
+check("background picker updates settings and coordinate grid toggles", () => {
+  const imported = sandbox.importScene("colour first = 10~20~30\ncolour second = 40~50~60");
+  sandbox.__debugSetScene(imported);
+  sandbox.updateReferenceField("settings.backgroundColor", "second");
+  assert(imported.settings.backgroundColor === "second", JSON.stringify(imported.settings));
+  imported.settings.showCoordinateGrid = true;
+  assert(sandbox.toggleCoordinateGrid() === false, "grid did not hide");
+  assert(sandbox.toggleCoordinateGrid() === true, "grid did not show");
+});
+
+check("MathQuill reflow never rewrites active field contents", () => {
+  const reflowBody = source.slice(source.indexOf("function forceMathFieldsReflow"), source.indexOf("function handleFieldHistoryKeydown"));
+  assert(!reflowBody.includes("mathField.latex("), reflowBody);
+  const delayedInit = source.slice(source.indexOf("mathField.latex(initialValue)"), source.indexOf("el.__mathField = mathField"));
+  assert((delayedInit.match(/mathField\.latex\(initialValue\)/g) ?? []).length === 1, delayedInit);
 });
 
 check("points and grid settings round-trip through text", () => {
