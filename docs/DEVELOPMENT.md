@@ -99,6 +99,9 @@ The Pages build runs `npm ci` and `npm run verify` before uploading `dist/`.
 Deployment depends on that exact build, not the result of a different CI run.
 `scripts/site-files.mjs` is the complete public-file allowlist. Add new public
 assets there deliberately; do not deploy the repository root.
+The Pages upload action includes hidden files explicitly so the staged
+`.nojekyll` marker is retained. The allowlist ensures no private hidden files
+enter that artifact.
 
 For a rollback, revert the faulty commit, verify, and push the revert so Pages
 publishes a traceable replacement. Do not force-push release history. Branch
