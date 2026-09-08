@@ -12,8 +12,10 @@
   },
   "scripts": {
     "dev": "vite",
+    "preview": "vite preview",
     "build": "node scripts/build.mjs",
-    "test": "vitest run",
+    "test": "vitest run tests/expression-syntax.test.ts && npm run test:renderer",
+    "test:renderer": "node --test packages/renderer/test/*.test.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "verify": "npm run build && npm test && npm run typecheck",

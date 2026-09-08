@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "../src/math/expression-syntax.js";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260901-boundary-grid-caret";
+const cacheVersion = "20260908-mobile-renderer-release";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -77,12 +78,14 @@ const sandbox = {
   convertPowers,
   getOpPrecedence,
   normalizeMathSyntax,
-  UNARY_OPERAND_PRECEDENCE
+  UNARY_OPERAND_PRECEDENCE,
+  renderFrame,
+  disposeRenderer
 };
 
 vm.createContext(sandbox);
 vm.runInContext(
-  source.replace(/^import .*expression-syntax\.js";\s*/, "").replace(
+  source.replace(/^import .*;\s*$/gm, "").replace(
     /loadSceneFromUrl\(\)\.then\(\(\) => \{\s*sceneHistory\.last = sceneSnapshot\(\);\s*renderApp\(\);\s*\}\);/,
     "globalThis.__debugLatexFunctions = LATEX_FUNCTIONS; globalThis.__debugScene = scene; globalThis.__debugSetScene = (next) => { scene = next; globalThis.__debugScene = scene; }; globalThis.__debugSetDisplayMode = (mode) => { displayMode = mode; }; globalThis.__debugPlayTime = (id) => { playingTimeIds.add(id); timeVariableDirections.set(id, 1); };"
   ),
@@ -372,7 +375,89 @@ check("GLSL trig respects degree angle mode", () => {
   const radians = sandbox.expressionToGlsl("sin(180)", {}, null, [], "radians");
   const degrees = sandbox.expressionToGlsl("sin(180)", {}, null, [], "degrees");
   assert(radians === "sin(180.0)", radians);
-  assert(degrees === "sin((180.0)*0.017453292519943295)", degrees);
+  assert(degrees === "leptonDegrees_sin(180.0)", degrees);
+});
+
+check("degree mode agrees across CPU, GPU references, nested calls, and inverse trig", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`set angle_mode = degrees
+expression inner = sin(x)
+expression outer = inner+1
+function wave(a) = sin(cos(a))
+colour bg = 255*sin(90)~0~0
+set background_color = bg`));
+  const env = sandbox.sceneFunctionEnv();
+  const runtime = sandbox.buildRuntimeEnv(env);
+  for (const [input, expected] of [["sin(90)", 1], ["arcsin(1)", 90], ["acos(0)", 90], ["outer", 2], ["sin(cos(0))", Math.sin(Math.PI / 180)], ["wave(0)", Math.sin(Math.PI / 180)], ["sinh(1)", Math.sinh(1)]]) {
+    const actual = sandbox.compileExpression(input)(90, 0, runtime);
+    assert(Math.abs(actual - expected) < 1e-10, `${input}: ${actual} != ${expected}`);
+  }
+  const nested = sandbox.expressionToGlsl("outer", env, null, [], "degrees");
+  assert(nested.includes("leptonDegrees_sin(x)") && !nested.includes("0.017453"), nested);
+  const direct = sandbox.expressionToGlsl("sin(cos(x))", env, null, [], "degrees");
+  assert(direct === "leptonDegrees_sin(leptonDegrees_cos(x))", direct);
+  assert(sandbox.resolveBackgroundColor().rgb[0] === 255, JSON.stringify(sandbox.resolveBackgroundColor()));
+  sandbox.__debugSetScene(sandbox.importScene(""));
+});
+
+check("piecewise equality is a comparison, not an assignment", () => {
+  for (const condition of ["x=1", "x==1", "x<=1", "x<2", "x!=2"]) {
+    const source = `{${condition}:10,20}`;
+    const evaluate = sandbox.compileExpression(source);
+    assert(evaluate(1, 0, {}) === 10, `${source}: true branch`);
+    assert(evaluate(2, 0, {}) === 20, `${source}: false branch`);
+    const glsl = sandbox.expressionToGlsl(source, {});
+    assert(glsl.includes("x"), `${source}: ${glsl}`);
+    assert(sandbox.validateExpression(source, {}).status === "valid", source);
+  }
+});
+
+check("malformed builtin input counts are red flagged including nested calls", () => {
+  for (const source of ["sin(1,2)", "clamp(1,2)", "and(1)", "xor(1,2,3)", "cos(sin(1,2))", "sin()", "min(1,)"]) {
+    assert(sandbox.validateExpression(source, {}).status === "invalid", source);
+  }
+  sandbox.__debugSetScene(sandbox.importScene("function constant() = 2"));
+  assert(sandbox.validateExpression("constant()", sandbox.sceneFunctionEnv()).status === "valid", "zero-argument custom function");
+  sandbox.__debugSetScene(sandbox.importScene(""));
+});
+
+check("a boundary may share its name with a value without replacing it", () => {
+  sandbox.__debugSetScene(sandbox.importScene("expression rest = 1\nboundary rest = rest\nexpression value = rest\ndraw(value) {boundary=rest}"));
+  const env = sandbox.boundaryExpressionEnv(true);
+  assert(sandbox.compileExpression("rest")(0, 0, sandbox.buildRuntimeEnv(env)) === 1, "boundary replaced a value with itself");
+  assert(sandbox.expressionToGlsl("rest", env) === "(1.0)", sandbox.expressionToGlsl("rest", env));
+  sandbox.__debugSetScene(sandbox.importScene(""));
+});
+
+check("bad builtin calls in dependencies only skip affected layers", () => {
+  sandbox.__debugSetScene(sandbox.importScene("expression broken = sin(1,2)\nexpression dependent = broken+1\nexpression good = cos(x)\ndraw(dependent)\ndraw(good)"));
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.draws[0].status === "invalid", "dependent layer must be invalid");
+  assert(diagnostics.draws[1].status === "valid", "unrelated layer should still draw");
+  const glsl = sandbox.buildFragmentShader();
+  assert(!glsl.includes("sin(1.0,2.0)"), "malformed dependency reached shader");
+  assert(glsl.includes("cos(x)"), "valid layer was dropped");
+  sandbox.__debugSetScene(sandbox.importScene(""));
+});
+
+check("grid ticks have a bounded screen-space cost even for extreme ranges", () => {
+  for (const [min, max] of [[-1, 1], [-1e6, 1e6], [1e20, 1e20 + 32768], [-1e308, 1e308], [0, 1e-320]]) {
+    const ticks = sandbox.coordinateGridTicks(min, max, 1000);
+    assert(ticks.length <= 200, `too many ticks: ${ticks.length}`);
+    assert(ticks.every((value) => Number.isFinite(value) && value >= min && value <= max), JSON.stringify(ticks));
+    assert(ticks.every((value, index) => !index || value > ticks[index - 1]), "ticks are not increasing");
+  }
+  assert(sandbox.coordinateGridTicks(-10, 10, 1000).length > 5, "normal grid lost its tick marks");
+});
+
+check("incomplete points do not block valid point overlays or picking", () => {
+  sandbox.__debugSetScene(sandbox.importScene("point broken = [1+,0]\npoint good = [0,0]"));
+  let painted = 0;
+  sandbox.drawPointsOverlay({ beginPath() {}, arc() { painted++; }, fill() {}, stroke() {} }, 100, 100, { xMin: -10, xMax: 10, yMin: -10, yMax: 10 });
+  assert(painted === 1, `expected one valid point; painted ${painted}`);
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv());
+  assert(sandbox.evaluatedPointCoordinates(sandbox.__debugScene.points[0], env) === null, "malformed point was evaluated");
+  assert(sandbox.evaluatedPointCoordinates(sandbox.__debugScene.points[1], env).join(",") === "0,0", "valid point was skipped");
+  sandbox.__debugSetScene(sandbox.importScene(""));
 });
 
 check("nested absolute bars serialize as nested abs calls", () => {
@@ -1017,7 +1102,7 @@ check("collapsed folders hide descendants without deleting them", () => {
   assert(sandbox.__debugScene.functions.length === 1);
 });
 
-check("folder status prioritizes red then blue then yellow then green", () => {
+check("folder status prioritizes red then yellow then blue then green", () => {
   const imported = sandbox.importScene(`folder group = {\n expression eq = x\n}`);
   sandbox.__debugSetScene(imported);
   const base = { folders: [{ status: "valid", message: "ok" }], functions: [{ status: "warning", message: "warn" }], colors: [], restrictions: [], draws: [] };
@@ -1026,6 +1111,28 @@ check("folder status prioritizes red then blue then yellow then green", () => {
   assert(sandbox.aggregateFolderDiagnostics(base)[0].status === "info");
   base.functions[0] = { status: "invalid", message: "bad" };
   assert(sandbox.aggregateFolderDiagnostics(base)[0].status === "invalid");
+});
+
+check("mixed warnings use the same priority in rows, folders, and scene summary", () => {
+  const statuses = ["valid", "info", "warning", "invalid"].map((status) => ({ status, message: status }));
+  assert(sandbox.combineDiagnostics(statuses).status === "invalid", "red must win");
+  assert(sandbox.combineDiagnostics(statuses.slice(0, 3)).status === "warning", "yellow must outrank blue");
+  sandbox.__debugSetScene(sandbox.importScene("folder group = {\nexpression recursive = recursive+recursive\nexpression twopi = x\n}"));
+  const diagnostics = sandbox.validateScene();
+  assert(diagnostics.functions[0].status === "info", diagnostics.functions[0].message);
+  assert(diagnostics.functions[1].status === "warning", diagnostics.functions[1].message);
+  assert(diagnostics.folders[0].status === "warning", diagnostics.folders[0].message);
+  assert(diagnostics.summary === diagnostics.functions[1].message, diagnostics.summary);
+});
+
+check("recursion cost never hides a real dependency error", () => {
+  for (const invalid of ["missing", "sin(x,2)", "x+*y"]) {
+    sandbox.__debugSetScene(sandbox.importScene(`expression recursive = recursive+recursive+broken\nexpression broken = ${invalid}\nexpression good = x\ndraw(recursive)\ndraw(good)`));
+    const diagnostics = sandbox.validateScene();
+    assert(diagnostics.functions[0].status === "invalid", `${invalid}: ${diagnostics.functions[0].message}`);
+    assert(diagnostics.draws[0].status === "invalid", "bad dependency's draw should be red");
+    assert(diagnostics.draws[1].status === "valid", "unrelated draw was affected");
+  }
 });
 
 check("entries can move into nested folders and back to the root", () => {
@@ -1215,6 +1322,7 @@ check("point coordinates compile through property and index selectors", () => {
 check("point function results compile through property and index selectors", () => {
   sandbox.__debugSetScene(sandbox.importScene(`function pair(a,b) -> point = [a+1,b*2]
 expression selected = pair(2,3).x+pair(2,3).y+pair(4,5)[0]+pair(4,5)[1]`));
+  assert(!sandbox.validateScene().hasErrors, JSON.stringify(sandbox.validateScene()));
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
   const value = sandbox.compileExpression("selected")(0,0,env);
   assert(value === 24, `point function selectors returned ${value}`);
@@ -1255,6 +1363,7 @@ function shifted(x,y) -> point = base(x,y)+2
 function scaled(x,y) -> point = shifted(x,y)*base(3,4)
 function sum(a,b) = a+b
 expression result = sum(scaled(1,2))`));
+  assert(!sandbox.validateScene().hasErrors, JSON.stringify(sandbox.validateScene()));
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
   assert(sandbox.compileExpression("result")(0,0,env) === 25, "expected [9,16] to sum to 25");
 });
@@ -1265,6 +1374,7 @@ function four(a,b,c,d) = 1000*a+100*b+10*c+d
 expression first = four(pair(1,2),3,4)
 expression middle = four(1,pair(2,3),4)
 expression last = four(1,2,pair(3,4))`));
+  assert(!sandbox.validateScene().hasErrors, JSON.stringify(sandbox.validateScene()));
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
   assert(sandbox.compileExpression("first")(0,0,env) === 1234, "leading point argument flattened incorrectly");
   assert(sandbox.compileExpression("middle")(0,0,env) === 1234, "middle point argument flattened incorrectly");
@@ -1875,14 +1985,21 @@ check("saving after five legacy previews compacts them instead of hitting the ol
   assert(stored.length < 20_000, `compacted saves still use ${stored.length} characters`);
 });
 
-check("local persistence keeps sixty Sky Sample graphs", () => {
+check("save limits never silently evict existing graphs", () => {
   storage.clear();
   sandbox.__debugSetScene(sandbox.importScene(sampleSources[3]));
-  for (let index = 0; index < 65; index += 1) sandbox.saveCurrentGraph(`Graph ${index + 1}`, { forceNew: true });
+  for (let index = 0; index < 60; index += 1) sandbox.saveCurrentGraph(`Graph ${index + 1}`, { forceNew: true });
+  const before = storage.get("lepton-saved-graphs-v1");
+  let failure;
+  try { sandbox.saveCurrentGraph("Graph 61", { forceNew: true }); } catch (error) { failure = error; }
+  assert(failure?.name === "SavedGraphLimitError", "61st save should report the limit");
+  assert(sandbox.savedGraphErrorMessage(failure).includes("No graphs were removed"), "missing actionable feedback");
+  assert(storage.get("lepton-saved-graphs-v1") === before, "failed save modified storage");
+  sandbox.saveCurrentGraph("Updated graph");
   const graphs = sandbox.loadSavedGraphs();
   assert(graphs.length === 60, String(graphs.length));
-  assert(graphs.some((graph) => graph.name === "Graph 65"), JSON.stringify(graphs));
-  assert(!graphs.some((graph) => graph.name === "Graph 1"), JSON.stringify(graphs));
+  assert(graphs.some((graph) => graph.name === "Updated graph"), "updating at capacity should work");
+  assert(graphs.some((graph) => graph.name === "Graph 1"), "oldest graph was evicted");
   assert(graphs.every((graph) => graph.scene.includes("function cloudDensity")), "a saved entry is not the Sky Sample");
 });
 

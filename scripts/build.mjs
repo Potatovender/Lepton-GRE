@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { SITE_FILES } from "./site-files.mjs";
 
 const requiredFiles = [
+  ...SITE_FILES,
+  "packages/renderer/README.md",
+  "packages/renderer/src/index.d.ts",
   "index.html",
   "app.html",
   "src/landing.js",
@@ -75,8 +79,11 @@ for (const removedPath of ["src/main.ts", "src/ui/app.ts", "src/model/scene.ts",
 await run(process.execPath, ["--check", "src/browser-preview-live.js"]);
 await run(process.execPath, ["--check", "src/math/expression-syntax.js"]);
 await run(process.execPath, ["--check", "src/landing.js"]);
+await run(process.execPath, ["--check", "packages/renderer/src/index.js"]);
+await run(process.execPath, ["scripts/download-mathquill.mjs", "--check"]);
 await run(process.execPath, ["scripts/check-editor-symbols.mjs"]);
 await run(process.execPath, ["scripts/migrate-samples.mjs"]);
+await run(process.execPath, ["scripts/stage-site.mjs"]);
 
 console.log("Build verification passed.");
 

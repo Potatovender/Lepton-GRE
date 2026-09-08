@@ -1,0 +1,11 @@
+{
+  "name": "@lepton/renderer",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Dependency-free WebGL rendering backend for Lepton.",
+  "exports": { ".": { "types": "./src/index.d.ts", "import": "./src/index.js" } },
+  "files": ["src", "README.md"],
+  "license": "UNLICENSED",
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "repository": { "type": "git", "url": "https://github.com/Potatovender/Lepton-GRE.git", "directory": "packages/renderer" }
+}

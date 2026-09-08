@@ -8,11 +8,11 @@
       name="description"
       content="Launch the Lepton-GRE mathematical grid renderer and function visualizer."
     />
-    <link rel="icon" href="./src/assets/lepton-favicon.png?v=20260901-boundary-grid-caret" type="image/png" />
-    <link rel="shortcut icon" href="./src/assets/lepton-favicon.png?v=20260901-boundary-grid-caret" type="image/png" />
-    <link rel="apple-touch-icon" href="./src/assets/lepton-favicon.png?v=20260901-boundary-grid-caret" />
+    <link rel="icon" href="./src/assets/lepton-favicon.png?v=20260908-mobile-renderer-release" type="image/png" />
+    <link rel="shortcut icon" href="./src/assets/lepton-favicon.png?v=20260908-mobile-renderer-release" type="image/png" />
+    <link rel="apple-touch-icon" href="./src/assets/lepton-favicon.png?v=20260908-mobile-renderer-release" />
     <link rel="stylesheet" href="./src/libs/mathquill/style.css" />
-    <link rel="stylesheet" href="./src/styles.css?v=20260901-boundary-grid-caret" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260908-mobile-renderer-release" />
   </head>
   <body>
     <div id="app">
@@ -27,26 +27,16 @@
               <span class="loading-note">Loading editor...</span>
             </div>
           </header>
-          <nav class="tab-row" aria-label="Editor sections">
-            <button class="tab-button" aria-selected="true">Functions</button>
-            <button class="tab-button" aria-selected="false">Colors</button>
-            <button class="tab-button" aria-selected="false">Bounds</button>
-            <button class="tab-button" aria-selected="false">Draw</button>
-          </nav>
-          <div class="entry-list">
-            <div class="expression-row">
-              <span class="entry-status valid"></span>
-              <textarea class="math-box" aria-label="Expression">eq = sin(x) + cos(y)</textarea>
-            </div>
-          </div>
+          <noscript>Lepton needs JavaScript enabled to edit and render graphs.</noscript>
         </section>
+        <div class="sidebar-resizer" aria-hidden="true"></div>
         <section class="renderer-pane" aria-label="Grid renderer">
           <canvas class="grid-canvas"></canvas>
-          <div class="render-overlay">Open through a local server for the interactive preview.</div>
+          <div class="render-overlay" role="status">Loading Lepton...</div>
         </section>
       </main>
     </div>
     <script src="./src/libs/mathquill/index.global.js"></script>
-    <script type="module" src="./src/browser-preview-live.js?v=20260901-boundary-grid-caret"></script>
+    <script type="module" src="./src/browser-preview-live.js?v=20260908-mobile-renderer-release"></script>
   </body>
 </html>

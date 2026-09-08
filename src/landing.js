@@ -1,4 +1,4 @@
-const APP_VERSION = "20260901-boundary-grid-caret";
+const APP_VERSION = "20260908-mobile-renderer-release";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

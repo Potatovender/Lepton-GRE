@@ -43,6 +43,10 @@ set random_seed = 1
 
 Bounds and custom aspect-ratio sides accept scalar math expressions. Invalid angle modes fall back to radians. `background_color = 0` uses the default background; another value names a colour. `show_coordinate_grid = False` is the master switch for axes, numbers, and grid lines.
 
+In degree mode, circular trig functions take degrees and inverse circular trig
+functions return degrees. Nested calls and references use the same convention in
+CPU evaluation and GLSL rendering. Hyperbolic functions are unaffected.
+
 ## Values
 
 ### Expressions
@@ -111,6 +115,11 @@ boundary clipped = and(inside,below)
 ```
 
 A boundary draws where its expression is greater than or equal to zero by default.
+
+Value IDs take precedence inside expressions if a boundary and a value share a
+name. This preserves existing scenes such as `expression rest = 1` followed by
+`boundary rest = rest`. Use distinct boundary IDs when composing named boundaries
+to avoid this ambiguity.
 Use `{when=lte}` to draw where it is less than or equal to zero; the Standard editor
 provides the same choice directly. Boundary expressions are edited like colour and
 transparency expressions. Named boundaries can be composed with `and(a,b)`,

@@ -10,6 +10,8 @@ node_modules/
 .pnpm-store/
 dist/
 coverage/
+output/
+test-artifacts/
 
 .DS_Store
 .idea/

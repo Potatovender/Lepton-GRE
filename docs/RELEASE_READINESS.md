@@ -1,0 +1,113 @@
+# Release Readiness
+
+Checked on 2026-09-08 for `20260908-mobile-renderer-release`. This supersedes the
+initial desktop-only audit. It is a bounded validation record, not a guarantee
+that every GPU, browser, expression, or editing sequence is bug-free.
+
+## Deployment
+
+The public homepage is <https://potatovender.github.io/Lepton-GRE/> and the editor
+is <https://potatovender.github.io/Lepton-GRE/app.html>. The authoritative deployed
+version/commit is in [release.json](https://potatovender.github.io/Lepton-GRE/release.json).
+A query string alone does not publish new code.
+
+The Pages workflow now installs locked dependencies and runs verification before
+uploading an explicit 35-file public artifact. Deploy depends on that build of the
+same commit. Tests, development documents, node_modules, local saves, audit
+screenshots, and unrelated ItGE experiments are not deployed.
+
+## Corrections
+
+- Mobile now uses equal upper graph/lower editor regions. It follows the visible
+  viewport when the keyboard opens and scrolls the active field into view without
+  rebuilding its MathQuill state. Compact controls keep Text mode editable on
+  short viewports; the custom-keyboard toggle no longer covers its action buttons.
+- Status priority is **red > yellow > blue > green** on rows, folders, and the
+  scene summary. Real syntax/dependency errors are checked before recursion-size
+  warnings. Point errors also propagate to containing folders.
+- Point-function arithmetic validation uses source-level component selectors
+  instead of exposing CPU-only helper calls to the GLSL compiler.
+- Degree-mode CPU evaluation and nested GLSL references now agree. Circular trig
+  inputs and inverse outputs follow angle mode; hyperbolic functions do not.
+- Piecewise single equality now compares instead of becoming an assignment.
+- Invalid builtin input counts are diagnosed through references and both
+  compilers. A broken layer does not prevent unrelated valid layers.
+- Legacy boundary/value pairs with the same ID no longer introduce recursion.
+- Saving graph 61 reports the library limit without silently evicting graph 1.
+  Updating an existing save remains possible; thumbnail recovery preserves all
+  scene records.
+- Clean Text drafts refresh from Standard edits. Loading another graph clears
+  the prior draft; unapplied drafts remain protected.
+- Export releases menu focus. Shader errors report failure rather than ready.
+  Malformed points no longer abort the complete point overlay.
+- Coordinate ticks use bounded screen-space counts per axis, preventing excessive
+  work with very different x/y ranges.
+- The WebGL driver is isolated in `packages/renderer` with a typed API, tests,
+  explicit cleanup, and no GRE/MathQuill dependency. The Lepton compiler remains
+  in the GRE; this is not a second language implementation.
+- MathQuill's existing assets were matched to version 2026.4.21 and pinned with
+  hashes, origin, archive integrity, and the MPL license. No editor upgrade was
+  slipped into this release.
+- The two reported development dependency advisories were addressed with
+  compatible Nano ID and PostCSS patch updates. The resulting npm audit reported
+  zero known vulnerabilities.
+
+## Verification
+
+- **150** runtime/model/grammar checks, **17** syntax unit tests, and **6**
+  standalone GPU-driver tests passed.
+- All **9** maintained sample files passed current-syntax migration checks.
+- Clean temporary source copy: locked dependency installation, build, tests, and
+  TypeScript declaration/configuration checks passed. Production JavaScript is
+  exercised by tests; this does not claim a full `checkJs` type check.
+- Chromium: landing, blank editor, all **8** gallery scenes, favicon URLs, sample
+  links, and nonblank graph output passed the load smoke checks.
+- Three Text Apply/Reload/Standard cycles preserved fractions and comments and
+  remounted MathQuill. Keyboard edits in the middle retained the caret position.
+- Background selection beyond the first colour, grid switches, and boundary
+  inequality controls persisted and round-tripped.
+- GPU pixel readback agreed with independent JavaScript calculations for nested
+  fractions, negative exponents, circular/hyperbolic trig, inverse hyperbolic
+  functions, roots, clamps, and piecewise conditions, within 8-bit image
+  quantization tolerance. Separate checks covered nested degree-mode references.
+  The same independent calculations also passed with WebGL 1 forced.
+- Water save/load produced a decodable, nonuniform 160 x 100 WebP preview of about
+  3.6 KB. Export produced a nonblank 1000 x 1000 PNG matching settings.
+- Water animation advanced time without recompiling the unchanged shader.
+- Phone tests: 390 x 844 gives 422 px to each pane. With a keyboard-sized visible
+  viewport of 390 x 500, both panes become 250 px and the focused last field stays
+  visible. Text remains scrollable and editable. 360 px portrait, 760 px landscape,
+  and 820 px tablet layouts retain reachable graph/editor regions.
+- Final desktop and mobile flow runs recorded no uncaught page errors. Browser
+  tests used isolated profiles, not the user's saved-graph library.
+
+Local screenshots/results live in `output/playwright/release-audit/`, excluded
+from Git and deployment.
+
+## Remaining Checks and Owner Decisions
+
+- The maintainer reports desktop Safari working. Real iPhone/Android keyboard
+  behavior and Firefox still deserve a physical-device check. Keyboard-resize
+  simulation is not the same as testing an operating system's software keyboard.
+- Correct independent pixel calculations do not prove performance on low-powered
+  GPUs. High-detail scenes can still compile slowly or render at low FPS.
+- Saves are local to an origin and browser, not cloud backups. Copy Lepton text
+  before clearing website data, moving domains, or deleting saved graphs.
+- Select a Lepton license if open-source reuse is intended. No license has been
+  chosen on the owner's behalf. Third-party license notices are included.
+- Branch protection, a release tag, and a formal supported-device policy can be
+  added when announcing a stable release. These are not required to serve this
+  verified public build.
+
+## Performance Notes
+
+Sample compile indicators in this environment ranged from a few milliseconds
+for simple scenes to roughly 165 ms for Sky, 538 ms for Tree, and 625 ms for
+Marble. Tree generated about 539 KB of GLSL. These are single-run compile
+indicators, not frame-time or cross-device benchmarks.
+
+Normal animation uses uniforms and cached GPU programs; synchronous GPU waits
+are restricted to readback/export. Future profiling should measure CPU and GPU
+time separately. CPU reference evaluation still recompiles formulas and GLSL
+still expands repeated references; caching CPU evaluators and shared GLSL
+subexpressions remain worthwhile focused performance work.

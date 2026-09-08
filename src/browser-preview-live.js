@@ -1,4 +1,5 @@
 import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -43,7 +44,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260901-boundary-grid-caret";
+const APP_VERSION = "20260908-mobile-renderer-release";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -62,6 +63,7 @@ function ensureLeptonFavicon() {
 }
 
 const DATA_ENTRY_KINDS = ["functions", "colors", "restrictions", "transparencies", "draws", "points", "folders"];
+const DIAGNOSTIC_PRIORITY = { valid: 0, info: 1, warning: 2, invalid: 3 };
 let dropdownDismissBound = false;
 let selectedDependencyEntry = null;
 
@@ -151,6 +153,14 @@ const GENERATED_GLSL_NAMES = new Set([
   "tanh1",
   "vec2"
 ]);
+
+const DEGREE_FUNCTIONS = {
+  sin: "sin", cos: "cos", tan: "tan", sec: "sec", csc: "csc", cot: "cot",
+  asin: "asin", acos: "acos", atan: "atan", arcsin: "asin", arccos: "acos", arctan: "atan",
+  arcsec: "arcsec", arccsc: "arccsc", arccot: "arccot"
+};
+const DEGREE_HELPER_NAMES = new Set(Object.values(DEGREE_FUNCTIONS).map((name) => `leptonDegrees_${name}`));
+for (const name of DEGREE_HELPER_NAMES) GENERATED_GLSL_NAMES.add(name);
 
 const EXACT_RESERVED_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["Math", "PI", "ref", "NaN"].includes(name)));
 const SUBSTRING_RESERVED_NAMES = new Set([...EXACT_RESERVED_NAMES].filter((name) => !["x", "y", "z", "e"].includes(name)));
@@ -284,7 +294,7 @@ const HELP_TEXT = {
   settingDrawOnlyInsideBoundary: "When enabled, pixels outside the active draw boundary are not drawn at all instead of showing the background.",
   settingMaxRecursion: "The maximum depth used when a variable refers back to itself or through a loop of other variables.",
   settingUnboundedDecimals: "How many digits to keep after the decimal point for unbounded time variables while they animate.",
-  settingAngleMode: "Chooses whether trig functions read angles as radians or degrees.",
+  settingAngleMode: "Chooses whether circular trig inputs and inverse trig outputs use radians or degrees. Hyperbolic functions are unchanged.",
   settingBackgroundColorId: "Choose the color ID used as the solid background when Background color is set to Custom.",
   variableType: "Expression entries are named formulas over x and y. Use them for equations, constants, color channels, and helper math that other entries can reference.",
   sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
@@ -398,7 +408,6 @@ let animationFpsFrameCount = 0;
 let animationFps = 0;
 let latestDiagnostics = null;
 const TIME_VARIABLE_RATE = 1;
-const webGlRenderCache = new WeakMap();
 let saveDialogOpen = false;
 let libraryDialogOpen = false;
 let saveNameDraft = "";
@@ -425,6 +434,8 @@ function renderApp() {
   prunePlayingTimeIds();
   const diagnostics = validateScene();
   const scrollKey = panelScrollKey();
+  const previousCanvas = root.querySelector(".grid-canvas");
+  if (previousCanvas) disposeRenderer(previousCanvas, { loseContext: true });
   root.innerHTML = `
     <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px; --sidebar-min-width: ${SIDEBAR_MIN_WIDTH}px">
       <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
@@ -2206,9 +2217,7 @@ function bindEvents() {
         saveErrorMessage = "";
       } catch (error) {
         saveNameDraft = existing.name;
-        saveErrorMessage = isStorageQuotaError(error)
-          ? "Browser storage is full. Delete an older saved graph, then try again."
-          : "This graph could not be saved in this browser.";
+        saveErrorMessage = savedGraphErrorMessage(error);
         saveDialogOpen = true;
         libraryDialogOpen = false;
       }
@@ -2243,9 +2252,10 @@ function bindEvents() {
     saveDialogOpen = false;
     renderApp();
   });
-  root.querySelector('[data-action="export-graph"]')?.addEventListener("click", () => {
+  root.querySelector('[data-action="export-graph"]')?.addEventListener("click", (event) => {
     setGraphActionFeedback("export-graph");
     exportCurrentGraphImage();
+    event.currentTarget.blur();
   });
   root.querySelectorAll('[data-action="close-save-dialog"]').forEach((target) => {
     target.addEventListener("click", (event) => {
@@ -2265,9 +2275,7 @@ function bindEvents() {
       saveDialogOpen = false;
       libraryDialogOpen = true;
     } catch (error) {
-      saveErrorMessage = isStorageQuotaError(error)
-        ? "Browser storage is full. Delete an older saved graph, then try again."
-        : "This graph could not be saved in this browser.";
+      saveErrorMessage = savedGraphErrorMessage(error);
       saveDialogOpen = true;
       libraryDialogOpen = false;
     }
@@ -2287,6 +2295,10 @@ function bindEvents() {
       sceneHistory.last = sceneSnapshot();
       if (before !== sceneSnapshot()) sceneHistory.undo.push(before);
       markSaved();
+      textDraft = null;
+      textDraftDirty = false;
+      textDraftWarningOpen = false;
+      textApplyNotice = "";
       displayMode = "standard";
       activeTab = "functions";
       saveDialogOpen = false;
@@ -2318,7 +2330,7 @@ function bindEvents() {
         return;
       }
       displayMode = nextMode;
-      if (displayMode === "text" && textDraft == null) textDraft = exportScene();
+      if (displayMode === "text" && !textDraftDirty) textDraft = exportScene();
       if (displayMode === "standard") settingsPanelOpen = false;
       if (displayMode === "text") settingsPanelOpen = false;
       renderApp();
@@ -2630,7 +2642,6 @@ function bindEvents() {
           const latex = mathField.latex();
           el.dataset.value = latex;
 
-          const cleanExpr = latexToLeptonText(latex);
           requestAnimationFrame(() => keepHorizontalCaretVisible(el));
 
           const before = sceneSnapshot();
@@ -2654,6 +2665,11 @@ function bindEvents() {
     });
     delete el.dataset.initializing;
     el.__mathField = mathField;
+    const keyboardInput = el.querySelector("textarea");
+    if (keyboardInput) {
+      keyboardInput.setAttribute("inputmode", "text");
+      keyboardInput.setAttribute("enterkeyhint", "next");
+    }
   });
 
   root.querySelectorAll(".mathquill-field").forEach((field) => {
@@ -3505,7 +3521,33 @@ function bindCanvasPan() {
   );
 }
 
-function hitDraggablePoint(event, canvas){const r=canvas.getBoundingClientRect(),vp=displayViewportForSize(viewport,r.width,r.height),env=buildRuntimeEnv(sceneFunctionEnv(true));for(let i=scene.points.length-1;i>=0;i--){const p=scene.points[i];if(!p.draggable||p.hidden)continue;const x=compileExpression(p.x)(0,0,env),y=compileExpression(p.y)(0,0,env),px=(x-vp.xMin)/(vp.xMax-vp.xMin)*r.width,py=r.height-(y-vp.yMin)/(vp.yMax-vp.yMin)*r.height;if(Math.hypot(event.clientX-r.left-px,event.clientY-r.top-py)<=10)return i;}return -1;}
+function evaluatedPointCoordinates(point, env) {
+  try {
+    const coordinates = [compileExpression(point.x)(0, 0, env), compileExpression(point.y)(0, 0, env)];
+    return coordinates.every(Number.isFinite) ? coordinates : null;
+  } catch {
+    // Incomplete edits are diagnosed on their own row, not the whole overlay.
+    return null;
+  }
+}
+
+function hitDraggablePoint(event, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return -1;
+  const vp = displayViewportForSize(viewport, rect.width, rect.height);
+  const env = buildRuntimeEnv(sceneFunctionEnv(true));
+  for (let index = scene.points.length - 1; index >= 0; index--) {
+    const point = scene.points[index];
+    if (!point.draggable || point.hidden) continue;
+    const coordinates = evaluatedPointCoordinates(point, env);
+    if (!coordinates) continue;
+    const [x, y] = coordinates;
+    const px = (x - vp.xMin) / (vp.xMax - vp.xMin) * rect.width;
+    const py = rect.height - (y - vp.yMin) / (vp.yMax - vp.yMin) * rect.height;
+    if (Math.hypot(event.clientX - rect.left - px, event.clientY - rect.top - py) <= 10) return index;
+  }
+  return -1;
+}
 function startPointDrag(index,canvas){
   const rect=canvas.getBoundingClientRect();
   const vp=displayViewportForSize(viewport,rect.width,rect.height);
@@ -4139,7 +4181,9 @@ function boundaryExpressionEnv(includeDefault = false) {
   const env = sceneFunctionEnv(includeDefault);
   for (const entry of dataEntries(scene.restrictions)) {
     const id = String(entry.id ?? "").trim();
-    if (!id) continue;
+    // Values and boundaries have separate namespaces. Preserve legacy pairs such as
+    // expression rest = 1 / boundary rest = rest instead of introducing recursion.
+    if (!id || Object.hasOwn(env, id)) continue;
     env[id] = {
       id,
       kind: "variable",
@@ -4473,6 +4517,22 @@ function renderScene(diagnostics = validateScene()) {
   }
 }
 
+function coordinateGridTicks(min, max, pixels) {
+  const range = max - min;
+  if (!Number.isFinite(range) || range <= 0 || !Number.isFinite(pixels) || pixels <= 0) return [];
+  const rawStep = range / Math.max(2, Math.floor(pixels / 80));
+  const scale = 10 ** Math.floor(Math.log10(rawStep));
+  const step = [1, 2, 5, 10].find((factor) => factor * scale >= rawStep) * scale;
+  if (!Number.isFinite(step) || step <= 0) return [];
+  const start = Math.ceil(min / step);
+  const end = Math.floor(max / step);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  // Index-based iteration cannot stall when adding a step smaller than an ULP.
+  const count = Math.min(200, Math.max(0, end - start + 1));
+  return [...new Set(Array.from({ length: count }, (_, index) => (start + index) * step))]
+    .filter((value) => Number.isFinite(value) && value >= min && value <= max);
+}
+
 function drawGraphOverlay() {
   const canvas = root.querySelector(".graph-overlay-canvas");
   const base = root.querySelector(".grid-canvas");
@@ -4485,21 +4545,22 @@ function drawGraphOverlay() {
   const vp = displayViewportForSize(viewport, rect.width, rect.height);
   const sx = (x) => (x-vp.xMin)/(vp.xMax-vp.xMin)*rect.width;
   const sy = (y) => rect.height-(y-vp.yMin)/(vp.yMax-vp.yMin)*rect.height;
-  const rawStep = (vp.xMax-vp.xMin)/10; const pow = 10 ** Math.floor(Math.log10(rawStep)); const step = [1,2,5,10].find(n=>n*pow>=rawStep) * pow;
+  const xTicks = coordinateGridTicks(vp.xMin, vp.xMax, rect.width);
+  const yTicks = coordinateGridTicks(vp.yMin, vp.yMax, rect.height);
   ctx.font="11px system-ui"; ctx.lineWidth=1;
   if (scene.settings.showCoordinateGrid !== false) {
     if (scene.settings.showGrid !== false) {
       ctx.strokeStyle="rgba(75,90,115,.18)";
-      for(let x=Math.ceil(vp.xMin/step)*step;x<=vp.xMax;x+=step){ctx.beginPath();ctx.moveTo(sx(x),0);ctx.lineTo(sx(x),rect.height);ctx.stroke();}
-      for(let y=Math.ceil(vp.yMin/step)*step;y<=vp.yMax;y+=step){ctx.beginPath();ctx.moveTo(0,sy(y));ctx.lineTo(rect.width,sy(y));ctx.stroke();}
+      for(const x of xTicks){ctx.beginPath();ctx.moveTo(sx(x),0);ctx.lineTo(sx(x),rect.height);ctx.stroke();}
+      for(const y of yTicks){ctx.beginPath();ctx.moveTo(0,sy(y));ctx.lineTo(rect.width,sy(y));ctx.stroke();}
     }
     const axisX=Math.max(12,Math.min(rect.width-12,sx(0))), axisY=Math.max(12,Math.min(rect.height-12,sy(0)));
     ctx.strokeStyle="rgba(45,55,72,.48)";
     if(scene.settings.showYAxis!==false){ctx.beginPath();ctx.moveTo(axisX,0);ctx.lineTo(axisX,rect.height);ctx.stroke();}
     if(scene.settings.showXAxis!==false){ctx.beginPath();ctx.moveTo(0,axisY);ctx.lineTo(rect.width,axisY);ctx.stroke();}
     ctx.fillStyle="rgba(45,55,72,.72)";
-    if(scene.settings.showXAxis!==false&&scene.settings.showXNumbers!==false) for(let x=Math.ceil(vp.xMin/step)*step;x<=vp.xMax;x+=step) ctx.fillText(Number(x.toPrecision(6)),sx(x)+3,axisY-4);
-    if(scene.settings.showYAxis!==false&&scene.settings.showYNumbers!==false) for(let y=Math.ceil(vp.yMin/step)*step;y<=vp.yMax;y+=step) ctx.fillText(Number(y.toPrecision(6)),axisX+4,sy(y)-3);
+    if(scene.settings.showXAxis!==false&&scene.settings.showXNumbers!==false) for(const x of xTicks) ctx.fillText(Number(x.toPrecision(6)),sx(x)+3,axisY-4);
+    if(scene.settings.showYAxis!==false&&scene.settings.showYNumbers!==false) for(const y of yTicks) ctx.fillText(Number(y.toPrecision(6)),axisX+4,sy(y)-3);
   }
   drawPointsOverlay(ctx, rect.width, rect.height, vp);
 }
@@ -4510,7 +4571,9 @@ function drawPointsOverlay(ctx, width, height, vp) {
   const env=buildRuntimeEnv(sceneFunctionEnv(true));
   for(const point of dataEntries(scene.points)){
     if(point.hidden)continue;
-    const x=compileExpression(point.x)(0,0,env),y=compileExpression(point.y)(0,0,env);if(!Number.isFinite(x)||!Number.isFinite(y))continue;
+    const coordinates = evaluatedPointCoordinates(point, env);
+    if (!coordinates) continue;
+    const [x, y] = coordinates;
     const color=resolveColorEntry(point.colorId??"default"); let rgb=[37,99,235];
     if(color){try{rgb=[compileExpression(color.red)(x,y,env),compileExpression(color.green)(x,y,env),compileExpression(color.blue)(x,y,env)].map(channel);}catch{} }
     ctx.beginPath();ctx.arc(sx(x),sy(y),6,0,Math.PI*2);ctx.fillStyle=`rgb(${rgb.join(",")})`;ctx.fill();ctx.strokeStyle="#fff";ctx.stroke();
@@ -4630,120 +4693,41 @@ function renderSceneWebGl(canvas) {
 }
 
 function renderSceneWebGlInto(canvas, options = {}) {
-  const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true }) ?? canvas.getContext("webgl", { preserveDrawingBuffer: true });
-  if (!gl) return false;
-
   const rect = canvas.getBoundingClientRect?.() ?? { width: canvas.width || 1, height: canvas.height || 1 };
-  const cssWidth = Math.max(1, options.cssWidth ?? rect.width);
-  const cssHeight = Math.max(1, options.cssHeight ?? rect.height);
-  const dpr = options.dpr ?? window.devicePixelRatio ?? 1;
-  const pixelWidth = Math.max(1, Math.floor(cssWidth * dpr));
-  const pixelHeight = Math.max(1, Math.floor(cssHeight * dpr));
-  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
-  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
-  const visibleViewport = options.visibleViewport ?? displayViewportForSize(viewport, cssWidth, cssHeight);
+  const width = Math.max(1, options.cssWidth ?? rect.width);
+  const height = Math.max(1, options.cssHeight ?? rect.height);
+  const visibleViewport = options.visibleViewport ?? displayViewportForSize(viewport, width, height);
   if (options.updateOverlay !== false) updateBoundaryOverlay(canvas, visibleViewport);
-  gl.viewport(0, 0, canvas.width, canvas.height);
-
-  const shaderKey = webGlShaderCacheKey();
-  let cached = webGlRenderCache.get(canvas);
-  window.__leptonLastShaderCompileMs = 0;
-  if (!cached || cached.gl !== gl || cached.shaderKey !== shaderKey) {
-    const compileStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
-    const fragmentSource = buildFragmentShader();
-    window.__leptonFragmentSource = fragmentSource;
-    if (fragmentSource.length > MAX_SAFE_FRAGMENT_SOURCE_LENGTH) {
-      window.__leptonShaderLog = `Generated shader exceeds the ${(MAX_SAFE_FRAGMENT_SOURCE_LENGTH / 1000000).toFixed(1)} MB safety budget.`;
-      showShaderError(window.__leptonShaderLog, fragmentSource.length);
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
-      return options.fallbackOnFailure === true ? false : true;
+  const clip = sceneViewport();
+  const background = resolveBackgroundColor().rgb.map((value) => value / 255);
+  const timeEntries = timeVariableEntries();
+  const floats = Object.fromEntries(timeUniformBindings().map((binding) => [binding.uniform,
+    evaluateScalarSetting(timeEntries.find(({ entry }) => entry.id === binding.id)?.entry.expression)]));
+  floats.u_random_seed = Number(scene.settings.randomSeed) || 1;
+  try {
+    const result = renderFrame(canvas, {
+      width, height, dpr: options.dpr ?? window.devicePixelRatio ?? 1,
+      bounds: visibleViewport,
+      clipBounds: scene.settings.drawOnlyInsideBoundary && isValidViewport(clip) ? clip : null,
+      background, floats, shaderKey: webGlShaderCacheKey(), fragmentSource: buildFragmentShader,
+      maxSourceLength: MAX_SAFE_FRAGMENT_SOURCE_LENGTH, synchronous: options.synchronous === true
+    });
+    window.__leptonLastShaderCompileMs = result.compileMs;
+    if (result.compiled) window.__leptonShaderBuildCount = (window.__leptonShaderBuildCount ?? 0) + 1;
+    if (result.supported) {
+      window.__leptonFragmentSource = result.source;
+      delete window.__leptonShaderLog;
+      delete window.__leptonRuntimeError;
+      clearShaderError();
     }
-    const vertexSource = `
-      attribute vec2 a_position;
-      void main() {
-        gl_Position = vec4(a_position, 0.0, 1.0);
-      }
-    `;
-    const program = createProgram(gl, vertexSource, fragmentSource);
-    if (!program) {
-      window.__leptonGlError = gl.getError();
-      gl.clearColor(0.98, 0.94, 0.94, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      showShaderError(window.__leptonShaderLog || "The generated shader could not be compiled.", fragmentSource.length);
-      return options.fallbackOnFailure === true ? false : true;
-    }
-    if (cached?.program) gl.deleteProgram(cached.program);
-    if (cached?.buffer) gl.deleteBuffer(cached.buffer);
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-    cached = {
-      gl,
-      shaderKey,
-      program,
-      buffer,
-      position: gl.getAttribLocation(program, "a_position"),
-      uniforms: {
-        resolution: gl.getUniformLocation(program, "u_resolution"),
-        bounds: gl.getUniformLocation(program, "u_bounds"),
-        clipBounds: gl.getUniformLocation(program, "u_clip_bounds"),
-        clipEnabled: gl.getUniformLocation(program, "u_clip_enabled"),
-        randomSeed: gl.getUniformLocation(program, "u_random_seed"),
-        background: gl.getUniformLocation(program, "u_background"),
-        time: timeUniformBindings().map((binding) => ({ ...binding, location: gl.getUniformLocation(program, binding.uniform) }))
-      }
-    };
-    webGlRenderCache.set(canvas, cached);
-    const compileEndedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
-    window.__leptonLastShaderCompileMs = compileEndedAt - compileStartedAt;
-    window.__leptonShaderBuildCount = (window.__leptonShaderBuildCount ?? 0) + 1;
+    return result.supported;
+  } catch (error) {
+    window.__leptonShaderLog = error.message;
+    window.__leptonFailedShaderSource = error.source ?? "";
+    showShaderError(error.message, error.source?.length ?? 0);
+    if (options.fallbackOnFailure === true) return false;
+    throw error;
   }
-  if (!cached?.program) {
-    window.__leptonGlError = gl.getError();
-    gl.clearColor(0.98, 0.94, 0.94, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    showShaderError(window.__leptonShaderLog || "The generated shader could not be compiled.", 0);
-    return options.fallbackOnFailure === true ? false : true;
-  }
-  clearShaderError();
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
-  gl.useProgram(cached.program);
-  gl.enableVertexAttribArray(cached.position);
-  gl.vertexAttribPointer(cached.position, 2, gl.FLOAT, false, 0, 0);
-
-  gl.uniform2f(cached.uniforms.resolution, canvas.width, canvas.height);
-  gl.uniform1f(cached.uniforms.randomSeed, Number(scene.settings.randomSeed) || 1);
-  gl.uniform4f(
-    cached.uniforms.bounds,
-    visibleViewport.xMin,
-    visibleViewport.xMax,
-    visibleViewport.yMin,
-    visibleViewport.yMax
-  );
-  const clipViewport = sceneViewport();
-  const clipEnabled = scene.settings.drawOnlyInsideBoundary && isValidViewport(clipViewport);
-  const safeClipViewport = clipEnabled ? clipViewport : visibleViewport;
-  gl.uniform1i(cached.uniforms.clipEnabled, clipEnabled ? 1 : 0);
-  gl.uniform4f(
-    cached.uniforms.clipBounds,
-    safeClipViewport.xMin,
-    safeClipViewport.xMax,
-    safeClipViewport.yMin,
-    safeClipViewport.yMax
-  );
-  const backgroundColor = resolveBackgroundColor();
-  gl.uniform3f(cached.uniforms.background, backgroundColor.rgb[0] / 255, backgroundColor.rgb[1] / 255, backgroundColor.rgb[2] / 255);
-  for (const binding of cached.uniforms.time) {
-    const entry = timeVariableEntries().find(({ entry: candidate }) => candidate.id === binding.id)?.entry;
-    const value = evaluateScalarSetting(entry?.expression);
-    gl.uniform1f(binding.location, Number.isFinite(value) ? value : 0);
-  }
-  gl.clearColor(backgroundColor.rgb[0] / 255, backgroundColor.rgb[1] / 255, backgroundColor.rgb[2] / 255, 1);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
-  if (options.synchronous === true) gl.finish();
-  return true;
 }
 
 function timeUniformBindings() {
@@ -4889,6 +4873,7 @@ function buildFragmentShader() {
     float arccot(float value) { return 1.5707963267948966 - atan(value); }
     float arcsec(float value) { return acos(1.0 / value); }
     float arccsc(float value) { return asin(1.0 / value); }
+    ${degreeHelperSource("glsl")}
     float cbrt(float value) { return sign(value) * pow(abs(value), 1.0 / 3.0); }
     float sinh1(float value) { return (exp(value) - exp(-value)) / 2.0; }
     float cosh1(float value) { return (exp(value) + exp(-value)) / 2.0; }
@@ -5112,47 +5097,6 @@ function drawErrorCanvas(canvas, message) {
   ctx.fillText(message, 42, 84);
 }
 
-function createProgram(gl, vertexSource, fragmentSource) {
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  if (!vertexShader || !fragmentShader) {
-    if (vertexShader) gl.deleteShader(vertexShader);
-    if (fragmentShader) gl.deleteShader(fragmentShader);
-    return null;
-  }
-
-  const program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    window.__leptonShaderLog = gl.getProgramInfoLog(program);
-    window.__leptonFailedShaderSource = fragmentSource;
-    console.warn(window.__leptonShaderLog);
-    gl.deleteProgram(program);
-    return null;
-  }
-
-  return program;
-}
-
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    window.__leptonShaderLog = gl.getShaderInfoLog(shader);
-    window.__leptonFailedShaderSource = source;
-    console.warn(window.__leptonShaderLog);
-    return null;
-  }
-
-  return shader;
-}
 
 function axis(min, max, count) {
   if (count <= 1) return [min];
@@ -5169,6 +5113,8 @@ function compileExpression(source, localNames = new Set()) {
     return (x,y,env) => { for (const branch of branches) if (branch.condition(x,y,env)) return branch.value(x,y,env); return fallback ? fallback(x,y,env) : NaN; };
   }
   let js = normalizeMathSyntax(normalizeExpressionText(normalizedSource));
+  assertBuiltinCallArity(js);
+  js = convertTrigForAngleMode(js, scene.settings.angleMode);
   js = rewritePointSelectors(js, (point, coordinate) => `point("${point.id}",${coordinate})`);
   const functionEnv = sceneFunctionEnv(true);
   const rewriteRuntimeFunctionCalls = (expression) => rewriteCustomFunctionCalls(expression, functionEnv, (entry, args) => {
@@ -5195,7 +5141,7 @@ function compileExpression(source, localNames = new Set()) {
   js = rewriteBareIdentifiers(
     js,
     (name) => localNames.has(name) ? `local("${name}")` : `ref("${name}", x, y)`,
-    new Set(["Math", "E", "PI", "call", "pointcall", "local", "point"]),
+    new Set(["Math", "E", "PI", "call", "pointcall", "local", "point", ...DEGREE_HELPER_NAMES]),
     localNames
   );
 
@@ -5226,6 +5172,7 @@ function compileExpression(source, localNames = new Set()) {
       const arccot = (value) => Math.PI / 2 - Math.atan(value);
       const arcsec = (value) => Math.acos(1 / value);
       const arccsc = (value) => Math.asin(1 / value);
+      ${degreeHelperSource("js")}
       const cbrt = (value) => Math.cbrt(value);
       const sech = (value) => 1 / Math.cosh(value);
       const csch = (value) => 1 / Math.sinh(value);
@@ -5386,7 +5333,7 @@ function topLevelPointBinary(source, operator) {
   return null;
 }
 
-function pointExpressionComponents(source, env, stack = []) {
+function pointExpressionComponents(source, env, stack = [], formatCall = null) {
   let text = String(source ?? "").trim();
   if (text.startsWith("(") && matchingParen(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
   if (text.startsWith("[") && matchingSquareBracket(text, 0) === text.length - 1) {
@@ -5397,8 +5344,8 @@ function pointExpressionComponents(source, env, stack = []) {
   for (const operator of ["+", "*"]) {
     const split = topLevelPointBinary(text, operator);
     if (!split) continue;
-    const left = pointExpressionComponents(split[0], env, stack);
-    const right = pointExpressionComponents(split[1], env, stack);
+    const left = pointExpressionComponents(split[0], env, stack, formatCall);
+    const right = pointExpressionComponents(split[1], env, stack, formatCall);
     if (!left && !right) continue;
     const leftParts = left ?? [split[0], split[0]];
     const rightParts = right ?? [split[1], split[1]];
@@ -5409,7 +5356,7 @@ function pointExpressionComponents(source, env, stack = []) {
   if (stack.includes(call.entry.id) || stack.length >= recursionLimit()) return ["0", "0"];
   const expanded = expandPointArguments(call.args, env, stack);
   if (expanded.length !== call.entry.params.length) throw new Error(`Function ${call.entry.id} expects ${call.entry.params.length} scalar inputs after point expansion`);
-  return [0, 1].map((component) => `pointcall("${call.entry.id}",${component},[${expanded.join(",")}],x,y)`);
+  return [0, 1].map((component) => formatCall ? formatCall(call, component) : `pointcall("${call.entry.id}",${component},[${expanded.join(",")}],x,y)`);
 }
 
 function expandPointArguments(args, env, stack = []) {
@@ -5467,6 +5414,7 @@ function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode 
     return result;
   }
   let expression = normalizeMathSyntax(normalizeExpressionText(normalizedSource));
+  assertBuiltinCallArity(expression);
   expression = rewritePointSelectors(expression, (point, coordinate) => {
     const pointKey = `point:${point.id}:${coordinate}`;
     if (stack.includes(pointKey) || stack.length >= recursionLimit()) return "(0.0/0.0)";
@@ -5635,7 +5583,12 @@ function rewritePointFunctionSelectors(expression, env, build) {
   return output;
 }
 function splitTopLevelText(source, separator){const out=[];let start=0,depth=0;for(let i=0;i<source.length;i++){if("({[".includes(source[i]))depth++;else if(")}]".includes(source[i]))depth--;else if(source[i]===separator&&depth===0){out.push(source.slice(start,i));start=i+1;}}out.push(source.slice(start));return out;}
-function resolvePiecewiseCondition(condition){const boundary=resolveBoundaryEntry(condition.trim());if(!boundary)return condition;return `(${boundary.expression})>=0`;}
+function resolvePiecewiseCondition(condition) {
+  const boundary = resolveBoundaryEntry(condition.trim());
+  if (boundary) return `(${boundary.expression})>=0`;
+  // In a condition, '=' means equality, never a value declaration.
+  return condition.replaceAll(/(?<![<>=!])=(?!=)/g, "==");
+}
 
 function normalizeGlslNumbers(expression) {
   return expression.replaceAll(/\b\d+(?:\.\d+)?\b/g, (match) => (match.includes(".") ? match : `${match}.0`));
@@ -5643,47 +5596,18 @@ function normalizeGlslNumbers(expression) {
 
 function convertTrigForAngleMode(expression, angleMode) {
   if (angleMode !== "degrees") return expression;
-  return wrapFunctionArguments(expression, new Set(["sin", "cos", "tan", "sec", "csc", "cot"]), (name, argument) => `${name}((${argument})*0.017453292519943295)`);
+  // Named helpers make conversion idempotent when a dependency is inlined again.
+  return expression.replaceAll(/\b([A-Za-z_]\w*)(?=\s*\()/g, (name) =>
+    Object.hasOwn(DEGREE_FUNCTIONS, name) ? `leptonDegrees_${DEGREE_FUNCTIONS[name]}` : name);
 }
 
-function wrapFunctionArguments(expression, names, wrap) {
-  let output = "";
-  let index = 0;
-  while (index < expression.length) {
-    const match = expression.slice(index).match(/^[A-Za-z_]\w*/);
-    if (!match) {
-      output += expression[index];
-      index += 1;
-      continue;
-    }
-
-    const name = match[0];
-    const nameStart = index;
-    index += name.length;
-    if (!names.has(name) || expression[index] !== "(") {
-      output += expression.slice(nameStart, index);
-      continue;
-    }
-
-    const open = index;
-    let depth = 0;
-    let close = -1;
-    for (let i = open; i < expression.length; i += 1) {
-      if (expression[i] === "(") depth += 1;
-      if (expression[i] === ")") depth -= 1;
-      if (depth === 0) {
-        close = i;
-        break;
-      }
-    }
-    if (close === -1) {
-      output += expression.slice(nameStart);
-      break;
-    }
-    output += wrap(name, expression.slice(open + 1, close));
-    index = close + 1;
-  }
-  return output;
+function degreeHelperSource(target) {
+  return [...new Set(Object.values(DEGREE_FUNCTIONS))].map((name) => {
+    const inverse = name.startsWith("a");
+    const native = target === "js" && ["sin", "cos", "tan", "asin", "acos", "atan"].includes(name) ? `Math.${name}` : name;
+    const value = inverse ? `${native}(value)*57.29577951308232` : `${native}(value*0.017453292519943295)`;
+    return target === "js" ? `const leptonDegrees_${name} = (value) => ${value};` : `float leptonDegrees_${name}(float value) { return ${value}; }`;
+  }).join("\n");
 }
 
 function recursionBaseGlsl(zName) {
@@ -5885,7 +5809,6 @@ function validateScene() {
     duplicateIdDiagnostic(entry.id ?? "", "Folder", duplicateIds.folders),
     validateFolderName(entry.id ?? "")
   ]));
-  diagnostics.folders = aggregateFolderDiagnostics(diagnostics);
   diagnostics.points = (scene.points ?? []).map((entry) => combineDiagnostics([
     duplicateIdDiagnostic(entry.id ?? "", "Point", duplicateIds.points),
     validateEntryId(entry.id ?? "", "Point", env, false),
@@ -5896,6 +5819,7 @@ function validateScene() {
       : { status: "invalid", message: `Missing point color: ${entry.colorId}` },
     pointLinkDiagnostic(entry, env)
   ]));
+  diagnostics.folders = aggregateFolderDiagnostics(diagnostics);
 
   const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.transparencies, ...diagnostics.draws, ...diagnostics.points, ...diagnostics.folders, ...diagnostics.settings];
   const firstError = all.find((item) => item.status === "invalid");
@@ -5908,7 +5832,7 @@ function validateScene() {
   const errorOwner = firstFunctionError >= 0 ? `function ${scene.functions[firstFunctionError]?.id ?? firstFunctionError}`
     : firstColorError >= 0 ? `colour ${scene.colors[firstColorError]?.id ?? firstColorError}`
       : firstBoundaryError >= 0 ? `boundary ${scene.restrictions[firstBoundaryError]?.id ?? firstBoundaryError}` : "";
-  diagnostics.summary = firstError ? `${errorOwner ? `${errorOwner}: ` : ""}${firstError.message}` : firstInfo ? firstInfo.message : firstWarning ? firstWarning.message : "GLSL ready";
+  diagnostics.summary = firstError ? `${errorOwner ? `${errorOwner}: ` : ""}${firstError.message}` : firstWarning ? firstWarning.message : firstInfo ? firstInfo.message : "GLSL ready";
   latestDiagnostics = diagnostics;
   return diagnostics;
 }
@@ -5916,7 +5840,9 @@ function validateScene() {
 function validateFunctionOutput(entry, env) {
   if (entry.outputType !== "point") return { status: "valid", message: "Function returns an expression" };
   try {
-    const components = pointExpressionComponents(entry.expression, env, [entry.id]);
+    // Validate source selectors, not CPU-only pointcall helpers, through both compilers.
+    const components = pointExpressionComponents(entry.expression, env, [entry.id],
+      (call, component) => `${call.entry.id}(${call.args.join(",")})[${component}]`);
     if (!components || components.length !== 2) return { status: "invalid", message: `Point function "${entry.id}" must return [x,y] or point-valued +/* arithmetic` };
     const locals = new Set(entry.params);
     return combineDiagnostics(components.map((component) => validateExpression(component, env, [entry.id], locals)));
@@ -5944,7 +5870,6 @@ function validateFolderName(name) {
 function aggregateFolderDiagnostics(diagnostics) {
   const memo = new Map();
   const visiting = new Set();
-  const priority = { valid: 0, warning: 1, info: 2, invalid: 3 };
   const visit = (index) => {
     if (memo.has(index)) return memo.get(index);
     if (visiting.has(index)) return { status: "invalid", message: "Folder nesting cannot contain a cycle" };
@@ -5959,7 +5884,7 @@ function aggregateFolderDiagnostics(diagnostics) {
       candidates.push(ref.kind === "folders" ? visit(childIndex) : diagnostics[ref.kind]?.[childIndex]);
     }
     visiting.delete(index);
-    const result = candidates.filter(Boolean).reduce((best, item) => (priority[item.status] > priority[best.status] ? item : best), { status: "valid", message: "Folder and contents are valid" });
+    const result = candidates.filter(Boolean).reduce((best, item) => (DIAGNOSTIC_PRIORITY[item.status] > DIAGNOSTIC_PRIORITY[best.status] ? item : best), { status: "valid", message: "Folder and contents are valid" });
     const wrapped = result.status === "valid" ? result : { status: result.status, message: `Folder contains: ${result.message}` };
     memo.set(index, wrapped);
     return wrapped;
@@ -6125,15 +6050,80 @@ function validateFunctionParams(entry, env) {
   return { status: "valid", message: "Function inputs are valid" };
 }
 
+function assertBuiltinCallArity(normalized) {
+  if (/\brandom\s*\(\s*[^)]/i.test(normalized)) throw new Error("random() does not accept a seed or other inputs; use the seed button on the graph");
+  for (const match of normalized.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)) {
+    const config = LATEX_FUNCTIONS[match[1]];
+    if (!config) continue;
+    const open = match.index + match[0].lastIndexOf("(");
+    const close = matchingParen(normalized, open);
+    const contents = normalized.slice(open + 1, close).trim();
+    const args = contents ? splitFunctionArgs(contents) : [];
+    if (args.length !== config.args || args.some((argument) => !argument.trim())) {
+      throw new Error(`${match[1]} expects ${config.args} input${config.args === 1 ? "" : "s"}`);
+    }
+  }
+}
+
+function assertExpressionDependencies(source, env, localNames = new Set()) {
+  const pending = [{ source, env, localNames }];
+  const visited = new Set();
+  const enqueueEntry = (entry, entryEnv) => {
+    const key = `${entry.id}:${entry.expression}`;
+    if (visited.has(key)) return;
+    visited.add(key);
+    pending.push({ source: entry.expression, env: entryEnv, localNames: new Set(entry.kind === "function" ? entry.params : []) });
+  };
+  // Check each definition once, without expanding recursive references into a tree.
+  while (pending.length) {
+    const current = pending.pop();
+    const displaySource = normalizeExpressionDisplayText(current.source);
+    const piecewise = parsePiecewiseExpression(displaySource);
+    if (piecewise) {
+      for (const branch of piecewise.branches) {
+        pending.push({ ...current, source: resolvePiecewiseCondition(branch.condition), env: { ...boundaryExpressionEnv(true), ...current.env } });
+        pending.push({ ...current, source: branch.value });
+      }
+      if (piecewise.fallback) pending.push({ ...current, source: piecewise.fallback });
+      continue;
+    }
+    let normalized = normalizeExpressionText(displaySource);
+    assertCompleteExpression(normalized);
+    assertBuiltinCallArity(normalized);
+    normalized = rewritePointSelectors(normalized, (point, coordinate) => {
+      const key = `point:${point.id}:${coordinate}`;
+      if (!visited.has(key)) {
+        visited.add(key);
+        pending.push({ ...current, source: coordinate === 0 ? point.x : point.y });
+      }
+      return "0";
+    });
+    const visitCall = (entry, args) => {
+      if (expandPointArguments(args, current.env).length !== entry.params.length) throw new Error(`Function ${entry.id} expects ${entry.params.length} scalar inputs`);
+      for (const argument of args) pending.push({ ...current, source: argument });
+      enqueueEntry(entry, current.env);
+      return "0";
+    };
+    normalized = rewritePointFunctionSelectors(normalized, current.env, visitCall);
+    normalized = rewriteCustomFunctionCalls(normalized, current.env, visitCall);
+    // Calls were checked above; construct without evaluating or expanding dependencies.
+    compileExpression(normalized, current.localNames);
+    for (const match of normalized.matchAll(/\b[A-Za-z_]\w*\b/g)) {
+      const name = match[0];
+      if (BUILTIN_NAMES.has(name) || current.localNames.has(name)) continue;
+      const entry = envEntry(current.env, name);
+      if (!entry) throw new Error(`Unknown variable: ${name}`);
+      enqueueEntry(entry, current.env);
+    }
+  }
+}
+
 function validateExpression(source, env, stack = [], localNames = new Set()) {
   try {
     const normalized = normalizeExpressionText(source);
     assertCompleteExpression(normalized);
-    if (/\brandom\s*\(\s*[^)]/i.test(normalized)) throw new Error("random() does not accept a seed or other inputs; use the seed button on the graph");
-    const emptyCall = [...normalized.matchAll(/\b([A-Za-z]\w*)\(\s*\)/g)].find((match) => match[1] !== "random");
-    if (emptyCall) {
-      throw new Error("Empty function argument");
-    }
+    assertBuiltinCallArity(normalized);
+    assertExpressionDependencies(source, env, localNames);
     const nodeCount = estimateExpandedNodeCount(source, env, stack, new Map(), localNames);
     if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) {
       return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes); graph may not render` };
@@ -6261,10 +6251,8 @@ function updateStatusLights(diagnostics) {
 
 function combineDiagnostics(items) {
   const present = items.filter(Boolean);
-  return present.find((item) => item.status === "invalid") ??
-    present.find((item) => item.status === "info") ??
-    present.find((item) => item.status === "warning") ??
-    { status: "valid", message: "Color is valid" };
+  return present.reduce((best, item) => DIAGNOSTIC_PRIORITY[item.status] > DIAGNOSTIC_PRIORITY[best.status] ? item : best,
+    { status: "valid", message: "Expression is valid" });
 }
 
 function handleMathBeforeInput(field, event) {
@@ -8691,7 +8679,7 @@ function latexToExpression(value) {
 }
 
 function parseAssignment(value) {
-  const assignment = value.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.+)$/);
+  const assignment = value.match(/^\s*([A-Za-z_]\w*)\s*=(?!=)\s*(.+)$/);
   return assignment ? { id: assignment[1], expression: assignment[2].trim() } : null;
 }
 
@@ -9009,7 +8997,7 @@ function normalizeSavedGraph(graph) {
 }
 
 function writeSavedGraphs(graphs) {
-  const compactGraphs = graphs.slice(0, SAVED_GRAPHS_LIMIT).map((graph) => ({
+  const compactGraphs = graphs.map((graph) => ({
     ...graph,
     thumbnail: savedGraphThumbnailState(graph.thumbnail) === "compact" ? graph.thumbnail : fallbackSavedGraphThumbnail()
   }));
@@ -9020,9 +9008,21 @@ function isStorageQuotaError(error) {
   return error?.name === "QuotaExceededError" || error?.code === 22 || error?.code === 1014;
 }
 
+function savedGraphErrorMessage(error) {
+  if (error?.name === "SavedGraphLimitError") return error.message;
+  return isStorageQuotaError(error)
+    ? "Browser storage is full. Back up and delete an older saved graph, then try again."
+    : "This graph could not be saved in this browser.";
+}
+
 function saveCurrentGraph(name, { forceNew = false } = {}) {
   const graphs = loadSavedGraphs();
   const existing = forceNew ? null : graphs.find((graph) => graph.id === activeSavedGraphId);
+  if (!existing && graphs.length >= SAVED_GRAPHS_LIMIT) {
+    const error = new Error(`This browser already has ${SAVED_GRAPHS_LIMIT} saved graphs. Update an existing save or back up and delete a graph before saving another. No graphs were removed.`);
+    error.name = "SavedGraphLimitError";
+    throw error;
+  }
   const now = new Date().toISOString();
   const graph = {
     id: existing?.id ?? createSavedGraphId(),
@@ -9297,7 +9297,7 @@ function persistRecoveredSavedGraphThumbnail(id, thumbnail) {
   if (!graph) return;
   graph.thumbnail = thumbnail;
   graph.thumbnailVersion = SAVED_GRAPH_THUMBNAIL_VERSION;
-  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(raw.slice(0, SAVED_GRAPHS_LIMIT)));
+  localStorage.setItem(SAVED_GRAPHS_KEY, JSON.stringify(raw));
 }
 
 function fallbackSavedGraphThumbnail() {
@@ -9414,19 +9414,49 @@ function renderSceneToPixels(source, width, height) {
 
 function releaseCaptureWebGlCanvas(canvas) {
   if (!canvas) return;
-  const cached = webGlRenderCache.get(canvas);
-  const gl = cached?.gl ?? canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-  if (gl) {
-    if (cached?.program) gl.deleteProgram(cached.program);
-    if (cached?.buffer) gl.deleteBuffer(cached.buffer);
-    webGlRenderCache.delete(canvas);
-    gl.getExtension("WEBGL_lose_context")?.loseContext();
-  }
+  disposeRenderer(canvas, { loseContext: true });
   canvas.width = 1;
   canvas.height = 1;
 }
 
+function keepMobileEditorVisible() {
+  if (window.innerWidth > 760) return;
+  const active = document.activeElement;
+  const field = active?.closest?.(".mathquill-field") ?? active;
+  const list = root.querySelector(".entry-list");
+  if (!field || !list?.contains(field)) return;
+  const bounds = list.getBoundingClientRect();
+  let rect = field.getBoundingClientRect();
+  if (rect.height > bounds.height - 16) rect = field.querySelector?.(".mq-cursor")?.getBoundingClientRect() ?? rect;
+  if (rect.height <= bounds.height - 16) {
+    if (rect.bottom > bounds.bottom - 8) list.scrollTop += rect.bottom - bounds.bottom + 8;
+    else if (rect.top < bounds.top + 8) list.scrollTop -= bounds.top + 8 - rect.top;
+  }
+  if (field.classList?.contains("mathquill-field")) keepHorizontalCaretVisible(field);
+}
+
+let mobileViewportFrame = 0;
+function syncMobileViewport() {
+  if (mobileViewportFrame) return;
+  mobileViewportFrame = requestAnimationFrame(() => {
+    mobileViewportFrame = 0;
+    const viewport = window.visualViewport;
+    const style = document.documentElement.style;
+    style.setProperty("--mobile-viewport-height", `${viewport?.height ?? window.innerHeight}px`);
+    style.setProperty("--mobile-viewport-top", `${viewport?.offsetTop ?? 0}px`);
+    if (window.innerWidth <= 760) {
+      keepMobileEditorVisible();
+      renderScene(latestDiagnostics ?? validateScene());
+    }
+  });
+}
+
+window.visualViewport?.addEventListener("resize", syncMobileViewport);
+window.visualViewport?.addEventListener("scroll", syncMobileViewport);
+document.addEventListener("focusin", () => requestAnimationFrame(keepMobileEditorVisible));
+syncMobileViewport();
 window.addEventListener("resize", () => {
+  syncMobileViewport();
   reflowMathLayout(root);
   requestAnimationFrame(() => reflowMathLayout(root));
   renderScene();

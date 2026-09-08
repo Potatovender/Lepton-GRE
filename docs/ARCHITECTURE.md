@@ -33,6 +33,7 @@ The canonical scene stores collections for values, colours, boundaries, transpar
 - **Landing behavior:** `src/landing.js` owns bundled sample text and generated sample links.
 - **Live runtime:** `src/browser-preview-live.js` owns scene state, UI rendering, interaction, import/export, validation, CPU evaluation, GLSL generation, animation, save/load, and export.
 - **Syntax primitives:** `src/math/expression-syntax.js` owns implicit multiplication and right-associative power lowering used by both CPU and GLSL paths.
+- **GPU driver:** `packages/renderer` owns shader/program lifecycle, uniform updates, viewport drawing, device-size checks, and cleanup. The GRE adapter generates GLSL and reports diagnostics; the driver has no scene or UI dependency.
 - **Styles:** `src/styles.css` owns all responsive layout and component states.
 
 Do not introduce another scene model or parser alongside the live runtime. A future modularization should move cohesive helpers out of the runtime while preserving one canonical call path and executable regression suite.
@@ -49,7 +50,7 @@ Parameterized function locals shadow outer values. Expressions and sliders resol
 
 ## Rendering
 
-The primary renderer draws a full-screen triangle and evaluates each visible draw layer in the fragment shader. Viewport bounds, clipping, random seed, background colour, resolution, and animated time values are uniforms.
+The primary renderer draws two full-screen triangles and evaluates each visible draw layer in the fragment shader. Viewport bounds, clipping, random seed, background colour, resolution, and animated time values are uniforms.
 
 The WebGL cache key contains graph structure but replaces current time values with a stable marker. Consequently:
 
@@ -65,17 +66,36 @@ The CPU renderer is a compatibility fallback and intentionally samples at the co
 
 `validateScene` returns per-collection diagnostics and a scene summary. Red prevents affected output, yellow reports a recoverable concern, and blue reports potentially expensive recursion. A broken layer should not suppress unrelated valid layers.
 
+Aggregation priority is red, yellow, blue, then green, including folder contents.
+An iterative dependency/syntax check runs before expanded-node cost warnings, so
+a blue warning cannot mask a missing definition, malformed operation, or wrong
+argument count. Recursive definitions are visited once during this structural
+pass; they are not exponentially expanded for validation.
+
+## Mobile Viewport
+
+Below 761 CSS pixels, CSS places the renderer and editor in equal-height rows.
+`visualViewport` height/offset changes update the shell when a software keyboard
+appears. The focused field is scrolled within the editor, without reconstructing
+the MathQuill DOM or changing its selection. Desktop retains the resizable
+left/right layout. This separates viewport layout from graph-coordinate bounds.
+
 Animation reuses the latest structural diagnostics because changing a numeric time value cannot change syntax, names, arity, or dependency structure. Any editor render refreshes the diagnostic snapshot.
 
 ## Persistence and Compatibility
 
 - URL scenes use the `scene` query parameter.
 - up to 60 saved graphs live in browser `localStorage` under `lepton-saved-graphs-v1`; each stores canonical scene text and a compressed 160×100 preview capped at 24,000 characters;
+- saving a new graph at the count limit reports an error without removing older graphs; updating an existing save remains possible. Storage quota failures also leave existing saves intact;
 - legacy, unversioned, malformed, or missing previews are regenerated lazily from scene text when their library rows become visible; verified previews carry a schema version so broken old captures are never trusted again;
 - loading a saved graph retains its local identity, so Save immediately replaces that entry; an unsaved graph prompts for a new name;
 - current exports use keyword grammar;
 - legacy `F:`, `C:`, `R:`, `D~`, and `S:` lines remain import-only compatibility paths;
 - folders and comments are preserved in current text exports.
+
+Entering Text view regenerates a clean draft from the current graph. An unapplied
+draft is preserved until the user applies or discards it. Loading a different
+saved graph clears the previous graph's draft.
 
 ## Performance Rules
 

@@ -7,7 +7,7 @@
 - A browser with WebGL
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
@@ -16,11 +16,18 @@ Useful scripts:
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start Vite for local development. |
-| `npm run build` | Run dependency-free production and grammar verification. |
-| `npm run test` | Run focused Vitest module tests. |
+| `npm run preview` | Serve the staged `dist/` build locally after building. |
+| `npm run build` | Run dependency-free checks and stage the explicit public file list in `dist/`. |
+| `npm run test` | Run focused Vitest syntax tests and isolated renderer tests. |
+| `npm run test:renderer` | Test GPU resource lifecycle, cache reuse, dimensions, and failures without a browser. |
 | `npm run typecheck` | Validate TypeScript declarations and test configuration. |
 | `npm run verify` | Run build, unit tests, and type checking. |
-| `npm run update:mathquill` | Explicitly refresh vendored MathQuill assets; review the resulting diff. |
+| `npm run update:mathquill` | Restore the pinned MathQuill assets, verifying hashes before replacement. |
+
+For a deliberate MathQuill upgrade, inspect the upstream release, update
+`src/libs/mathquill/vendor.json` with its exact version and verified hashes, then
+run the updater and editor browser checks. Never use `@latest` for production
+vendor files. The build verifies the current pin offline.
 
 ## Adding or Changing Expression Syntax
 
@@ -73,6 +80,8 @@ Before release, verify:
 - save/load/new/export and an export whose aspect ratio differs from the visible renderer;
 - Mandelbrot recursion and at least one high-detail animated sample;
 - no console errors at desktop and narrow widths.
+- on mobile, equal upper graph/lower editor regions, focused field visibility
+  when the keyboard reduces the viewport, and text-editor scrolling in both axes.
 
 ## Release Checklist
 
@@ -83,8 +92,21 @@ Before release, verify:
 5. Review `git diff --check`, dead imports, TODO/FIXME markers, and generated/vendor churn.
 6. Commit and push `main`.
 7. Confirm the GitHub Actions Node 24 CI run passes.
-8. Confirm GitHub Pages serves the new version and both public URLs return `200`.
+8. Confirm both Pages build/deploy jobs passed and public `release.json` matches
+   the pushed commit. Check both public URLs and all sample links return `200`.
+
+The Pages build runs `npm ci` and `npm run verify` before uploading `dist/`.
+Deployment depends on that exact build, not the result of a different CI run.
+`scripts/site-files.mjs` is the complete public-file allowlist. Add new public
+assets there deliberately; do not deploy the repository root.
+
+For a rollback, revert the faulty commit, verify, and push the revert so Pages
+publishes a traceable replacement. Do not force-push release history. Branch
+protection and an open-source license remain repository-owner choices.
 
 ## Repository Policy
 
-CI uses Node 24 and dependency caching through `package-lock.json`. The Pages workflow uploads and deploys the static repository with GitHub's supported Pages actions. Do not commit secrets, local IDE files, generated Python caches, or browser storage. Vendored MathQuill files are intentionally tracked.
+CI uses Node 24 and dependency caching through `package-lock.json`. Do not commit
+secrets, local IDE files, generated caches, browser storage, or audit screenshots.
+Vendored MathQuill files and their MPL license are intentionally tracked.
+Independent experiments must not be swept into a release with `git add .`.

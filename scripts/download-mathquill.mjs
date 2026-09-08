@@ -1,34 +1,22 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 
-const ASSETS = [
-  {
-    url: "https://cdn.jsdelivr.net/npm/@desmos-community/mathquill@latest/dist/index.global.js",
-    dest: "src/libs/mathquill/index.global.js"
-  },
-  {
-    url: "https://cdn.jsdelivr.net/npm/@desmos-community/mathquill@latest/dist/style.css",
-    dest: "src/libs/mathquill/style.css"
+const directory = "src/libs/mathquill";
+const manifest = JSON.parse(await readFile(`${directory}/vendor.json`, "utf8"));
+const checkOnly = process.argv.includes("--check");
+const verified = [];
+for (const [file, hash] of Object.entries(manifest.assets)) {
+  const path = `${directory}/${file}`;
+  let buffer;
+  if (checkOnly) buffer = await readFile(path);
+  else {
+    const response = await fetch(`https://cdn.jsdelivr.net/npm/${manifest.package}@${manifest.version}/dist/${file}`);
+    if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`);
+    buffer = Buffer.from(await response.arrayBuffer());
   }
-];
-
-console.log("Starting MathQuill asset download...");
-
-for (const asset of ASSETS) {
-  try {
-    console.log(`Fetching ${asset.url} -> ${asset.dest}`);
-    const response = await fetch(asset.url);
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    await mkdir(dirname(asset.dest), { recursive: true });
-    await writeFile(asset.dest, buffer);
-    console.log(`Saved ${asset.dest}`);
-  } catch (error) {
-    console.error(`Failed to download ${asset.url}:`, error.message);
-    process.exit(1);
-  }
+  if (createHash("sha256").update(buffer).digest("hex") !== hash) throw new Error(`${file}: vendor integrity mismatch; existing assets were not replaced.`);
+  verified.push([path, buffer]);
 }
-
-console.log("MathQuill assets downloaded successfully!");
+// Validate the complete pair before replacing either asset.
+if (!checkOnly) for (const [path, buffer] of verified) await writeFile(path, buffer);
+console.log(`MathQuill ${manifest.version}: ${checkOnly ? "verified" : "restored"} pinned assets.`);

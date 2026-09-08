@@ -1,0 +1,12 @@
+{
+  "package": "@desmos-community/mathquill",
+  "version": "2026.4.21",
+  "license": "MPL-2.0",
+  "source": "https://github.com/desmos-community/desmos-community-mathquill",
+  "tarball": "https://registry.npmjs.org/@desmos-community/mathquill/-/mathquill-2026.4.21.tgz",
+  "integrity": "sha512-mtGtwWMNEX0jaxZLCO0akyttkuPPncuwqBiNghtgPHViVSFCwaGdI019VKX+OesqJhpz3Jk9DMfb239Tynmz1Q==",
+  "assets": {
+    "index.global.js": "f7fafa6bedc9d415b6c0e16ce34ec081a3ef402d80beeab5f7da716fdf2b1b0c",
+    "style.css": "014d661fc2634ec1eaa787676dc823a7393c5c55dfd1c972d12eb5a6308f1bad"
+  }
+}
