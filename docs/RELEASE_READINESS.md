@@ -1,6 +1,6 @@
 # Release Readiness
 
-Checked on 2026-09-08 for `20260908-mobile-renderer-release`. This supersedes the
+Checked on 2026-09-09 for `20260909-editor-context`. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -12,12 +12,27 @@ version/commit is in [release.json](https://potatovender.github.io/Lepton-GRE/re
 A query string alone does not publish new code.
 
 The Pages workflow now installs locked dependencies and runs verification before
-uploading an explicit 35-file public artifact. Deploy depends on that build of the
+uploading an explicit 36-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Corrections
 
+- Horizontal equation scrolling no longer follows MathQuill's offscreen hidden
+  textarea on every input. It stays fixed while a caret has room, and only moves
+  enough to reveal an out-of-view caret. Pointer drag-scroll handlers no longer
+  run several times for the same mouse movement.
+- Grouped power bases retain parentheses across all serializers and CPU/GLSL
+  compilation. `(2^3)^2` evaluates to 64, not 512.
+- Empty custom-function input slots are rejected for scalar calls, point
+  expansion, and component selectors. Point literals keep internal commas.
+- Bare callable built-in names produce an error rather than a green status and
+  an undeclared shader identifier. Local scalar parameters are not replaced by
+  built-in constants/functions before CPU evaluation.
+- Failed first renders can release an acquired WebGL context even when no GPU
+  program was cached. Disposal/retry cases have standalone tests.
+- Public function metadata is centralized in `src/math/builtins.js`. No second
+  parser, engine, or editor was introduced.
 - Mobile now uses equal upper graph/lower editor regions. It follows the visible
   viewport when the keyboard opens and scrolls the active field into view without
   rebuilding its MathQuill state. Compact controls keep Text mode editable on
@@ -48,22 +63,27 @@ screenshots, and unrelated ItGE experiments are not deployed.
 - MathQuill's existing assets were matched to version 2026.4.21 and pinned with
   hashes, origin, archive integrity, and the MPL license. No editor upgrade was
   slipped into this release.
-- The two reported development dependency advisories were addressed with
-  compatible Nano ID and PostCSS patch updates. The resulting npm audit reported
-  zero known vulnerabilities.
+- The prior Nano ID/PostCSS fixes are retained. A new development-only Vitest
+  advisory was resolved by upgrading to patched 4.1.11 and using its typed
+  configuration import. Playwright 1.62.1 is pinned for browser regressions;
+  neither test package is deployed. npm audit reports zero known vulnerabilities.
 
 ## Verification
 
-- **150** runtime/model/grammar checks, **17** syntax unit tests, and **6**
+- **154** runtime/model/grammar checks, **17** syntax unit tests, and **11**
   standalone GPU-driver tests passed.
 - All **9** maintained sample files passed current-syntax migration checks.
-- Clean temporary source copy: locked dependency installation, build, tests, and
-  TypeScript declaration/configuration checks passed. Production JavaScript is
+- Build, tests, and TypeScript declaration/configuration checks passed. Production JavaScript is
   exercised by tests; this does not claim a full `checkJs` type check.
 - Chromium: landing, blank editor, all **8** gallery scenes, favicon URLs, sample
   links, and nonblank graph output passed the load smoke checks.
 - Three Text Apply/Reload/Standard cycles preserved fractions and comments and
   remounted MathQuill. Keyboard edits in the middle retained the caret position.
+- The checked-in Playwright suite measures scroll offsets, not just saved text:
+  middle typing/backspace, arrows, Home/End, and both drag-selection directions
+  pass at 380/760/1100 px desktop sidebars and a 390 px phone viewport. Additional
+  checks cover all mathematical row types, grouped exponents, and GPU pixels.
+  Both CI and Pages run this suite against the staged files before publishing.
 - Background selection beyond the first colour, grid switches, and boundary
   inequality controls persisted and round-tripped.
 - GPU pixel readback agreed with independent JavaScript calculations for nested
@@ -82,11 +102,14 @@ screenshots, and unrelated ItGE experiments are not deployed.
   tests used isolated profiles, not the user's saved-graph library.
 
 Local screenshots/results live in `output/playwright/release-audit/`, excluded
-from Git and deployment.
+from Git and deployment. Focused caret screenshots are in
+`output/playwright/editor-regression/`.
 
 ## Remaining Checks and Owner Decisions
 
-- The maintainer reports desktop Safari working. Real iPhone/Android keyboard
+- The maintainer reports desktop Safari working. The standalone WebKit 26.5
+  test browser timed out before loading the local blank editor in this run;
+  no new Safari verification is claimed. Real iPhone/Android keyboard
   behavior and Firefox still deserve a physical-device check. Keyboard-resize
   simulation is not the same as testing an operating system's software keyboard.
 - Correct independent pixel calculations do not prove performance on low-powered

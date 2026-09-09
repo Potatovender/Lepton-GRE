@@ -2,7 +2,7 @@
 export const SITE_FILES = [
   "index.html", "app.html", "robots.txt", "sitemap.xml", "THIRD_PARTY_NOTICES.md",
   "src/landing.js", "src/browser-preview-live.js", "src/styles.css",
-  "src/math/expression-syntax.js", "packages/renderer/src/index.js",
+  "src/math/expression-syntax.js", "src/math/builtins.js", "packages/renderer/src/index.js",
   "src/libs/mathquill/index.global.js", "src/libs/mathquill/style.css",
   "src/libs/mathquill/LICENSE", "src/libs/mathquill/vendor.json",
   ...["hero-field", "lepton-favicon", "lepton-logo", "lepton-logo-transparent",

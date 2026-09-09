@@ -58,6 +58,9 @@ expression radius = sqrt(x^2+y^2)
 expression rings = sin(4*radius)
 ```
 
+Powers associate to the right: `2^3^2` is `2^(3^2)` (512). Group the base for
+`(2^3)^2` (64). Grouping is preserved in both Text and Standard views.
+
 ### Sliders
 
 ```text
@@ -86,6 +89,11 @@ expression circle = distance(x,y)-4
 ```
 
 Function parameters are local and shadow outer values with the same name. Calls must provide exactly the declared number of arguments.
+
+Empty argument slots are errors: `distance(2,,3)` does not mean `distance(2,3)`.
+Use `sqrt(value)` in Lepton text or `\sqrt{value}` when pasting LaTeX. Built-in
+function names require inputs; bare `sin` is not a scalar value. `random` is the
+documented zero-argument exception and is equivalent to `random()`.
 
 Functions return expressions by default and may explicitly return a point:
 

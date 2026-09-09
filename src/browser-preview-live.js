@@ -1,5 +1,6 @@
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260909-editor-context";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260909-editor-context";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260909-editor-context";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -44,7 +45,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260908-mobile-renderer-release";
+const APP_VERSION = "20260909-editor-context";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -67,68 +68,6 @@ const DIAGNOSTIC_PRIORITY = { valid: 0, info: 1, warning: 2, invalid: 3 };
 let dropdownDismissBound = false;
 let selectedDependencyEntry = null;
 
-const BUILTIN_NAMES = new Set([
-  "x",
-  "y",
-  "z",
-  "pi",
-  "e",
-  "sin",
-  "cos",
-  "tan",
-  "asin",
-  "acos",
-  "atan",
-  "arcsin",
-  "arccos",
-  "arctan",
-  "arcsec",
-  "arccsc",
-  "arccot",
-  "sinh",
-  "cosh",
-  "tanh",
-  "sech",
-  "csch",
-  "coth",
-  "arcsinh",
-  "arccosh",
-  "arctanh",
-  "arcsech",
-  "arccsch",
-  "arccoth",
-  "sqrt",
-  "cbrt",
-  "log",
-  "ln",
-  "abs",
-  "sign",
-  "floor",
-  "ceil",
-  "round",
-  "min",
-  "max",
-  "exp",
-  "frac",
-  "clamp",
-  "union",
-  "intersect",
-  "subtract",
-  "and",
-  "or",
-  "not",
-  "xand",
-  "xor",
-  "random",
-  "sec",
-  "csc",
-  "cot",
-  "pow",
-  "Math",
-  "PI",
-  "ref",
-  "NaN"
-]);
 const GENERATED_GLSL_NAMES = new Set([
   "clamp3",
   "leptonRandom",
@@ -164,58 +103,6 @@ for (const name of DEGREE_HELPER_NAMES) GENERATED_GLSL_NAMES.add(name);
 
 const EXACT_RESERVED_NAMES = new Set([...BUILTIN_NAMES].filter((name) => !["Math", "PI", "ref", "NaN"].includes(name)));
 const SUBSTRING_RESERVED_NAMES = new Set([...EXACT_RESERVED_NAMES].filter((name) => !["x", "y", "z", "e"].includes(name)));
-const LATEX_FUNCTIONS = {
-  sin: { internal: "sin", args: 1, display: "sin" },
-  cos: { internal: "cos", args: 1, display: "cos" },
-  tan: { internal: "tan", args: 1, display: "tan" },
-  asin: { internal: "asin", args: 1, display: "arcsin" },
-  acos: { internal: "acos", args: 1, display: "arccos" },
-  atan: { internal: "atan", args: 1, display: "arctan" },
-  arcsin: { internal: "arcsin", args: 1, display: "arcsin" },
-  arccos: { internal: "arccos", args: 1, display: "arccos" },
-  arctan: { internal: "arctan", args: 1, display: "arctan" },
-  arcsec: { internal: "arcsec", args: 1, display: "arcsec" },
-  arccsc: { internal: "arccsc", args: 1, display: "arccsc" },
-  arccot: { internal: "arccot", args: 1, display: "arccot" },
-  sinh: { internal: "sinh", args: 1, display: "sinh" },
-  cosh: { internal: "cosh", args: 1, display: "cosh" },
-  tanh: { internal: "tanh", args: 1, display: "tanh" },
-  sech: { internal: "sech", args: 1, display: "sech" },
-  csch: { internal: "csch", args: 1, display: "csch" },
-  coth: { internal: "coth", args: 1, display: "coth" },
-  arcsinh: { internal: "arcsinh", args: 1, display: "arcsinh" },
-  arccosh: { internal: "arccosh", args: 1, display: "arccosh" },
-  arctanh: { internal: "arctanh", args: 1, display: "arctanh" },
-  arcsech: { internal: "arcsech", args: 1, display: "arcsech" },
-  arccsch: { internal: "arccsch", args: 1, display: "arccsch" },
-  arccoth: { internal: "arccoth", args: 1, display: "arccoth" },
-  sqrt: { internal: "sqrt", args: 1, display: "sqrt" },
-  cbrt: { internal: "cbrt", args: 1, display: "cbrt" },
-  log: { internal: "log", args: 1, display: "log" },
-  ln: { internal: "ln", args: 1, display: "ln" },
-  abs: { internal: "abs", args: 1, display: "abs" },
-  sign: { internal: "sign", args: 1, display: "sign" },
-  floor: { internal: "floor", args: 1, display: "floor" },
-  ceil: { internal: "ceil", args: 1, display: "ceil" },
-  round: { internal: "round", args: 1, display: "round" },
-  exp: { internal: "exp", args: 1, display: "exp" },
-  sec: { internal: "sec", args: 1, display: "sec" },
-  csc: { internal: "csc", args: 1, display: "csc" },
-  cot: { internal: "cot", args: 1, display: "cot" },
-  min: { internal: "min", args: 2, display: "min" },
-  max: { internal: "max", args: 2, display: "max" },
-  clamp: { internal: "clamp", args: 3, display: "clamp" },
-  union: { internal: "union", args: 2, display: "union" },
-  intersect: { internal: "intersect", args: 2, display: "intersect" },
-  subtract: { internal: "subtract", args: 2, display: "subtract" },
-  and: { internal: "and", args: 2, display: "and" },
-  or: { internal: "or", args: 2, display: "or" },
-  not: { internal: "not", args: 1, display: "not" },
-  xand: { internal: "xand", args: 2, display: "xand" },
-  xor: { internal: "xor", args: 2, display: "xor" },
-  random: { internal: "random", args: 0, display: "random" },
-  frac: { internal: "frac", args: 2, display: "frac" }
-};
 const LATEX_SHORTCUTS = new Set(Object.keys(LATEX_FUNCTIONS));
 const FUNCTION_TEXT_NAMES = new Set(Object.values(LATEX_FUNCTIONS).map((config) => config.internal));
 const SETTING_TEXT_KEYS = new Set([
@@ -2635,7 +2522,7 @@ function bindEvents() {
 
     const mathField = MQ.MathField(el, {
       autoCommands: "sqrt sum",
-      autoOperatorNames: "sin cos tan ln log exp min max clamp round floor ceil abs sign sinh cosh tanh arcsin arccos arctan sec csc cot arccot arcsec arccsc sech csch coth arcsinh arccosh arctanh arcsech arccsch arccoth cbrt asin acos atan random union intersect subtract and or not xand xor",
+      autoOperatorNames: MATHQUILL_OPERATOR_NAMES,
       handlers: {
         edit: () => {
           if (el.dataset.initializing === "true" || !el.contains(document.activeElement)) return;
@@ -2692,16 +2579,6 @@ function bindEvents() {
     });
     field.addEventListener("keyup", () => requestAnimationFrame(() => keepHorizontalCaretVisible(field)));
     field.addEventListener("mouseup", () => requestAnimationFrame(() => keepHorizontalCaretVisible(field)));
-    field.addEventListener("pointermove", (event) => {
-      if (event.buttons) {
-        scrollFieldNearPointer(field, event);
-      }
-    });
-    field.addEventListener("mousemove", (event) => {
-      if (event.buttons) {
-        scrollFieldNearPointer(field, event);
-      }
-    });
     field.addEventListener(
       "wheel",
       (event) => {
@@ -2712,6 +2589,8 @@ function bindEvents() {
   });
 
   root.querySelectorAll("input, textarea").forEach((field) => {
+    // MathQuill owns its hidden textarea; only its visible host should scroll.
+    if (closestMathFieldTarget(field)) return;
     const isSceneText = field.matches?.("[data-scene-text]");
     field.addEventListener("focusin", () => activateKeyboardTarget(field));
     field.addEventListener("pointerdown", () => {
@@ -2733,20 +2612,6 @@ function bindEvents() {
     });
     field.addEventListener("mouseup", () => {
       if (!isSceneText) keepTextInputCaretVisible(field);
-    });
-    field.addEventListener("pointermove", (event) => {
-      if (isSceneText) return;
-      if (event.buttons) {
-        scrollFieldNearPointer(field, event);
-        keepTextInputCaretVisible(field, event);
-      }
-    });
-    field.addEventListener("mousemove", (event) => {
-      if (isSceneText) return;
-      if (event.buttons) {
-        scrollFieldNearPointer(field, event);
-        keepTextInputCaretVisible(field, event);
-      }
     });
     field.addEventListener(
       "wheel",
@@ -5133,10 +4998,10 @@ function compileExpression(source, localNames = new Set()) {
   js = rewriteRuntimeFunctionCalls(js);
   js = convertPowers(js)
     .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
-    .replaceAll(/\bpi\b/g, "Math.PI")
-    .replaceAll(/\be\b/g, "Math.E")
-    .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log|pow)\b/g, "Math.$1")
-    .replaceAll(/\barc(sin|cos|tan)\b/g, "Math.a$1");
+    .replaceAll(/\bpi\b/g, (name) => localNames.has(name) ? name : "Math.PI")
+    .replaceAll(/\be\b/g, (name) => localNames.has(name) ? name : "Math.E")
+    .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log|pow)\b/g, (name) => localNames.has(name) ? name : `Math.${name}`)
+    .replaceAll(/\barc(sin|cos|tan)\b/g, (name, suffix) => localNames.has(name) ? name : `Math.a${suffix}`);
 
   js = rewriteBareIdentifiers(
     js,
@@ -5300,7 +5165,7 @@ function rewriteCustomFunctionCalls(expression, env, build) {
       output += expression.slice(nameStart);
       break;
     }
-    const args = splitFunctionArgs(expression.slice(index + 1, close)).map((arg) => arg.trim()).filter((arg) => arg.length);
+    const args = customFunctionArguments(expression.slice(index + 1, close), name);
     output += build(definitions[name], args);
     index = close + 1;
   }
@@ -5315,7 +5180,7 @@ function directCustomFunctionCall(source, env) {
   const close = matchingParen(text, open);
   const entry = envFunctionDefinitions(env)[match[1]];
   if (!entry || close !== text.length - 1) return null;
-  return { entry, args: splitFunctionArgs(text.slice(open + 1, close)).map((arg) => arg.trim()).filter(Boolean) };
+  return { entry, args: customFunctionArguments(text.slice(open + 1, close), match[1]) };
 }
 
 function topLevelPointBinary(source, operator) {
@@ -5576,7 +5441,7 @@ function rewritePointFunctionSelectors(expression, env, build) {
       continue;
     }
     const coordinate = selector[1] ? (selector[1] === "x" ? 0 : 1) : Number(selector[2]);
-    const args = splitFunctionArgs(expression.slice(open + 1, close)).map((argument) => argument.trim()).filter(Boolean);
+    const args = customFunctionArguments(expression.slice(open + 1, close), match[0]);
     output += build(entry, args, coordinate);
     index = close + 1 + selector[0].length;
   }
@@ -6110,6 +5975,10 @@ function assertExpressionDependencies(source, env, localNames = new Set()) {
     compileExpression(normalized, current.localNames);
     for (const match of normalized.matchAll(/\b[A-Za-z_]\w*\b/g)) {
       const name = match[0];
+      if (!current.localNames.has(name) && (FUNCTION_TEXT_NAMES.has(name) || name === "pow")
+        && !/^\s*\(/.test(normalized.slice(match.index + name.length))) {
+        throw new Error(`Function ${name} requires parentheses and inputs`);
+      }
       if (BUILTIN_NAMES.has(name) || current.localNames.has(name)) continue;
       const entry = envEntry(current.env, name);
       if (!entry) throw new Error(`Unknown variable: ${name}`);
@@ -6906,57 +6775,6 @@ function convertDivisionsToFrac(source) {
   return output;
 }
 
-const STANDARD_LATEX_COMMANDS = {
-  sin: "\\sin",
-  cos: "\\cos",
-  tan: "\\tan",
-  asin: "\\arcsin",
-  acos: "\\arccos",
-  atan: "\\arctan",
-  arcsin: "\\arcsin",
-  arccos: "\\arccos",
-  arctan: "\\arctan",
-  arcsec: "\\operatorname{arcsec}",
-  arccsc: "\\operatorname{arccsc}",
-  arccot: "\\operatorname{arccot}",
-  sinh: "\\sinh",
-  cosh: "\\cosh",
-  tanh: "\\tanh",
-  sech: "\\operatorname{sech}",
-  csch: "\\operatorname{csch}",
-  coth: "\\operatorname{coth}",
-  arcsinh: "\\operatorname{arcsinh}",
-  arccosh: "\\operatorname{arccosh}",
-  arctanh: "\\operatorname{arctanh}",
-  arcsech: "\\operatorname{arcsech}",
-  arccsch: "\\operatorname{arccsch}",
-  arccoth: "\\operatorname{arccoth}",
-  log: "\\log",
-  ln: "\\ln",
-  sqrt: "\\sqrt",
-  cbrt: "\\operatorname{cbrt}",
-  abs: "\\operatorname{abs}",
-  sign: "\\operatorname{sign}",
-  floor: "\\operatorname{floor}",
-  ceil: "\\operatorname{ceil}",
-  round: "\\operatorname{round}",
-  exp: "\\exp",
-  random: "\\operatorname{random}",
-  sec: "\\sec",
-  csc: "\\csc",
-  cot: "\\cot",
-  min: "\\min",
-  max: "\\max",
-  clamp: "\\operatorname{clamp}",
-  union: "\\operatorname{union}",
-  intersect: "\\operatorname{intersect}",
-  subtract: "\\operatorname{subtract}",
-  and: "\\operatorname{and}",
-  or: "\\operatorname{or}",
-  not: "\\operatorname{not}",
-  xand: "\\operatorname{xand}",
-  xor: "\\operatorname{xor}"
-};
 
 function tokenizeLatex(source) {
   const tokens = [];
@@ -7339,6 +7157,11 @@ function parseLeptonText(source) {
   return createParser(tokens, false);
 }
 
+function powerBaseNeedsGrouping(base) {
+  // Powers associate to the right: (a^b)^c must not be serialized as a^b^c.
+  return base.type === "binary" || base.type === "unary" || base.type === "power";
+}
+
 function astToLatex(node) {
   if (node.type === "number") {
     return String(node.value);
@@ -7357,7 +7180,7 @@ function astToLatex(node) {
   }
   if (node.type === "power") {
     const base = astToLatex(node.base);
-    return `${node.base.type === "binary" || node.base.type === "unary" ? `\\left(${base}\\right)` : base}^{${astToLatex(node.exponent)}}`;
+    return `${powerBaseNeedsGrouping(node.base) ? `\\left(${base}\\right)` : base}^{${astToLatex(node.exponent)}}`;
   }
   if (node.type === "binary") {
     const op = node.op;
@@ -7411,7 +7234,7 @@ function astToLeptonText(node) {
   }
   if (node.type === "power") {
     const rawBase = astToLeptonText(node.base);
-    const base = node.base.type === "binary" || node.base.type === "unary" ? `(${rawBase})` : rawBase;
+    const base = powerBaseNeedsGrouping(node.base) ? `(${rawBase})` : rawBase;
     const exponent = astToLeptonText(node.exponent);
     if (node.exponent.type === "number" || node.exponent.type === "identifier") {
       return `${base}^${exponent}`;
@@ -7457,7 +7280,7 @@ function astToMathString(node) {
   }
   if (node.type === "power") {
     const rawBase = astToMathString(node.base);
-    const base = node.base.type === "binary" || node.base.type === "unary" ? `(${rawBase})` : rawBase;
+    const base = powerBaseNeedsGrouping(node.base) ? `(${rawBase})` : rawBase;
     const exponent = astToMathString(node.exponent);
     return `${base}^${node.exponent.type === "number" || node.exponent.type === "identifier" ? exponent : `(${exponent})`}`;
   }
@@ -7497,7 +7320,7 @@ function astToEditableHtml(node) {
   }
   if (node.type === "power") {
     const base = astToEditableHtml(node.base);
-    const groupedBase = node.base.type === "binary" || node.base.type === "unary" ? `(${base})` : base;
+    const groupedBase = powerBaseNeedsGrouping(node.base) ? `(${base})` : base;
     return `<span class="mq-power" data-command="power"><span class="mq-base">${groupedBase}</span><span class="mq-exponent">${astToEditableHtml(node.exponent)}</span></span>`;
   }
   if (node.type === "binary") {
@@ -8020,24 +7843,15 @@ function parseFunctionCall(source, name) {
   return splitFunctionArgs(inner);
 }
 
-function splitFunctionArgs(inner) {
-  const args = [];
-  let depth = 0;
-  let braceDepth = 0;
-  let start = 0;
-  for (let i = 0; i < inner.length; i += 1) {
-    const char = inner[i];
-    if (char === "(") depth += 1;
-    if (char === ")") depth -= 1;
-    if (char === "{") braceDepth += 1;
-    if (char === "}") braceDepth -= 1;
-    if (char === "," && depth === 0 && braceDepth === 0) {
-      args.push(inner.slice(start, i));
-      start = i + 1;
-    }
-  }
-  args.push(inner.slice(start));
+function customFunctionArguments(inner, name) {
+  if (!inner.trim()) return [];
+  const args = splitFunctionArgs(inner).map((argument) => argument.trim());
+  if (args.some((argument) => !argument)) throw new Error(`${name} has an empty argument; enter a value between each comma`);
   return args;
+}
+
+function splitFunctionArgs(inner) {
+  return splitTopLevelText(inner, ",");
 }
 
 function matchingParen(source, openIndex) {
@@ -9471,7 +9285,6 @@ document.addEventListener("selectionchange", () => requestAnimationFrame(handleD
 document.addEventListener("pointermove", handleDocumentPointerScroll);
 document.addEventListener("pointerup", stopSelectionPointerScroll);
 document.addEventListener("pointercancel", stopSelectionPointerScroll);
-document.addEventListener("mousemove", handleDocumentPointerScroll);
 document.addEventListener("mouseup", stopSelectionPointerScroll);
 ensureLeptonFavicon();
 

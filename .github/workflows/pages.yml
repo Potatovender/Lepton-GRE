@@ -28,6 +28,10 @@ jobs:
         run: npm ci
       - name: Verify the exact release commit and stage the site
         run: npm run verify
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Check editor interactions before publishing
+        run: npm run test:browser
       - name: Upload verified public files only
         uses: actions/upload-pages-artifact@v5
         with:

@@ -1,4 +1,5 @@
 const cache = new WeakMap();
+const contexts = new WeakMap();
 const registered = new WeakSet();
 const VERTEX_SOURCE = "attribute vec2 a_position; void main() { gl_Position = vec4(a_position, 0.0, 1.0); }";
 export const MAX_FRAGMENT_CHARACTERS = 1_500_000;
@@ -61,6 +62,8 @@ export function renderFrame(canvas, options) {
   if (options.clipBounds) validateBounds(options.clipBounds);
   const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true }) ?? canvas.getContext("webgl", { preserveDrawingBuffer: true });
   if (!gl) return { supported: false, compiled: false, compileMs: 0, source: "" };
+  // Retain the context for disposal even when the first render fails.
+  contexts.set(canvas, gl);
   if (gl.isContextLost?.()) throw new RendererError("The graphics context was lost. Wait for recovery or reload the graph.");
   if (!registered.has(canvas) && canvas.addEventListener) {
     canvas.addEventListener("webglcontextlost", (event) => { event.preventDefault(); cache.delete(canvas); });
@@ -132,6 +135,10 @@ export function disposeRenderer(canvas, { loseContext = false } = {}) {
     state.gl.deleteProgram(state.program);
     state.gl.deleteBuffer(state.buffer);
     cache.delete(canvas);
-    if (loseContext) state.gl.getExtension("WEBGL_lose_context")?.loseContext();
+  }
+  if (loseContext) {
+    const gl = contexts.get(canvas);
+    contexts.delete(canvas);
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
   }
 }

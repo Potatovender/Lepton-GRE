@@ -20,6 +20,7 @@ Useful scripts:
 | `npm run build` | Run dependency-free checks and stage the explicit public file list in `dist/`. |
 | `npm run test` | Run focused Vitest syntax tests and isolated renderer tests. |
 | `npm run test:renderer` | Test GPU resource lifecycle, cache reuse, dimensions, and failures without a browser. |
+| `npm run test:browser` | Run real keyboard/selection and MathQuill remount checks against `dist/` (build first; install Chromium with `npx playwright install chromium`). |
 | `npm run typecheck` | Validate TypeScript declarations and test configuration. |
 | `npm run verify` | Run build, unit tests, and type checking. |
 | `npm run update:mathquill` | Restore the pinned MathQuill assets, verifying hashes before replacement. |
@@ -33,9 +34,11 @@ vendor files. The build verifies the current pin offline.
 
 Update every applicable layer:
 
-1. `LATEX_FUNCTIONS` and display command maps.
+1. The function definition in `src/math/builtins.js`; names, display command maps,
+   argument counts, and MathQuill operator suggestions derive from it.
 2. Text/LaTeX normalization and parser arity.
-3. `BUILTIN_NAMES` and generated GLSL reserved names.
+3. Generated GLSL helper names, when introducing a new helper. Public names are
+   reserved automatically by the metadata module.
 4. CPU evaluation in `compileExpression`.
 5. GLSL substitutions and helper implementation in `expressionToGlsl`/`buildFragmentShader`.
 6. Validation and naming diagnostics.
@@ -44,6 +47,10 @@ Update every applicable layer:
 9. `docs/LEPTON_LANGUAGE.md`, tutorial copy, and affected samples.
 
 Never add a display-only symbol without a compiler form, or a CPU built-in without a GLSL equivalent.
+
+See [Extending Lepton](EXTENDING_LEPTON.md) for ownership boundaries, the new-data
+checklist, and the proposed shared web/desktop architecture. Those future features
+are not yet implemented.
 
 ## Adding a Data Type
 
@@ -83,9 +90,17 @@ Before release, verify:
 - on mobile, equal upper graph/lower editor regions, focused field visibility
   when the keyboard reduces the viewport, and text-editor scrolling in both axes.
 
+`npm run test:browser` creates isolated profiles and checks stable horizontal
+scroll positions during middle edits, minimal edge movement, both selection
+directions, four panel/viewport sizes, and three Apply/Reload cycles. It serves
+the exact staged build and closes that server on completion. Set `LEPTON_TEST_URL`
+to a local or public base URL to verify a deployment. Optional
+`LEPTON_TEST_BROWSER=webkit` uses WebKit after `npx playwright install webkit`;
+`LEPTON_BROWSER_EXECUTABLE` selects a preinstalled test browser.
+
 ## Release Checklist
 
-1. Run `npm run verify`.
+1. Run `npm run verify` and `npm run test:browser`.
 2. Update `APP_VERSION` in both runtime modules and every matching `?v=` reference in `index.html`, `app.html`, and tests.
 3. Update sample source and thumbnails together when a sample changes.
 4. Update `sitemap.xml` dates for public-page changes.

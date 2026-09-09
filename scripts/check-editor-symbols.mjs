@@ -2,12 +2,13 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "../src/math/expression-syntax.js";
 import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "../src/math/builtins.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260908-mobile-renderer-release";
+const cacheVersion = "20260909-editor-context";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -80,7 +81,11 @@ const sandbox = {
   normalizeMathSyntax,
   UNARY_OPERAND_PRECEDENCE,
   renderFrame,
-  disposeRenderer
+  disposeRenderer,
+  LATEX_FUNCTIONS,
+  STANDARD_LATEX_COMMANDS,
+  MATHQUILL_OPERATOR_NAMES,
+  BUILTIN_NAMES
 };
 
 vm.createContext(sandbox);
@@ -240,6 +245,28 @@ check("bare random is a zero-argument built-in with operator styling", () => {
   assert(source.includes("scheduleMountedMathFieldReflow();"), "sidebar resizing does not reflow MathQuill fields");
 });
 
+check("bare builtin functions are red flagged before shader compilation", () => {
+  for (const name of Object.keys(LATEX_FUNCTIONS).filter((name) => name !== "random")) {
+    sandbox.__debugSetScene(sandbox.importScene(`expression bad = ${name}+1\nexpression dependent = bad`));
+    const diagnostics = sandbox.validateScene();
+    assert(diagnostics.functions.every((entry) => entry.status === "invalid"), `${name}: ${JSON.stringify(diagnostics)}`);
+    assert(diagnostics.functions[0].message.includes("requires parentheses"), diagnostics.functions[0].message);
+  }
+  sandbox.__debugSetScene(sandbox.importScene("expression bad = sqrt{y^2+1}"));
+  assert(sandbox.validateScene().hasErrors, "Bare sqrt braces silently compiled to multiplication");
+});
+
+check("local scalar parameters precede builtin substitution in both compilers", () => {
+  for (const param of ["pi", "e", "sin", "cos", "arcsin", "clamp", "ln", "pow"]) {
+    sandbox.__debugSetScene(sandbox.importScene(`function increment(${param}) = ${param}+1\nexpression result = increment(2)`));
+    const env = sandbox.sceneFunctionEnv(true);
+    assert(!sandbox.validateScene().hasErrors, `${param}: ${JSON.stringify(sandbox.validateScene())}`);
+    assert(sandbox.compileExpression("result")(0, 0, sandbox.buildRuntimeEnv(env)) === 3, `Local ${param} became a builtin`);
+    const glsl = sandbox.expressionToGlsl("result", env);
+    assert(glsl.includes("2.0") && !/\b(pi|sin|cos|clamp|ln)\b/.test(glsl), glsl);
+  }
+});
+
 check("nested built-ins and user functions compile through CPU and GLSL", () => {
   const nestedSource = `function square(v) = v^2
 function soften(v,limit) = clamp(square(v),0,limit)
@@ -291,6 +318,52 @@ draw(result,colour=rgb)`;
   const secondEnv = sandbox.sceneFunctionEnv(true);
   const secondGlsl = sandbox.expressionToGlsl(second.functions.find((entry) => entry.id === "result").expression, secondEnv);
   assert(firstGlsl === secondGlsl, `round trip changed GLSL:\n${firstGlsl}\n${secondGlsl}`);
+});
+
+check("grouped power bases survive every serializer and repeated scene round trips", () => {
+  for (const [expression, expected] of [
+    ["(2^3)^2", 64], ["2^(3^2)", 512], ["((2^3)^2)^2", 4096],
+    ["(-2^3)^2", 64], ["-(2^3)^2", -64], ["(frac{2}{3}^2)^2", (2 / 3) ** 4],
+    ["sin((2^3)^2)", Math.sin(64)], ["(2^(1+2))^(1+1)", 64]
+  ]) {
+    const ast = sandbox.parseLeptonText(expression);
+    for (const serialized of [sandbox.astToLatex(ast), sandbox.astToLeptonText(ast), sandbox.astToMathString(ast)]) {
+      const actual = sandbox.compileExpression(serialized)(0, 0, {});
+      assert(Math.abs(actual - expected) < 1e-10, `${expression} became ${serialized}: ${actual}, expected ${expected}`);
+    }
+    let text = `expression result = ${expression}\ndraw(result)`;
+    let firstGlsl;
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+      sandbox.__debugSetScene(sandbox.importScene(text));
+      const env = sandbox.sceneFunctionEnv(true);
+      const actual = sandbox.compileExpression("result")(0, 0, sandbox.buildRuntimeEnv(env));
+      assert(Math.abs(actual - expected) < 1e-10, `${text}: ${actual}`);
+      const glsl = sandbox.expressionToGlsl("result", env);
+      firstGlsl ??= glsl;
+      assert(glsl === firstGlsl, `${expression}: shader changed after round trip`);
+      text = sandbox.exportScene();
+    }
+  }
+  assert(sandbox.expressionToGlsl("(2^3)^2", {}) === "pow((pow(2.0,3.0)),2.0)", "GLSL grouped base lost");
+});
+
+check("missing scalar and point function arguments are errors, not discarded slots", () => {
+  const definitions = `function encode(a,b) = 10*a+b
+function pair(a,b) -> point = [a,b]
+function constant() = 7`;
+  for (const expression of ["encode(2,,3)", "encode(,2,3)", "encode(2,3,)", "pair(2,,3).x", "pair(,2,3)[1]", "encode(pair(2,,3))", "encode(2,pair(3,,4).y)"]) {
+    sandbox.__debugSetScene(sandbox.importScene(`${definitions}\nexpression result = ${expression}`));
+    const status = sandbox.validateScene().functions.at(-1);
+    assert(status.status === "invalid", `${expression}: ${JSON.stringify(status)}`);
+    assert(status.message.includes("empty argument"), `${expression}: ${status.message}`);
+  }
+  for (const [expression, expected] of [["constant()", 7], ["encode(pair(2,3))", 23], ["encode([2,3])", 23], ["encode(2,3)", 23]]) {
+    sandbox.__debugSetScene(sandbox.importScene(`${definitions}\nexpression result = ${expression}`));
+    const env = sandbox.sceneFunctionEnv(true);
+    assert(!sandbox.validateScene().hasErrors, `${expression}: ${JSON.stringify(sandbox.validateScene())}`);
+    assert(sandbox.compileExpression("result")(0, 0, sandbox.buildRuntimeEnv(env)) === expected, expression);
+    assert(sandbox.expressionToGlsl("result", env).length > 0, expression);
+  }
 });
 
 check("time playback controls include a live FPS output", () => {

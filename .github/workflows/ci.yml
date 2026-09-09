@@ -27,3 +27,9 @@ jobs:
 
       - name: Verify application
         run: npm run verify
+
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Check editor interactions in the staged release
+        run: npm run test:browser

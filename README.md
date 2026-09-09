@@ -9,6 +9,7 @@ Lepton GRE (Lepton Graph Rendering Interface) is a browser-based mathematical fi
 - Language reference: [docs/LEPTON_LANGUAGE.md](docs/LEPTON_LANGUAGE.md)
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Development and releases: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- Extension guide and proposed web/desktop roadmap: [docs/EXTENDING_LEPTON.md](docs/EXTENDING_LEPTON.md)
 
 ## Features
 
@@ -37,6 +38,8 @@ Run the complete local verification suite before committing:
 
 ```sh
 npm run verify
+npx playwright install chromium
+npm run test:browser
 ```
 
 The dependency-free production check can also run without installing packages:
@@ -69,6 +72,7 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `src/browser-preview-live.js` | Production state, UI, text import/export, diagnostics, expression compilation, animation, and WebGL rendering. |
 | `packages/renderer/` | Reusable WebGL driver, typed API, isolated Node tests, and packaging instructions. No dependency on the GRE UI. |
 | `src/math/expression-syntax.js` | Shared implicit-multiplication and power-precedence transformations. |
+| `src/math/builtins.js` | Shared built-in names, arity, display aliases, LaTeX commands, and MathQuill operator suggestions. |
 | `src/landing.js` | Landing-page sample source and launch URL generation. |
 | `src/styles.css` | Landing and grapher styles. |
 | `src/libs/mathquill/` | Vendored equation editor assets. |
@@ -76,6 +80,7 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `scripts/build.mjs` | Dependency-free verification followed by staging the public build in `dist/`. |
 | `scripts/site-files.mjs`, `scripts/stage-site.mjs` | Explicit public-file list and release metadata generation. |
 | `scripts/check-editor-symbols.mjs` | Executable grammar, parser, model, UI-contract, and GLSL regression suite. |
+| `scripts/check-editor-browser.mjs` | Actual typing, caret/selection scrolling, and repeated editor-mount checks against the staged release. |
 | `tests/` | Focused Vitest tests for the standalone expression-syntax module. |
 | `sample code/` | The single source of truth for copyable landing-page samples. `npm run migrate:samples` upgrades recognized legacy forms after grammar changes. |
 | `docs/` | Architecture, language, development, and design references. |

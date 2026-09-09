@@ -728,6 +728,13 @@ select {
   white-space: nowrap;
 }
 
+/* The browser scrolls a focused textarea into view on input. Keep MathQuill's
+   hidden keyboard target in the viewport, not at the offscreen equation start. */
+.mathquill-field > .mq-textarea {
+  position: sticky;
+  left: 12px;
+}
+
 .mathquill-field .mq-non-leaf {
   max-width: none !important;
 }

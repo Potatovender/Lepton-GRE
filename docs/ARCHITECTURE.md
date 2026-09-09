@@ -33,10 +33,26 @@ The canonical scene stores collections for values, colours, boundaries, transpar
 - **Landing behavior:** `src/landing.js` owns bundled sample text and generated sample links.
 - **Live runtime:** `src/browser-preview-live.js` owns scene state, UI rendering, interaction, import/export, validation, CPU evaluation, GLSL generation, animation, save/load, and export.
 - **Syntax primitives:** `src/math/expression-syntax.js` owns implicit multiplication and right-associative power lowering used by both CPU and GLSL paths.
+- **Built-in metadata:** `src/math/builtins.js` provides public function names,
+  arity, display aliases, LaTeX commands, and MathQuill operator suggestions.
+  CPU and GLSL implementations are explicit and covered by the shared tests.
 - **GPU driver:** `packages/renderer` owns shader/program lifecycle, uniform updates, viewport drawing, device-size checks, and cleanup. The GRE adapter generates GLSL and reports diagnostics; the driver has no scene or UI dependency.
 - **Styles:** `src/styles.css` owns all responsive layout and component states.
 
 Do not introduce another scene model or parser alongside the live runtime. A future modularization should move cohesive helpers out of the runtime while preserving one canonical call path and executable regression suite.
+
+See [Extending Lepton](EXTENDING_LEPTON.md) for current integration points and the
+proposed module/profile/desktop roadmap.
+
+## Editor Scrolling
+
+The MathQuill host owns horizontal overflow; its root block keeps natural math
+width. Its hidden native textarea stays sticky inside the visible host so native
+input scrolling cannot drag the whole equation toward its offscreen beginning.
+Only scroll to reveal a caret outside the viewport; do not recenter an already
+visible caret. Native text-input handlers must not also attach to MathQuill's
+hidden textarea. Drag scrolling is handled once per document pointer event, not
+again by both bubbling mouse events and per-field handlers.
 
 ## Expression Pipeline
 

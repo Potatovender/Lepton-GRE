@@ -78,6 +78,7 @@ for (const removedPath of ["src/main.ts", "src/ui/app.ts", "src/model/scene.ts",
 
 await run(process.execPath, ["--check", "src/browser-preview-live.js"]);
 await run(process.execPath, ["--check", "src/math/expression-syntax.js"]);
+await run(process.execPath, ["--check", "src/math/builtins.js"]);
 await run(process.execPath, ["--check", "src/landing.js"]);
 await run(process.execPath, ["--check", "packages/renderer/src/index.js"]);
 await run(process.execPath, ["scripts/download-mathquill.mjs", "--check"]);

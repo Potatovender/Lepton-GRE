@@ -27,6 +27,7 @@ dependency licenses.
 | TypeScript | Type declarations and test configuration | Apache-2.0 | [microsoft/TypeScript](https://github.com/microsoft/TypeScript) |
 | Vite | Local development server | MIT | [vitejs/vite](https://github.com/vitejs/vite) |
 | Vitest | Syntax module tests | MIT | [vitest-dev/vitest](https://github.com/vitest-dev/vitest) |
+| Playwright | Isolated browser interaction regression tests | Apache-2.0 | [microsoft/playwright](https://github.com/microsoft/playwright) |
 
 Node.js provides the development runtime. WebGL and Canvas are browser APIs, not
 bundled third-party libraries. The standalone Lepton renderer has no external

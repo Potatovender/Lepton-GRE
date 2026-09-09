@@ -16,6 +16,7 @@
     "build": "node scripts/build.mjs",
     "test": "vitest run tests/expression-syntax.test.ts && npm run test:renderer",
     "test:renderer": "node --test packages/renderer/test/*.test.mjs",
+    "test:browser": "node scripts/check-editor-browser.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "verify": "npm run build && npm test && npm run typecheck",
@@ -24,8 +25,9 @@
     "update:mathquill": "node scripts/download-mathquill.mjs"
   },
   "devDependencies": {
+    "playwright": "1.62.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "vitest": "^3.2.0"
+    "vitest": "4.1.11"
   }
 }
