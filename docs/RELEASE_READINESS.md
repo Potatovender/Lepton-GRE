@@ -33,6 +33,8 @@ screenshots, and unrelated ItGE experiments are not deployed.
   program was cached. Disposal/retry cases have standalone tests.
 - Public function metadata is centralized in `src/math/builtins.js`. No second
   parser, engine, or editor was introduced.
+- The development server serves extensionless sample files as plain text instead
+  of appending JavaScript source-map comments that appear as extra data rows.
 - Mobile now uses equal upper graph/lower editor regions. It follows the visible
   viewport when the keyboard opens and scrolls the active field into view without
   rebuilding its MathQuill state. Compact controls keep Text mode editable on
@@ -107,9 +109,10 @@ from Git and deployment. Focused caret screenshots are in
 
 ## Remaining Checks and Owner Decisions
 
-- The maintainer reports desktop Safari working. The standalone WebKit 26.5
-  test browser timed out before loading the local blank editor in this run;
-  no new Safari verification is claimed. Real iPhone/Android keyboard
+- The maintainer reports desktop Safari working. WebKit 26.5 passes the focused
+  editor and GPU regression suite as well. An earlier local-port timeout was
+  resolved by using the staged server's automatic port instead of restricted
+  port 4190. These are engine tests, not physical-device testing. Real iPhone/Android keyboard
   behavior and Firefox still deserve a physical-device check. Keyboard-resize
   simulation is not the same as testing an operating system's software keyboard.
 - Correct independent pixel calculations do not prove performance on low-powered

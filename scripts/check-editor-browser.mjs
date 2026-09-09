@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { chromium, webkit } from "playwright";
-import { preview } from "vite";
+import { createServer, preview } from "vite";
+import { SITE_FILES } from "./site-files.mjs";
 
 // Run against the staged release by default, or a deployed build via the URL.
 const server = process.env.LEPTON_TEST_URL ? null : await preview({ preview: { host: "127.0.0.1", port: 0 } });
@@ -152,6 +153,21 @@ try {
     }
   });
   console.log("ok - grouped powers and local constant shadowing produce the correct GPU pixels");
+
+  if (!process.env.LEPTON_TEST_URL) {
+    const dev = await createServer({ server: { host: "127.0.0.1", port: 0 } });
+    try {
+      await dev.listen();
+      for (const file of SITE_FILES.filter((file) => file.startsWith("sample code/"))) {
+        const response = await fetch(new URL(file, dev.resolvedUrls.local[0]));
+        assert(response.ok, `Sample request failed: ${file}`);
+        assert.equal(await response.text(), await readFile(file, "utf8"), `Development server modified ${file}`);
+      }
+      console.log("ok - development server serves all nine sample sources byte-for-byte without injected comments");
+    } finally {
+      await dev.close();
+    }
+  }
 } catch (error) {
   if (activePage && !activePage.isClosed()) await activePage.screenshot({ path: `${output}/failure.png` });
   throw error;

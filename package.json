@@ -25,6 +25,7 @@
     "update:mathquill": "node scripts/download-mathquill.mjs"
   },
   "devDependencies": {
+    "@types/node": "24.13.3",
     "playwright": "1.62.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",

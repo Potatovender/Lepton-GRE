@@ -97,6 +97,9 @@ the exact staged build and closes that server on completion. Set `LEPTON_TEST_UR
 to a local or public base URL to verify a deployment. Optional
 `LEPTON_TEST_BROWSER=webkit` uses WebKit after `npx playwright install webkit`;
 `LEPTON_BROWSER_EXECUTABLE` selects a preinstalled test browser.
+The same suite checks that Vite serves sample source files byte-for-byte without
+injecting source-map comments. Use the URL printed by Vite or its automatic port;
+some otherwise unused ports (including 4190) are blocked by browser networking.
 
 ## Release Checklist
 
