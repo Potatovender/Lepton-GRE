@@ -113,6 +113,28 @@ colour sunset = 240~110+20*sin(x)~70
 
 Channels are separated by `~`, accept full expressions, and are clamped to displayable RGB values. During mapped colour evaluation, `x` is the selected draw value and `y` remains the graph's vertical coordinate.
 
+### HSV Colours
+
+Choose **More data > Colour (HSV)** in the New line or row-type menu:
+
+```text
+expression wave = sin(x)+cos(y)
+colourhsv spectrum = 180+90*x~0.8~1
+draw(wave) {colour=spectrum}
+```
+
+The channels are **hue ~ saturation ~ value (brightness)**. Hue uses degrees,
+independent of the trig angle mode, wrapping every 360 (so -60 and 300 match).
+Saturation and value clamp to 0..1. `colorhsv` is an accepted spelling; export
+uses `colourhsv`. Both models share one colour namespace and work for draw
+layers, point colours, and the solid background. Points use their coordinates;
+backgrounds sample at (0,0). HSV draw layers have the same x/y mapping as RGB.
+
+Changing between RGB and HSV in Standard preserves the three formulas in order,
+but reinterprets their units; it is not a colour-space conversion of the formulas.
+Reselecting the existing type does not change any channel. Missing colour IDs
+remain in the text and are flagged instead of being replaced with defaults.
+
 ## Boundaries
 
 ```text

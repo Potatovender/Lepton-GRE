@@ -1,6 +1,6 @@
 # Release Readiness
 
-Checked on 2026-09-09 for `20260909-editor-context`. This supersedes the
+Checked on 2026-09-10 for `20260910-more-data-hsv`. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -12,12 +12,22 @@ version/commit is in [release.json](https://potatovender.github.io/Lepton-GRE/re
 A query string alone does not publish new code.
 
 The Pages workflow now installs locked dependencies and runs verification before
-uploading an explicit 36-file public artifact. Deploy depends on that build of the
+uploading an explicit 37-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Corrections
 
+- The type chooser has a More data catalog, including points and HSV colours.
+  HSV supports wrapping hue in degrees and clamped saturation/brightness, across
+  CPU/GLSL rendering, point colours, backgrounds, previews, and export. It shares
+  the RGB colour namespace and reference controls.
+- Reselecting a colour type no longer resets its formulas. RGB/HSV switching
+  keeps channel formulas in order; changing models reinterprets their units.
+- Empty expression/function/slider/boundary/transparency entries and standalone
+  comments survive text import. Comments before points/folders and at folder
+  endings retain their position. Unknown background/point colour IDs stay in the
+  source and are flagged instead of silently being replaced with defaults.
 - Horizontal equation scrolling no longer follows MathQuill's offscreen hidden
   textarea on every input. It stays fixed while a caret has room, and only moves
   enough to reveal an out-of-view caret. Pointer drag-scroll handlers no longer
@@ -72,9 +82,14 @@ screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Verification
 
-- **154** runtime/model/grammar checks, **17** syntax unit tests, and **11**
+- **160** runtime/model/grammar checks, **17** syntax unit tests, and **11**
   standalone GPU-driver tests passed.
 - All **9** maintained sample files passed current-syntax migration checks.
+- All nine sample sources remain canonically identical after repeated import/export
+  cycles, with no dropped declarations. Mixed RGB/HSV scenes retain comments,
+  folders, references, and incomplete entries through round trips and local saves.
+- HSV reference tests cover all six hue sectors, negative/multiple-turn hue,
+  saturation/brightness clamping, mapped draw coordinates, and backgrounds.
 - Build, tests, and TypeScript declaration/configuration checks passed. Production JavaScript is
   exercised by tests; this does not claim a full `checkJs` type check.
 - Chromium: landing, blank editor, all **8** gallery scenes, favicon URLs, sample

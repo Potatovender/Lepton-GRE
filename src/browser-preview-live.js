@@ -1,6 +1,7 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260909-editor-context";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260909-editor-context";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260909-editor-context";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260910-more-data-hsv";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260910-more-data-hsv";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260910-more-data-hsv";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260910-more-data-hsv";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -45,7 +46,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260909-editor-context";
+const APP_VERSION = "20260910-more-data-hsv";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -164,6 +165,7 @@ const HELP_TEXT = {
   text: "Text mode shows the whole Lepton scene as plain text. It is useful for copying, pasting, sharing, and bulk edits.",
   functions: "The Data workspace holds values, colours, boundaries, transparencies, draw layers, points, folders, and comments in one reorderable list.",
   colors: "Colours evaluate red, green, and blue expressions at every coordinate. For example, colour rgb = 255~80+20sin(x)~40 uses one expression per channel.",
+  hsvColors: "HSV colours evaluate hue in degrees (wrapping every 360), saturation, and value (brightness). Saturation and value are clamped to 0 to 1. Like RGB colours, x is the draw value and y is the graph's y coordinate.",
   restrictions: "Boundaries are formulas that define where a layer is drawn. Choose greater than or equal to zero or less than or equal to zero, and combine named boundaries with and, or, not, xand, or xor.",
   draws: "Draw layers always choose a value to render. Add colour, boundary, or transparency components only when needed; their displayed order is preserved.",
   settings: "Settings control the viewport, recursion depth, angle mode, and optional solid background color.",
@@ -205,7 +207,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 1: Create data",
-    body: "The Data workspace holds everything except settings. Use New line to create a value, colour, boundary, transparency, draw layer, folder, or comment. Values can be expressions, sliders, or functions, and folders can organize any related entries without changing compilation."
+    body: "The Data workspace holds everything except settings. New line adds an expression; its ... menu chooses another type. More data opens the complete catalog, including points and HSV colours. Values can be expressions, sliders, or functions, and folders can organize related entries without changing compilation."
   },
   {
     mode: "standard",
@@ -217,7 +219,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "colors",
     title: "Step 3: Make a colour",
-    body: "Type a formula directly into each colour channel. Each formula can use x, y, values, sliders, or functions; the three channels are separated by ~ in Text mode."
+    body: "Type a formula directly into each colour channel. RGB uses red, green, and blue from 0 to 255. More data also offers HSV: hue in degrees wrapping every 360, saturation and brightness clamped to 0 to 1. Both use ~ between channels in Text mode. In a draw layer, x is the drawn value and y is the graph's vertical coordinate."
   },
   {
     mode: "standard",
@@ -235,7 +237,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "draws",
     title: "Step 6: Add points and structure",
-    body: "Points can be fixed or draggable, use a colour, show their coordinates, and sample a linked function. Folders, comments, drag handles, search, filters, and sorting help keep larger scenes understandable without changing how they compile."
+    body: "Choose More data, then Point. Points can be fixed or draggable, use an RGB or HSV colour, show their coordinates, and sample a linked function. Folders, comments, drag handles, search, filters, and sorting help keep larger scenes understandable without changing how they compile."
   },
   {
     mode: "standard",
@@ -547,6 +549,7 @@ function orderedDataEntries(target = scene) {
 
 function dataSubtype(entry, kind) {
   if (isCommentEntry(entry)) return "comment";
+  if (kind === "colors" && entry.model === "hsv") return "colourhsv";
   if (kind === "functions") return normalizeFunctionEntry(entry).kind;
   if (kind === "folders") return "folder";
   if (kind === "points") return "point";
@@ -556,11 +559,13 @@ function dataSubtype(entry, kind) {
 function matchesDataTypeFilter(kind, entry, type) {
   if (type === "all") return true;
   if (type === "values") return kind === "functions" && !isCommentEntry(entry);
+  if (type === "colors") return kind === "colors" && !isCommentEntry(entry);
   return dataSubtype(entry, kind) === type;
 }
 
 function dataTypeLabel(kind, entry) {
   if (isCommentEntry(entry)) return "comment";
+  if (kind === "colors" && entry.model === "hsv") return "colour HSV";
   if (kind === "functions") {
     const subtype = normalizeFunctionEntry(entry).kind;
     if (subtype === "slider") return "value · slider";
@@ -864,7 +869,7 @@ function textStatementSignatures(source) {
     if (match) { signatures.push(`slider:${match[1]}`); continue; }
     match = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*(?:\(|=)/i);
     if (match) { signatures.push(`function:${match[1]}`); continue; }
-    match = line.match(/^(?:colour|color)\s+([A-Za-z_]\w*)\s*=/i);
+    match = line.match(/^(?:colour|color)(?:hsv)?\s+([A-Za-z_]\w*)\s*=/i);
     if (match) { signatures.push(`colour:${match[1]}`); continue; }
     match = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=/i);
     if (match) { signatures.push(`boundary:${match[1]}`); continue; }
@@ -1292,11 +1297,8 @@ function folderIcon() {
 function dataRowContent(kind, entry, index, diagnostic = null) {
   if (kind === "functions") return functionRowContent(entry, index);
   if (kind === "colors") {
-    return `
-      ${colorChannelRow(index, "red", "red channel", entry.red, diagnostic?.channels?.red)}
-      ${colorChannelRow(index, "green", "green channel", entry.green, diagnostic?.channels?.green)}
-      ${colorChannelRow(index, "blue", "blue channel", entry.blue, diagnostic?.channels?.blue)}
-    `;
+    const labels = { red: "red channel", green: "green channel", blue: "blue channel", hue: "hue (degrees)", saturation: "saturation", value: "brightness" };
+    return colourChannelKeys(entry).map((key) => colorChannelRow(index, key, labels[key], entry[key], diagnostic?.channels?.[key])).join("");
   }
   if (kind === "restrictions") {
     const comparison = entry.checkSmaller ? "lte" : "gte";
@@ -1559,6 +1561,7 @@ function listControlBar(kind, label) {
             ["slider", "Sliders"],
             ["function", "Functions"],
             ["colors", "Colours"],
+            ["colourhsv", "HSV colours"],
             ["restrictions", "Boundaries"],
             ["transparencies", "Transparencies"],
             ["draws", "Draw layers"],
@@ -1600,7 +1603,7 @@ function visibleDataEntries() {
     if (included.size) indexed = indexed.filter((item) => included.has(dataItemKey(item)));
     else selectedDependencyEntry = null;
   } else if (state.sort === "group") {
-    const groups = { variable: 0, slider: 1, function: 2, colors: 3, restrictions: 4, transparencies: 5, draws: 6, folder: 7, comment: 8 };
+    const groups = { variable: 0, slider: 1, function: 2, colors: 3, colourhsv: 3, restrictions: 4, transparencies: 5, draws: 6, folder: 7, comment: 8 };
     indexed.sort((left, right) => (groups[dataSubtype(left.entry, left.kind)] ?? 9) - (groups[dataSubtype(right.entry, right.kind)] ?? 9));
   } else if (state.sort !== "custom") {
     indexed.sort((left, right) => {
@@ -1681,7 +1684,7 @@ function directDependencyKeys(item, ordered, byId) {
     const normalized = normalizeFunctionEntry(entry);
     addExpression(normalized.expression, normalized.kind === "function" ? new Set(normalized.params) : new Set());
   }
-  else if (kind === "colors") [entry.red, entry.green, entry.blue].forEach((source) => addExpression(source));
+  else if (kind === "colors") colourChannelKeys(entry).forEach((key) => addExpression(entry[key]));
   else if (kind === "restrictions" || kind === "transparencies") addExpression(entry.expression);
   else if (kind === "points") {
     addExpression(entry.x);
@@ -1901,22 +1904,66 @@ function entryTypeMenu(kind, index, label) {
     <details class="entry-type-menu" data-type-menu="${base}">
       <summary class="entry-type-label" aria-label="Change data type">${escapeHtml(label)}</summary>
       <div class="entry-type-popover">
-        <div class="new-entry-group">
-          <span class="new-entry-heading">Value</span>
-          <button data-change-entry-kind="${base}.variable" type="button">Expression</button>
-          <button data-change-entry-kind="${base}.slider" type="button">Slider</button>
-          <button data-change-entry-kind="${base}.function" type="button">Function</button>
-        </div>
-        <div class="new-entry-divider" role="separator"></div>
-        <button data-change-entry-kind="${base}.colors" type="button">Colour</button>
-        <button data-change-entry-kind="${base}.restrictions" type="button">Boundary</button>
-        <button data-change-entry-kind="${base}.transparencies" type="button">Transparency</button>
-        <button data-change-entry-kind="${base}.points" type="button">Point</button>
-        <div class="new-entry-divider" role="separator"></div>
-        <button data-change-entry-kind="${base}.draws" type="button">Draw layer</button>
+        ${dataTypeChoices(base)}
       </div>
     </details>
   `;
+}
+
+const DATA_TYPE_CATALOG = [
+  { type: "folders", label: "Folder", createOnly: true },
+  { type: "comment", label: "Comment", createOnly: true },
+  { type: "variable", label: "Expression", help: "variableType" },
+  { type: "slider", label: "Slider", help: "sliderType" },
+  { type: "function", label: "Function", help: "functionType" },
+  { type: "colors", label: "Colour (RGB)", help: "colors" },
+  { type: "restrictions", label: "Boundary", help: "restrictions" },
+  { type: "transparencies", label: "Transparency" },
+  { type: "draws", label: "Draw layer", help: "draws" },
+  { type: "points", label: "Point", more: true },
+  { type: "colourhsv", label: "Colour (HSV)", help: "hsvColors", more: true }
+];
+
+function dataTypeChoices(base = "") {
+  const button = ({ type, label, help, createOnly }) => {
+    const attrs = base ? `data-change-entry-kind="${base}.${type}"`
+      : type === "comment" ? 'data-add-comment="functions" data-comment-target="data"'
+      : FUNCTION_ENTRY_KINDS.has(type) ? `data-add="functions" data-entry-kind-choice="${type}"`
+      : `data-add="${type}"`;
+    const disabled = base && createOnly;
+    const title = disabled ? "Use New line to add this type" : HELP_TEXT[help] ?? label;
+    const separator = ["variable", "colors", "draws"].includes(type) ? '<div class="new-entry-divider" role="separator"></div>' : "";
+    return `${separator}<button ${attrs} ${disabled ? "disabled" : ""} title="${escapeHtml(title)}" type="button">${label}</button>`;
+  };
+  return `<div data-type-page="quick">
+    ${DATA_TYPE_CATALOG.filter((item) => !item.more && (!base || !item.createOnly)).map(button).join("")}
+    <div class="new-entry-divider" role="separator"></div>
+    <button data-more-data="true" type="button">More data...</button>
+  </div>
+  <div data-type-page="all" hidden>
+    <button data-more-data="false" type="button">Back</button>
+    <span class="new-entry-heading">All data types</span>
+    ${DATA_TYPE_CATALOG.map(button).join("")}
+  </div>`;
+}
+
+function positionDataTypeMenu(menu) {
+  const popover = menu.querySelector(".entry-type-popover, .new-entry-popover");
+  if (!popover) return;
+  const anchor = menu.querySelector("summary").getBoundingClientRect();
+  const screen = window.visualViewport;
+  const left = screen?.offsetLeft ?? 0;
+  const top = screen?.offsetTop ?? 0;
+  const width = screen?.width ?? window.innerWidth;
+  const height = screen?.height ?? window.innerHeight;
+  const below = top + height - anchor.bottom - 12;
+  const above = anchor.top - top - 12;
+  const down = below >= Math.min(320, height / 2) || below >= above;
+  popover.style.maxHeight = `${Math.max(60, down ? below : above)}px`;
+  popover.style.maxWidth = `${width - 16}px`;
+  const bounds = popover.getBoundingClientRect();
+  popover.style.left = `${Math.max(left + 8, Math.min(anchor.left, left + width - bounds.width - 8))}px`;
+  popover.style.top = `${down ? anchor.bottom + 4 : Math.max(top + 8, anchor.top - bounds.height - 4)}px`;
 }
 
 function addDataRow() {
@@ -1929,22 +1976,7 @@ function addDataRow() {
       <details class="new-entry-menu" data-new-entry-menu>
         <summary class="new-entry-ellipsis" aria-label="Choose line type">...</summary>
         <div class="new-entry-popover">
-          <button data-add="folders" type="button">${folderIcon()} Folder</button>
-          <button data-add-comment="functions" data-comment-target="data" type="button">${commentIcon()} Comment</button>
-          <div class="new-entry-divider" role="separator"></div>
-          <div class="new-entry-group">
-            <span class="new-entry-heading">Value</span>
-            <button data-add="functions" data-entry-kind-choice="variable" type="button">Expression</button>
-            <button data-add="functions" data-entry-kind-choice="slider" type="button">Slider</button>
-            <button data-add="functions" data-entry-kind-choice="function" type="button">Function</button>
-          </div>
-          <div class="new-entry-divider" role="separator"></div>
-          <button data-add="colors" type="button">Colour</button>
-          <button data-add="restrictions" type="button">Boundary</button>
-          <button data-add="transparencies" type="button">Transparency</button>
-          <div class="new-entry-divider" role="separator"></div>
-          <button data-add="draws" type="button">Draw layer</button>
-          <button data-add="points" type="button">Point</button>
+          ${dataTypeChoices()}
         </div>
       </details>
     </div>
@@ -2370,6 +2402,21 @@ function bindEvents() {
       renderApp();
     });
   });
+  root.querySelectorAll("[data-more-data]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const menu = button.closest("details");
+      const page = button.dataset.moreData === "true" ? "all" : "quick";
+      menu.querySelectorAll("[data-type-page]").forEach((element) => { element.hidden = element.dataset.typePage !== page; });
+      positionDataTypeMenu(menu);
+      menu.querySelector(`[data-type-page="${page}"] button:not(:disabled)`)?.focus();
+    });
+  });
+  root.querySelectorAll(".new-entry-menu, .entry-type-menu").forEach((menu) => {
+    menu.addEventListener("toggle", () => { if (menu.open) positionDataTypeMenu(menu); });
+    menu.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") { menu.open = false; menu.querySelector("summary")?.focus(); event.stopPropagation(); }
+    });
+  });
   root.querySelectorAll("[data-slider-value]").forEach((slider) => {
     slider.addEventListener("input", () => {
       const index = Number(slider.dataset.sliderValue);
@@ -2667,7 +2714,7 @@ function bindEvents() {
       listControls.data.sort = "custom";
       listControls.data.type = "all";
       const target = addEntry(kind, kind === "settingsComments" ? "comment" : "data");
-      if (target && kind === "functions" && button.dataset.entryKindChoice) {
+      if (target && target.kind === "functions" && button.dataset.entryKindChoice) {
         scene.functions[target.index].kind = button.dataset.entryKindChoice;
       }
       recordSceneHistory(before);
@@ -3581,7 +3628,7 @@ function renameSceneReferences(collection, oldId, newId) {
   if (collection === "functions") {
     scene.colors.forEach((entry) => {
       if (isCommentEntry(entry)) return;
-      entry.red = replace(entry.red); entry.green = replace(entry.green); entry.blue = replace(entry.blue);
+      colourChannelKeys(entry).forEach((key) => { entry[key] = replace(entry[key]); });
     });
     scene.restrictions.forEach((entry) => { if (!isCommentEntry(entry)) entry.expression = replace(entry.expression); });
     scene.transparencies.forEach((entry) => { if (!isCommentEntry(entry)) entry.expression = replace(entry.expression); });
@@ -3930,13 +3977,21 @@ function resolveColorEntry(id) {
     (id === DEFAULT_DRAW_COLOR.id || LEGACY_DEFAULT_COLOR_IDS.has(id) ? DEFAULT_DRAW_COLOR : null);
 }
 
+function compileColour(entry) {
+  const channels = colourChannelKeys(entry).map((key) => compileExpression(entry[key]));
+  return (x, y, env) => {
+    const values = channels.map((evaluate) => evaluate(x, y, env));
+    return (entry.model === "hsv" ? hsvToRgb(...values) : values).map(channel);
+  };
+}
+
 function normalizedBoundaryExpression(entry) {
-  const expression = String(entry?.expression ?? "1").trim() || "1";
+  const expression = String(entry?.expression ?? "1").trim();
   return entry?.checkSmaller ? `0-(${expression})` : expression;
 }
 
 function legacyBoundaryExpression(expression, flag = "False") {
-  const normalized = convertDivisionsToFrac(String(expression ?? "1").trim() || "1");
+  const normalized = convertDivisionsToFrac(String(expression ?? "1").trim());
   return { expression: normalized, checkSmaller: parseLeptonBoolean(flag) };
 }
 
@@ -4142,7 +4197,7 @@ function convertedEntryForKind(targetKind, sourceEntry, targetSubtype = "variabl
 
 function changeDataEntryKind(fromKind, fromIndex, target) {
   if (!DATA_ENTRY_KINDS.includes(fromKind) || !scene[fromKind]?.[fromIndex]) return null;
-  const targetKind = DATA_ENTRY_KINDS.includes(target) ? target : "functions";
+  const targetKind = target === "colourhsv" ? "colors" : DATA_ENTRY_KINDS.includes(target) ? target : "functions";
   const targetSubtype = DATA_ENTRY_KINDS.includes(target) ? "variable" : target;
   if (fromKind === "functions" && targetKind === "functions") {
     if (!FUNCTION_ENTRY_KINDS.has(targetSubtype)) return null;
@@ -4152,9 +4207,25 @@ function changeDataEntryKind(fromKind, fromIndex, target) {
     return { kind: "functions", index: fromIndex };
   }
   const sourceEntry = scene[fromKind][fromIndex];
+  // Selecting an existing type must never reset its data. Switching colour models
+  // retains each channel formula in order, with the new model's units/meaning.
+  if (fromKind === "colors" && targetKind === "colors") {
+    const values = colourChannelKeys(sourceEntry).map((key) => sourceEntry[key]);
+    colourChannelKeys(sourceEntry).forEach((key) => { delete sourceEntry[key]; });
+    if (target === "colourhsv") sourceEntry.model = "hsv";
+    else delete sourceEntry.model;
+    colourChannelKeys(sourceEntry).forEach((key, index) => { sourceEntry[key] = values[index]; });
+    return { kind: fromKind, index: fromIndex };
+  }
+  if (fromKind === targetKind) return { kind: fromKind, index: fromIndex };
   const uid = ensureEntryUid(sourceEntry, fromKind);
   const converted = convertedEntryForKind(targetKind, sourceEntry, targetSubtype);
   if (!converted) return null;
+  if (target === "colourhsv") {
+    converted.model = "hsv";
+    [converted.hue, converted.saturation, converted.value] = [converted.red, converted.green, converted.blue];
+    delete converted.red; delete converted.green; delete converted.blue;
+  }
   converted._uid = uid;
   const ref = scene.dataOrder?.find((item) => item.kind === fromKind && item.uid === uid);
   scene[fromKind].splice(fromIndex, 1);
@@ -4167,9 +4238,16 @@ function changeDataEntryKind(fromKind, fromIndex, target) {
 }
 
 function addEntry(kind, type = "data") {
+  const hsv = kind === "colourhsv";
+  if (hsv) kind = "colors";
   if (!Array.isArray(scene[kind])) return null;
   const entry = type === "comment" || kind === "settingsComments" ? createCommentEntry("") : defaultEntryForKind(kind);
   if (!entry) return null;
+  if (hsv) {
+    entry.model = "hsv";
+    entry.hue = "0"; entry.saturation = "1"; entry.value = "1";
+    delete entry.red; delete entry.green; delete entry.blue;
+  }
   scene[kind].push(entry);
   if (DATA_ENTRY_KINDS.includes(kind)) {
     ensureEntryUid(entry, kind);
@@ -4324,9 +4402,7 @@ function deleteEntry(kind, index) {
     scene.points.forEach((point) => { if (!isCommentEntry(point) && point.linkedFunctionId === removed.id) point.linkedFunctionId = ""; });
     scene.colors.forEach((color) => {
       if (isCommentEntry(color)) return;
-      if (color.red === removed.id) color.red = replacement;
-      if (color.green === removed.id) color.green = replacement;
-      if (color.blue === removed.id) color.blue = replacement;
+      colourChannelKeys(color).forEach((key) => { if (color[key] === removed.id) color[key] = replacement; });
     });
     scene.restrictions.forEach((restriction) => {
       if (isCommentEntry(restriction)) return;
@@ -4440,7 +4516,7 @@ function drawPointsOverlay(ctx, width, height, vp) {
     if (!coordinates) continue;
     const [x, y] = coordinates;
     const color=resolveColorEntry(point.colorId??"default"); let rgb=[37,99,235];
-    if(color){try{rgb=[compileExpression(color.red)(x,y,env),compileExpression(color.green)(x,y,env),compileExpression(color.blue)(x,y,env)].map(channel);}catch{} }
+    if(color){try{rgb=compileColour(color)(x,y,env);}catch{} }
     ctx.beginPath();ctx.arc(sx(x),sy(y),6,0,Math.PI*2);ctx.fillStyle=`rgb(${rgb.join(",")})`;ctx.fill();ctx.strokeStyle="#fff";ctx.stroke();
     if(point.showLabel){
       const linked=pointLinkedValue(point,env); const parts=[`${point.id} = (${formatPointDisplayNumber(x)}, ${formatPointDisplayNumber(y)})`];
@@ -4507,18 +4583,14 @@ function renderSceneCpuInto(canvas, options = {}) {
     if (!fn || !color || !restriction || !transparency) continue;
 
     let evaluate;
-    let red;
-    let green;
-    let blue;
+    let evaluateColour;
     let boundary;
     let transparencyValue;
     let drawArguments = [];
     try {
       evaluate = compileExpression(fn.expression, fn.kind === "function" ? new Set(fn.params) : new Set());
       drawArguments = drawArgumentsForFunction(draw, fn).map((argument) => compileExpression(argument));
-      red = compileExpression(color.red);
-      green = compileExpression(color.green);
-      blue = compileExpression(color.blue);
+      evaluateColour = compileColour(color);
       boundary = compileExpression(restriction.expression);
       transparencyValue = compileExpression(transparency.expression);
     } catch {
@@ -4545,7 +4617,7 @@ function renderSceneCpuInto(canvas, options = {}) {
         const opacity = 1 - clampNumber(transparencyValue(z, y, env), 0, 1);
         if (!Number.isFinite(opacity) || opacity <= 0) continue;
         ctx.globalAlpha = opacity;
-        ctx.fillStyle = `rgb(${channel(red(z, y, env))}, ${channel(green(z, y, env))}, ${channel(blue(z, y, env))})`;
+        ctx.fillStyle = `rgb(${evaluateColour(z, y, env).join(",")})`;
         ctx.fillRect(xi * pixelWidth, cssHeight - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
       }
     }
@@ -4642,10 +4714,7 @@ function resolveBackgroundColor() {
   if (!color) return fallback;
   try {
     const env = buildRuntimeEnv(sceneFunctionEnv());
-    const red = compileExpression(color.red)(0, 0, env);
-    const green = compileExpression(color.green)(0, 0, env);
-    const blue = compileExpression(color.blue)(0, 0, env);
-    return { custom: true, rgb: [channel(red), channel(green), channel(blue)] };
+    return { custom: true, rgb: compileColour(color)(0, 0, env) };
   } catch {
     return fallback;
   }
@@ -4676,9 +4745,7 @@ function buildFragmentShader() {
       if (!fn || !color || !restriction || !transparency) return null;
       if (
         validateExpression(fn.expression, env, [fn.id], fn.kind === "function" ? new Set(fn.params) : new Set()).status === "invalid" ||
-        validateExpression(color.red, env).status === "invalid" ||
-        validateExpression(color.green, env).status === "invalid" ||
-        validateExpression(color.blue, env).status === "invalid" ||
+        colourChannelKeys(color).some((key) => validateExpression(color[key], env).status === "invalid") ||
         validateExpression(restriction.expression, boundaryEnv).status === "invalid" ||
         validateExpression(transparency.expression, env).status === "invalid"
       ) {
@@ -4686,11 +4753,11 @@ function buildFragmentShader() {
       }
       try {
         const localMap = drawLocalGlslMap(draw, fn, env, dynamicMap);
+        const channels = colourChannelKeys(color).map((key) => expressionToGlsl(color[key], env, "z", [], scene.settings.angleMode, dynamicMap));
+        const colourVector = `vec3(${channels.join(", ")})`;
         return {
           expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, localMap),
-          red: expressionToGlsl(color.red, env, "z", [], scene.settings.angleMode, dynamicMap),
-          green: expressionToGlsl(color.green, env, "z", [], scene.settings.angleMode, dynamicMap),
-          blue: expressionToGlsl(color.blue, env, "z", [], scene.settings.angleMode, dynamicMap),
+          rgb: color.model === "hsv" ? `leptonHsvToRgb(${colourVector})` : `clamp(${colourVector} / 255.0, 0.0, 1.0)`,
           bound: expressionToGlsl(restriction.expression, boundaryEnv, null, [], scene.settings.angleMode, dynamicMap),
           transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode, dynamicMap),
           boundCheck: "boundValue >= 0.0"
@@ -4709,7 +4776,7 @@ function buildFragmentShader() {
         float boundValue = ${layer.bound};
         if (${layer.boundCheck}) {
           float z = ${layer.expr};
-          vec3 layerColor = clamp(vec3(${layer.red}, ${layer.green}, ${layer.blue}) / 255.0, 0.0, 1.0);
+          vec3 layerColor = ${layer.rgb};
           float opacity = 1.0 - clamp(${layer.transparency}, 0.0, 1.0);
           color = mix(color, layerColor, opacity);
           painted = true;
@@ -4729,6 +4796,7 @@ function buildFragmentShader() {
       uniform float u_random_seed;
       uniform vec3 u_background;
       ${timeUniforms}
+      ${HSV_GLSL}
 
     float frac(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
     float ln(float value) { return value > 0.0 ? log(value) : 0.0; }
@@ -5567,6 +5635,9 @@ function validateScene() {
     summary: "GLSL ready"
   };
   diagnostics.settings = [viewportDiagnostic()];
+  if (scene.settings.backgroundColor !== "0" && !dataEntries(scene.colors).some((entry) => entry.id === scene.settings.backgroundColor)) {
+    diagnostics.settings.push({ status: "invalid", message: `Missing background colour: ${scene.settings.backgroundColor}` });
+  }
   const timeVariableCount = scene.functions
     .filter((entry) => !isCommentEntry(entry))
     .map(normalizeFunctionEntry)
@@ -5610,17 +5681,11 @@ function validateScene() {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     const idResult = validateEntryId(entry.id, "Color", env, false);
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Color", duplicateIds.colors);
-    const channels = {
-      red: validateExpression(entry.red, env),
-      green: validateExpression(entry.green, env),
-      blue: validateExpression(entry.blue, env)
-    };
+    const channels = Object.fromEntries(colourChannelKeys(entry).map((key) => [key, validateExpression(entry[key], env)]));
     const combined = combineDiagnostics([
       duplicateDiagnostic,
       idResult,
-      channels.red,
-      channels.green,
-      channels.blue
+      ...Object.values(channels)
     ]);
     return { ...combined, channels };
   });
@@ -5658,9 +5723,7 @@ function validateScene() {
     const affected = combineDiagnostics([
       ...(fn.kind === "function" ? drawArgumentsForFunction(entry, fn).map((argument) => validateExpression(argument, drawEnv)) : []),
       validateExpression(fn.expression, drawEnv, [fn.id], fn.kind === "function" ? new Set(fn.params) : new Set()),
-      validateExpression(color.red, drawEnv),
-      validateExpression(color.green, drawEnv),
-      validateExpression(color.blue, drawEnv),
+      ...colourChannelKeys(color).map((key) => validateExpression(color[key], drawEnv)),
       validateExpression(restriction.expression, drawBoundaryEnv),
       validateExpression(transparency.expression, drawEnv)
     ]);
@@ -5674,16 +5737,20 @@ function validateScene() {
     duplicateIdDiagnostic(entry.id ?? "", "Folder", duplicateIds.folders),
     validateFolderName(entry.id ?? "")
   ]));
-  diagnostics.points = (scene.points ?? []).map((entry) => combineDiagnostics([
-    duplicateIdDiagnostic(entry.id ?? "", "Point", duplicateIds.points),
-    validateEntryId(entry.id ?? "", "Point", env, false),
-    validateExpression(entry.x, env),
-    validateExpression(entry.y, env),
-    resolveColorEntry(entry.colorId ?? "default")
-      ? { status: "valid", message: "Point color is valid" }
-      : { status: "invalid", message: `Missing point color: ${entry.colorId}` },
-    pointLinkDiagnostic(entry, env)
-  ]));
+  diagnostics.points = (scene.points ?? []).map((entry) => {
+    if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
+    const color = resolveColorEntry(entry.colorId ?? "default");
+    return combineDiagnostics([
+      duplicateIdDiagnostic(entry.id ?? "", "Point", duplicateIds.points),
+      validateEntryId(entry.id ?? "", "Point", env, false),
+      validateExpression(entry.x, env),
+      validateExpression(entry.y, env),
+      color
+        ? combineDiagnostics(colourChannelKeys(color).map((key) => validateExpression(color[key], env)))
+        : { status: "invalid", message: `Missing point color: ${entry.colorId}` },
+      pointLinkDiagnostic(entry, env)
+    ]);
+  });
   diagnostics.folders = aggregateFolderDiagnostics(diagnostics);
 
   const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.transparencies, ...diagnostics.draws, ...diagnostics.points, ...diagnostics.folders, ...diagnostics.settings];
@@ -7994,7 +8061,7 @@ function exportFunctionEntry(rawEntry, section = "functions") {
 function exportColorEntry(entry) {
   if (isCommentEntry(entry)) return exportStandaloneComment(entry, "colors");
   return appendInlineComment(
-    `colour ${entry.id} = ${textModeExpression(entry.red)}~${textModeExpression(entry.green)}~${textModeExpression(entry.blue)}`,
+    `${entry.model === "hsv" ? "colourhsv" : "colour"} ${entry.id} = ${colourChannelKeys(entry).map((key) => textModeExpression(entry[key])).join("~")}`,
     entry.comment
   );
 }
@@ -8026,6 +8093,7 @@ function exportDrawEntry(entry) {
 }
 
 function exportPointEntry(entry) {
+  if (isCommentEntry(entry)) return exportStandaloneComment(entry, "points");
   const properties = [
     `draggable=${formatLeptonBoolean(entry.draggable)}`,
     `visible=${formatLeptonBoolean(!entry.hidden)}`,
@@ -8169,7 +8237,6 @@ function importScene(raw) {
   const pendingComments = [];
   const folderStack = [];
   const queueStandaloneComment = (comment) => {
-    if (!String(comment ?? "").trim()) return;
     pendingComments.push(parseStandaloneComment(comment, null));
   };
   const flushPendingComments = (section) => {
@@ -8185,15 +8252,16 @@ function importScene(raw) {
   };
 
   for (const rawLine of logicalLeptonLines(raw)) {
-    const { code, comment } = splitLeptonComment(rawLine);
+    const { code, comment, hasComment } = splitLeptonComment(rawLine);
     const line = code.trim();
     if (!line) {
-      queueStandaloneComment(comment);
+      if (hasComment) queueStandaloneComment(comment);
       continue;
     }
     if (line === "~~~~~") continue;
     const folderOpen = line.match(/^folder\s+(.+?)\s*=\s*\{$/i);
     if (folderOpen) {
+      flushPendingComments("functions");
       next._importParentUid = folderStack.at(-1) ?? "";
       const folder = pushDataEntry(next, "folders", withInlineComment({ id: folderOpen[1].trim(), collapsed: false }, comment));
       folderStack.push(folder._uid);
@@ -8201,6 +8269,7 @@ function importScene(raw) {
       continue;
     }
     if (line === "}") {
+      flushPendingComments(currentCommentSection);
       folderStack.pop();
       next._importParentUid = folderStack.at(-1) ?? "";
       continue;
@@ -8242,14 +8311,14 @@ function importScene(raw) {
         if (comment.trim()) next.settingLineComments[assignment[1]] = comment.trim();
       }
     } else if (/^(variable|expression)\s+/i.test(line)) {
-      const assignment = line.match(/^(?:variable|expression)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      const assignment = line.match(/^(?:variable|expression)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
         flushPendingComments("functions");
         currentCommentSection = "functions";
         pushDataEntry(next, "functions", withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
       }
     } else if (/^(slider|time)\s+/i.test(line)) {
-      const assignment = line.match(/^(slider|time)(?:\s+(bounded_looped|bounded looped|bounded|unbounded))?\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      const assignment = line.match(/^(slider|time)(?:\s+(bounded_looped|bounded looped|bounded|unbounded))?\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
         const time = assignment[1].toLowerCase() === "time";
         const timeMode = normalizeTimeMode(assignment[2]);
@@ -8275,7 +8344,7 @@ function importScene(raw) {
         }, comment));
       }
     } else if (/^(function|map)\s+/i.test(line)) {
-      const callAssignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*(expression|point))?\s*=\s*(.+)$/i);
+      const callAssignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*(expression|point))?\s*=\s*(.*)$/i);
       if (callAssignment) {
         flushPendingComments("functions");
         currentCommentSection = "functions";
@@ -8287,23 +8356,25 @@ function importScene(raw) {
           expression: convertDivisionsToFrac(callAssignment[4].trim())
         }, comment));
       } else {
-        const assignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+        const assignment = line.match(/^(?:function|map)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
         if (assignment) {
           flushPendingComments("functions");
           currentCommentSection = "functions";
           pushDataEntry(next, "functions", withInlineComment({ id: assignment[1], kind: "variable", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
         }
       }
-    } else if (/^(colour|color)\s+/i.test(line)) {
-      const assignment = line.match(/^(?:colour|color)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+    } else if (/^(colour|color)(?:hsv)?\s+/i.test(line)) {
+      const assignment = line.match(/^(?:colour|color)(hsv)?\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
-        const [red = "0", green = "0", blue = "0"] = assignment[2].split("~").map((part) => part.trim());
+        const entry = { id: assignment[2], ...(assignment[1] ? { model: "hsv" } : {}) };
+        const parts = assignment[3].split("~").map((part) => part.trim());
+        colourChannelKeys(entry).forEach((key, index) => { entry[key] = parts[index] ?? "0"; });
         flushPendingComments("colors");
         currentCommentSection = "colors";
-        pushDataEntry(next, "colors", withInlineComment({ id: assignment[1], red, green, blue }, comment));
+        pushDataEntry(next, "colors", withInlineComment(entry, comment));
       }
     } else if (/^(boundary|restriction)\s+/i.test(line)) {
-      const assignment = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      const assignment = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
         const propertyBlock = splitTrailingProperties(assignment[2], new Set(["when"]));
         const [expression = "1", flag = "False"] = propertyBlock.body.split("~").map((part) => part.trim());
@@ -8314,7 +8385,7 @@ function importScene(raw) {
         pushDataEntry(next, "restrictions", withInlineComment({ id: assignment[1], ...boundary }, comment));
       }
     } else if (/^transparency\s+/i.test(line)) {
-      const assignment = line.match(/^transparency\s+([A-Za-z_]\w*)\s*=\s*(.+)$/i);
+      const assignment = line.match(/^transparency\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
         flushPendingComments("transparencies");
         currentCommentSection = "transparencies";
@@ -8352,6 +8423,8 @@ function importScene(raw) {
         pushDataEntry(next, "draws", withInlineComment({ equationId: target.equationId, arguments: target.arguments, components, hidden }, comment));
       }
     } else if (/^point\s+/i.test(line)) {
+      flushPendingComments("points");
+      currentCommentSection = "points";
       const modern = line.match(/^point\s+([A-Za-z_]\w*)\s*=\s*\[([\s\S]+)\]\s*(\{[\s\S]*\})?$/i);
       if (modern) {
         const coordinates = splitTopLevelText(modern[2], ",").map((part) => part.trim());
@@ -8379,15 +8452,13 @@ function importScene(raw) {
 
 function normalizeSceneReferences(next) {
   next.points.forEach((point) => {
-    if (!point.colorId || (point.colorId !== "default" && !dataEntries(next.colors).some((color) => color.id === point.colorId))) point.colorId = "default";
+    if (isCommentEntry(point)) return;
+    if (point.colorId == null) point.colorId = "default";
     point.hidden = Boolean(point.hidden);
     point.linkedFunctionId = String(point.linkedFunctionId ?? "");
     point.showLabel = Boolean(point.showLabel);
   });
   next.draws = next.draws.map((draw) => isCommentEntry(draw) ? draw : normalizeDrawEntry(draw));
-  if (next.settings.backgroundColor !== "0" && !dataEntries(next.colors).some((color) => color.id === next.settings.backgroundColor)) {
-    next.settings.backgroundColor = "0";
-  }
   ensureSceneDataOrder(next);
   return next;
 }
@@ -8673,7 +8744,7 @@ function collectTextDeclaredIdentifiers(source) {
   const ids = new Set();
   String(source ?? "").split("\n").forEach((line) => {
     const { code } = splitLeptonComment(line);
-    const declaration = code.match(/^\s*(?:variable|expression|slider|function|map|colour|color|boundary|restriction|transparency|point)\s+([A-Za-z_]\w*)/i);
+    const declaration = code.match(/^\s*(?:variable|expression|slider|function|map|colour(?:hsv)?|color(?:hsv)?|boundary|restriction|transparency|point)\s+([A-Za-z_]\w*)/i);
     if (declaration) ids.add(declaration[1]);
     const time = code.match(/^\s*time\s+(?:bounded|unbounded|bounded_looped)\s+([A-Za-z_]\w*)/i);
     if (time) ids.add(time[1]);
@@ -8691,7 +8762,7 @@ function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
   if (folder) {
     return `${escapeHtml(folder[1])}<span class="syntax-keyword">${folder[2]}</span>${escapeHtml(folder[3])}<span class="syntax-variable">${escapeHtml(folder[4])}</span><span class="syntax-operator">${escapeHtml(folder[5])}</span>${escapeHtml(folder[6])}`;
   }
-  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|map|colour|color|boundary|restriction|transparency|point)(\b)/i);
+  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|map|colour(?:hsv)?|color(?:hsv)?|boundary|restriction|transparency|point)(\b)/i);
   if (declaration) {
     const prefix = escapeHtml(declaration[1]);
     const keyword = declaration[2].toLowerCase();

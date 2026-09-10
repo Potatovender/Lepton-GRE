@@ -27,6 +27,14 @@ URL / saved graph / text input
 
 The canonical scene stores collections for values, colours, boundaries, transparency, draws, points, and folders. `dataOrder` owns root/nested ordering independently of the storage collections. Comments are entries or inline metadata so text and Standard views can round-trip without losing placement.
 
+RGB and HSV both live in `scene.colors`, sharing IDs and references. Legacy RGB
+records retain `red/green/blue`; HSV records use `model: "hsv"` with
+`hue/saturation/value`. `colourChannelKeys` in `src/math/colour.js` routes editing,
+validation, dependencies, renaming, serialization, and compilation over the
+appropriate channels. Its CPU and GLSL conversions agree on degree-based hue
+wrapping and saturation/value clamping. The UI's `DATA_TYPE_CATALOG` supplies both
+quick choices and the full More data list without changing the storage model.
+
 ## Ownership Boundaries
 
 - **HTML shells:** `index.html` and `app.html` contain metadata and initial loading states only.

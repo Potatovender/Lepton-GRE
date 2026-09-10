@@ -118,6 +118,7 @@ try {
     `expression eq = ${longValue}`,
     `function fn(q) = ${longValue}+q`,
     `colour c = ${longValue}~${longValue}~${longValue}`,
+    `colourhsv ch = ${longValue}~${longValue}~${longValue}`,
     `boundary b = ${longValue}`,
     `transparency tr = ${longValue}`,
     `point p = [${longValue},${longValue}]`
@@ -154,6 +155,110 @@ try {
   });
   console.log("ok - grouped powers and local constant shadowing produce the correct GPU pixels");
 
+  await page.evaluate(() => {
+    for (const [hsv, expected] of [
+      ["0~1~1", [255, 0, 0]], ["120~1~1", [0, 255, 0]],
+      ["240~1~1", [0, 0, 255]], ["-60~2~3", [255, 0, 255]],
+      ["720~1~1", [255, 0, 0]], ["30~0.5~0.8", [204, 153, 102]],
+      ["20~-1~0.5", [128, 128, 128]], ["20~1~-1", [0, 0, 0]],
+      ["120*x~1~1", [0, 255, 0]]
+    ]) {
+      const pixels = window.__leptonDebug.renderSceneToPixels(`expression eq = 1\ncolourhsv pigment = ${hsv}\ndraw(eq) {colour=pigment}`, 16, 16);
+      const rgb = Array.from(pixels.data.slice((8 * 16 + 8) * 4, (8 * 16 + 8) * 4 + 3));
+      if (rgb.some((value, i) => Math.abs(value - expected[i]) > 1)) throw new Error(`HSV ${hsv}: ${rgb}, expected ${expected}`);
+    }
+    const bg = window.__leptonDebug.renderSceneToPixels("set background_color = pigment\ncolourhsv pigment = 240~1~1", 16, 16);
+    if (bg.data[(8 * 16 + 8) * 4 + 2] !== 255) throw new Error("HSV background not rendered");
+  });
+  console.log("ok - HSV GPU pixels wrap hue, clamp S/V and map draw values correctly");
+
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${base}app.html?scene=expression%20eq%20%3D%20x`);
+    const chooser = page.locator(".new-entry-menu");
+    await chooser.locator("summary").click();
+    assert.equal(await chooser.locator('[data-add="points"]').isVisible(), false, "Points leaked into quick menu");
+    await chooser.locator('[data-more-data="true"]').click();
+    await assertMenuFits(chooser.locator(".new-entry-popover"), width);
+    await page.screenshot({ path: `${output}/more-data-${width}.png` });
+    await chooser.locator('[data-add="colourhsv"]').click();
+    const hue = page.locator('.mathquill-field[data-field="colors.0.hue"]');
+    await hue.locator(".mq-root-block").waitFor();
+    await hue.click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Delete");
+    await page.keyboard.type("120");
+    await page.locator('[data-display-mode="text"]').click();
+    let text = await page.locator("[data-scene-text]").inputValue();
+    assert(text.includes("colourhsv c1 = 120~1~1"), text);
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      await page.locator('[data-action="apply-text"]').click();
+      await page.locator('[data-display-mode="standard"]').click();
+      await hue.locator(".mq-root-block").waitFor();
+      const typeMenu = page.locator('[data-type-menu="colors.0"]');
+      await typeMenu.locator("summary").click();
+      await typeMenu.locator('[data-more-data="true"]').click();
+      await assertMenuFits(typeMenu.locator(".entry-type-popover"), width);
+      await typeMenu.locator('[data-change-entry-kind="colors.0.colourhsv"]').click();
+      await page.locator('[data-display-mode="text"]').click();
+      await page.locator('[data-action="refresh-text"]').click();
+      assert.equal(await page.locator("[data-scene-text]").inputValue(), text, "Type reselect/Apply/Reload lost HSV source");
+    }
+    await page.locator('[data-display-mode="standard"]').click();
+    await chooser.locator("summary").click();
+    await chooser.locator('[data-more-data="true"]').click();
+    await chooser.locator('[data-add="points"]').click();
+    await page.locator('.mathquill-field[data-field="points.0.x"] .mq-root-block').waitFor();
+    await chooser.locator("summary").click();
+    await page.keyboard.press("Escape");
+    assert.equal(await chooser.getAttribute("open"), null, "Escape did not close menu");
+    await page.screenshot({ path: `${output}/hsv-data-${width}.png` });
+    console.log(`ok - More data, real HSV typing, points and lossless type selection at ${width}px`);
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('[data-display-mode="text"]').click();
+  await page.locator("[data-scene-text]").fill(`set show_coordinate_grid = False
+folder Colours = {
+  // Gradient
+  time unbounded pulse = 0 {speed=1}
+  expression eq = x+sin(y)+pulse
+  colourhsv pigment = 180+90*x~0.8~1
+  colour legacy = 12~34~56
+  boundary gate = 1
+  transparency fade = 0
+  function sampleValue(a,b) = a+b
+  point p = [0,0] {colour=pigment, link=sampleValue, show_label=True}
+  draw(eq) {colour=pigment, boundary=gate, transparency=fade}
+}`);
+  await page.locator('[data-action="apply-text"]').click();
+  await page.locator('[data-action="refresh-text"]').click();
+  const savedSource = await page.locator("[data-scene-text]").inputValue();
+  await page.locator('[data-display-mode="standard"]').click();
+  await page.locator(".graph-actions-trigger").hover();
+  await page.locator('[data-action="open-save-dialog"]').click();
+  await page.locator("[data-save-name]").fill("HSV persistence regression");
+  await page.locator('[data-action="confirm-save-graph"]').click();
+  await page.reload();
+  await page.locator(".graph-actions-trigger").hover();
+  await page.locator('[data-action="open-library"]').click();
+  const image = page.locator(".saved-graph-thumb").first();
+  const preview = await image.evaluate(async (img) => {
+    await img.decode();
+    const canvas = document.createElement("canvas"); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    const context = canvas.getContext("2d"); context.drawImage(img, 0, 0);
+    const bytes = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const colours = new Set();
+    for (let i = 0; i < bytes.length; i += 4) colours.add(`${bytes[i]},${bytes[i + 1]},${bytes[i + 2]}`);
+    return { width: canvas.width, height: canvas.height, colours: colours.size, size: img.src.length };
+  });
+  assert(preview.width === 160 && preview.height === 100 && preview.colours > 50 && preview.size < 24000, JSON.stringify(preview));
+  await page.locator("[data-load-saved-graph]").first().click();
+  await page.locator('.mathquill-field[data-field="colors.0.hue"] .mq-root-block').waitFor();
+  await page.locator('[data-display-mode="text"]').click();
+  assert.equal(await page.locator("[data-scene-text]").inputValue(), savedSource, "Save/reload/load lost data");
+  console.log("ok - mixed-type saved graph reloads without losing data and retains a compact nonblank preview");
+
   if (!process.env.LEPTON_TEST_URL) {
     const dev = await createServer({ server: { host: "127.0.0.1", port: 0 } });
     try {
@@ -186,4 +291,11 @@ async function geometry(field) {
     width: element.clientWidth,
     caret: element.querySelector(".mq-cursor")?.getBoundingClientRect().left - element.getBoundingClientRect().left
   }));
+}
+
+async function assertMenuFits(menu, width) {
+  await menu.waitFor({ state: "visible" });
+  await settle(menu.page());
+  const box = await menu.boundingBox();
+  assert(box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y + box.height <= 901, `Menu outside viewport: ${JSON.stringify(box)}`);
 }

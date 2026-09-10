@@ -10,6 +10,7 @@ not a claim that desktop builds or importable libraries already exist.
 | Built-in names, argument counts, display aliases, LaTeX commands, MathQuill operator suggestions | `src/math/builtins.js` | Every definition must have working CPU and GLSL forms; the runtime regression suite iterates the registry. |
 | Scalar syntax and precedence | `src/math/expression-syntax.js`, live-runtime AST parsing/serialization | Text and LaTeX round trips, left/right associativity, nested calls, malformed input, CPU/GPU agreement. |
 | Data model, UI, validation, import/export | `src/browser-preview-live.js` | Ordering, folders, comments, references, history, persistence, diagnostics, both editor modes. |
+| Data chooser and colour models | Runtime `DATA_TYPE_CATALOG`, `src/math/colour.js` | Quick/More data menus, colour channel diagnostics, shared IDs, CPU/GLSL pixel agreement, save/load and text round trips. |
 | GPU resource lifecycle and drawing | `packages/renderer` | Standalone Node tests plus actual GPU pixel/readback tests. No DOM editor or scene dependencies belong in this package. |
 | Browser interaction | `src/styles.css`, live-runtime event handlers | `npm run test:browser` against the staged release; test long equations and different panel widths. |
 | Public artifact | `scripts/site-files.mjs` | Explicitly include new runtime modules/assets; inspect `release.json` after deployment. |

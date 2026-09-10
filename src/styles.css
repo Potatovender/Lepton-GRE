@@ -1226,10 +1226,10 @@ select {
 .entry-type-static.invalid { color: #ad342e; background: #fae8e6; border-color: #e9bbb7; }
 
 .entry-type-popover {
-  position: absolute;
-  top: calc(100% + 5px);
+  position: fixed;
+  top: 0;
   left: 0;
-  z-index: 18;
+  z-index: 120;
   width: min(210px, calc(var(--sidebar-width) - 70px));
   max-height: min(300px, calc(100vh - 140px));
   display: grid;
@@ -1736,10 +1736,8 @@ select {
 }
 
 .new-entry-popover {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  z-index: 16;
+  position: fixed;
+  z-index: 120;
   width: min(240px, calc(var(--sidebar-width) - 36px));
   max-height: min(320px, calc(100vh - 140px));
   display: grid;
@@ -1768,6 +1766,11 @@ select {
   background: #eef4ff;
   outline: none;
 }
+
+[data-type-page]:not([hidden]) { display: grid; gap: 3px; }
+[data-type-page][hidden] { display: none; }
+[data-type-page] button:disabled { opacity: .5; cursor: default; }
+.expression-row:has(.entry-type-menu[open]) { z-index: 120; }
 
 .new-entry-group {
   display: grid;

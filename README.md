@@ -16,6 +16,8 @@ Lepton GRE (Lepton Graph Rendering Interface) is a browser-based mathematical fi
 - Unified visual workspace and one-to-one Lepton text representation.
 - MathQuill-backed structured equation editing and LaTeX clipboard input.
 - Expressions, parameterized functions, sliders, animated time values, colours, boundaries, transparency, points, folders, and comments.
+- More data catalog for supported entry types, including points and HSV colours
+  with looping hue and clamped saturation/brightness. RGB and HSV share colour references.
 - Piecewise expressions, recursive references with a configurable depth, and dependency-focused workspace filtering.
 - Full-canvas WebGL rendering, coordinate-grid controls, pan/zoom, local saves, PNG export, and sample scenes.
 - Live diagnostics for syntax, naming, recursion size, dependencies, channels, settings, and draw components.
@@ -73,6 +75,7 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `packages/renderer/` | Reusable WebGL driver, typed API, isolated Node tests, and packaging instructions. No dependency on the GRE UI. |
 | `src/math/expression-syntax.js` | Shared implicit-multiplication and power-precedence transformations. |
 | `src/math/builtins.js` | Shared built-in names, arity, display aliases, LaTeX commands, and MathQuill operator suggestions. |
+| `src/math/colour.js` | Colour channel definitions and matching CPU/GLSL HSV conversion. |
 | `src/landing.js` | Landing-page sample source and launch URL generation. |
 | `src/styles.css` | Landing and grapher styles. |
 | `src/libs/mathquill/` | Vendored equation editor assets. |

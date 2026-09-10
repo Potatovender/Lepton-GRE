@@ -3,12 +3,13 @@ import vm from "node:vm";
 import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "../src/math/expression-syntax.js";
 import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js";
 import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "../src/math/builtins.js";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "../src/math/colour.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260909-editor-context";
+const cacheVersion = "20260910-more-data-hsv";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -85,7 +86,8 @@ const sandbox = {
   LATEX_FUNCTIONS,
   STANDARD_LATEX_COMMANDS,
   MATHQUILL_OPERATOR_NAMES,
-  BUILTIN_NAMES
+  BUILTIN_NAMES,
+  colourChannelKeys, hsvToRgb, HSV_GLSL
 };
 
 vm.createContext(sandbox);
@@ -1969,9 +1971,124 @@ S:background_color~bg`);
   assert(exported.includes("set background_color = bg"), exported);
 });
 
-check("missing background color falls back to default", () => {
+check("missing background colour preserves its ID and reports an error", () => {
   const imported = sandbox.importScene(`S:background_color~missing`);
-  assert(imported.settings.backgroundColor === "0", JSON.stringify(imported.settings));
+  assert(imported.settings.backgroundColor === "missing", JSON.stringify(imported.settings));
+  sandbox.__debugSetScene(imported);
+  assert(sandbox.validateScene().settings.some((item) => item.message.includes("Missing background colour")), "missing reference not flagged");
+  assert(sandbox.resolveBackgroundColor().custom === false, "invalid reference should render fallback without changing source");
+});
+
+check("HSV hue wraps in degrees and saturation/brightness clamp", () => {
+  for (const [h, s, v, expected] of [
+    [0, 1, 1, [255, 0, 0]], [60, 1, 1, [255, 255, 0]],
+    [120, 1, 1, [0, 255, 0]], [180, 1, 1, [0, 255, 255]],
+    [240, 1, 1, [0, 0, 255]], [300, 1, 1, [255, 0, 255]],
+    [-60, 2, 3, [255, 0, 255]], [720, 1, 1, [255, 0, 0]],
+    [40, -1, .5, [127.5, 127.5, 127.5]], [20, 1, -1, [0, 0, 0]],
+    [30, .5, .8, [204, 153, 102]]
+  ]) {
+    const actual = hsvToRgb(h, s, v);
+    assert(actual.every((component, index) => Math.abs(component - expected[index]) < 1e-8), JSON.stringify({ h, s, v, actual }));
+  }
+});
+
+check("HSV channels share colour references, validation, dependency and rename handling", () => {
+  const imported = sandbox.importScene(`set background_color = pigment
+expression huebase = 120
+expression eq = 1
+colorhsv pigment = huebase*x~1~1
+colour legacy = 12~34~56
+point p = [1,2] {colour=pigment}
+draw(eq) {colour=pigment}`);
+  sandbox.__debugSetScene(imported);
+  const colour = imported.colors[0];
+  assert(colour.model === "hsv" && colour.hue === "huebase*x", JSON.stringify(colour));
+  assert(sandbox.validateScene().hasErrors === false, JSON.stringify(sandbox.validateScene()));
+  const cpu = sandbox.compileColour(colour)(1, 2, sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv()));
+  assert(cpu.join(",") === "0,255,0", cpu.join(","));
+  assert(sandbox.buildFragmentShader().includes("leptonHsvToRgb(vec3("), "HSV conversion missing in shader");
+  assert(sandbox.resolveBackgroundColor().rgb.join(",") === "255,0,0", "background did not sample at 0,0");
+  const dependencies = sandbox.dependencyEntryKeys({ kind: "colors", uid: colour._uid });
+  assert(dependencies.has(sandbox.entryOrderKey("functions", imported.functions[0]._uid)), "HSV dependency missing");
+  imported.functions[0].id = "newHue";
+  sandbox.renameSceneReferences("functions", "huebase", "newHue");
+  assert(colour.hue === "newHue*x", colour.hue);
+  colour.id = "newPigment";
+  sandbox.renameSceneReferences("colors", "pigment", "newPigment");
+  assert(imported.points[0].colorId === "newPigment" && imported.settings.backgroundColor === "newPigment", "colour references did not rename");
+  colour.saturation = "missing+";
+  const status = sandbox.validateScene();
+  assert(status.colors[0].channels.hue.status === "valid", JSON.stringify(status.colors));
+  assert(status.colors[0].channels.saturation.status === "invalid" && status.draws[0].status === "invalid", JSON.stringify(status));
+});
+
+check("More data catalog exposes all types, with points and HSV outside the quick menu", () => {
+  const menu = sandbox.dataTypeChoices();
+  const quick = menu.split('<div data-type-page="all"')[0];
+  assert(quick.includes("More data") && !quick.includes('data-add="points"') && !quick.includes('data-add="colourhsv"'), quick);
+  for (const kind of ["points", "colourhsv", "colors", "folders", "draws"]) assert(menu.includes(`data-add="${kind}"`), `${kind} missing`);
+  assert(sandbox.dataTypeChoices("colors.0").includes('data-change-entry-kind="colors.0.colourhsv"'), "type conversion chooser missing");
+});
+
+check("HSV selection preserves channel formulas, identity, comments, and mixed ordering", () => {
+  sandbox.__debugSetScene(sandbox.importScene("expression eq = x\ncolour pigment = x+20~y+1~0.5 // keep\ndraw(eq) {colour=pigment}"));
+  const before = JSON.stringify(sandbox.__debugScene.dataOrder);
+  sandbox.changeDataEntryKind("colors", 0, "colors");
+  assert(sandbox.__debugScene.colors[0].red === "x+20", "reselecting colour reset its channels");
+  sandbox.changeDataEntryKind("colors", 0, "colourhsv");
+  assert(sandbox.__debugScene.colors[0].hue === "x+20" && sandbox.__debugScene.colors[0].comment === "keep", "HSV conversion lost formula/comment");
+  sandbox.changeDataEntryKind("colors", 0, "colors");
+  assert(sandbox.__debugScene.colors[0].red === "x+20", "RGB conversion lost formula");
+  assert(JSON.stringify(sandbox.__debugScene.dataOrder) === before, "conversion reordered entries");
+  const created = sandbox.addEntry("colourhsv");
+  assert(created.kind === "colors" && sandbox.__debugScene.colors[created.index].model === "hsv", JSON.stringify(created));
+});
+
+check("all sample data remains stable through repeated import/export cycles", () => {
+  for (const original of sampleSources) {
+    sandbox.__debugSetScene(sandbox.importScene(original));
+    const canonical = sandbox.exportScene();
+    for (let pass = 0; pass < 3; pass += 1) {
+      sandbox.__debugSetScene(sandbox.importScene(sandbox.exportScene()));
+      assert(sandbox.exportScene() === canonical, `sample changed at pass ${pass}`);
+    }
+    assert(sandbox.textImportLosses(original, canonical).length === 0, JSON.stringify(sandbox.textImportLosses(original, canonical)));
+  }
+});
+
+check("HSV, empty fields, point comments, folders and unresolved IDs survive round trips", () => {
+  const original = `set background_color = unavailable
+// before folder
+folder mixed = {
+  expression unfinished =
+  slider unfinishedslider =
+  boundary unfinishedbound =
+  transparency unfinishedalpha =
+  //
+  colourhsv huepaint = -60~0.5~0.8 // HSV
+  // before point
+  point mark = [1,2] {colour=unavailable}
+  // at folder end
+}
+function unfinishedfn(a) =
+draw(unfinished) {colour=huepaint}`;
+  sandbox.__debugSetScene(sandbox.importScene(original));
+  const canonical = sandbox.exportScene();
+  for (let pass = 0; pass < 4; pass += 1) {
+    sandbox.__debugSetScene(sandbox.importScene(sandbox.exportScene()));
+    assert(sandbox.exportScene() === canonical, sandbox.exportScene());
+  }
+  assert(canonical.indexOf("// before folder") < canonical.indexOf("folder mixed"), canonical);
+  assert(canonical.indexOf("// before point") < canonical.indexOf("point mark"), canonical);
+  assert(canonical.includes("colour=unavailable"), canonical);
+  assert(sandbox.__debugScene.restrictions[0].expression === "", "empty boundary was replaced with 1");
+  assert(canonical.includes("  //\n"), "empty comment was dropped");
+  assert(sandbox.textImportLosses(original, canonical).length === 0, canonical);
+  const nonCommentPoints = sandbox.__debugScene.points.filter((entry) => !sandbox.isCommentEntry(entry));
+  assert(nonCommentPoints.length === 1, JSON.stringify(sandbox.__debugScene.points));
+  const saved = sandbox.saveCurrentGraph("HSV round trip", { forceNew: true });
+  assert(saved.scene === canonical, "saved source lost data");
 });
 
 check("saved graphs persist locally with names scenes and thumbnails", () => {
