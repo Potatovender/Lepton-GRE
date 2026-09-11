@@ -1,10 +1,12 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260910-more-data-hsv";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260910-more-data-hsv";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260910-more-data-hsv";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260910-more-data-hsv";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260911-lists-reductions";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260911-lists-reductions";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260911-lists-reductions";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260911-lists-reductions";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260911-lists-reductions";
 
 const DEFAULT_SCENE = {
   functions: [],
+  lists: [],
   colors: [],
   restrictions: [],
   transparencies: [],
@@ -22,6 +24,7 @@ const DEFAULT_SCENE = {
     yMax: 10,
     yPoints: 120,
     maxRecursion: 100,
+    maxListSize: 10000,
     angleMode: "radians",
     backgroundColor: "0",
     ensureSquareGrid: true,
@@ -46,7 +49,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260910-more-data-hsv";
+const APP_VERSION = "20260911-lists-reductions";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -64,7 +67,7 @@ function ensureLeptonFavicon() {
   }
 }
 
-const DATA_ENTRY_KINDS = ["functions", "colors", "restrictions", "transparencies", "draws", "points", "folders"];
+const DATA_ENTRY_KINDS = ["functions", "lists", "colors", "restrictions", "transparencies", "draws", "points", "folders"];
 const DIAGNOSTIC_PRIORITY = { valid: 0, info: 1, warning: 2, invalid: 3 };
 let dropdownDismissBound = false;
 let selectedDependencyEntry = null;
@@ -112,6 +115,7 @@ const SETTING_TEXT_KEYS = new Set([
   "y_min",
   "y_max",
   "max_recursion",
+  "max_list_size",
   "angle_mode",
   "background_color",
   "ensure_square_grid",
@@ -155,6 +159,7 @@ const FUNCTION_ENTRY_KINDS = new Set(["variable", "slider", "function"]);
 const TIME_VARIABLE_MODES = new Set(["bounded", "unbounded", "bounded_looped"]);
 const DATA_TYPE_LABELS = {
   functions: "value",
+  lists: "list",
   colors: "colour",
   restrictions: "boundary",
   transparencies: "transparency",
@@ -182,12 +187,14 @@ const HELP_TEXT = {
   settingCustomAspectRatio: "Custom ratios use two math fields: the left number is width and the right number is height.",
   settingDrawOnlyInsideBoundary: "When enabled, pixels outside the active draw boundary are not drawn at all instead of showing the background.",
   settingMaxRecursion: "The maximum depth used when a variable refers back to itself or through a loop of other variables.",
+  settingMaxListSize: "Maximum elements in one list (default 10,000). Oversized lists receive a blue warning and are not partially drawn. Sums and products have no separate term limit.",
   settingUnboundedDecimals: "How many digits to keep after the decimal point for unbounded time variables while they animate.",
   settingAngleMode: "Chooses whether circular trig inputs and inverse trig outputs use radians or degrees. Hyperbolic functions are unchanged.",
   settingBackgroundColorId: "Choose the color ID used as the solid background when Background color is set to Custom.",
   variableType: "Expression entries are named formulas over x and y. Use them for equations, constants, color channels, and helper math that other entries can reference.",
   sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
   functionType: "Function entries accept named inputs such as wave(x,y). Inside the function body, input names take priority over outer values with the same name.",
+  listType: "Lists contain scalar expressions in square brackets. Read an item with values[0], operate on the whole list with values+1, or draw its elements in order. Generate a list with [c for(c=1,10)].",
   tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
 };
 
@@ -207,7 +214,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 1: Create data",
-    body: "The Data workspace holds everything except settings. New line adds an expression; its ... menu chooses another type. More data opens the complete catalog, including points and HSV colours. Values can be expressions, sliders, or functions, and folders can organize related entries without changing compilation."
+    body: "The Data workspace holds everything except settings. New line adds an expression; its ... menu chooses another type. More data opens the complete catalog, including points, lists, and HSV colours. Folders organize related entries without changing compilation."
   },
   {
     mode: "standard",
@@ -260,7 +267,13 @@ const TUTORIAL_STEPS = [
   {
     mode: "standard",
     tab: "draws",
-    title: "Step 10: Save and export",
+    title: "Step 10: Lists and repeated calculations",
+    body: "Choose More data > List and enter [1,2,3]. Name it values, then draw values to render all three elements in order. values[0] reads the first item; values+10 adds ten to each. Try [c^2 for(c=1,5)] in a list row. sum(i=1~3){i} returns 6 and prod(i=1~3){i} also returns 6. In a math field, type sum or prod, fill the lower limit (i=1), use Up for the upper limit, then Right and parentheses for the body. Bounds may use x, y or sliders; large ranges can be slow."
+  },
+  {
+    mode: "standard",
+    tab: "draws",
+    title: "Step 11: Save and export",
     body: "The Graph menu creates, saves, loads, and exports graphs. Saved graphs stay in this browser with a compact preview. Lepton warns before discarding unsaved graph or text changes."
   }
 ];
@@ -578,6 +591,7 @@ function dataTypeLabel(kind, entry) {
 }
 
 function exportOrderedDataEntry(kind, entry) {
+  if (kind === "lists") return isCommentEntry(entry) ? exportStandaloneComment(entry, kind) : appendInlineComment(`list ${entry.id} = ${textModeExpression(entry.expression)}`, entry.comment);
   if (kind === "functions") return exportFunctionEntry(entry, kind);
   if (kind === "colors") return exportColorEntry(entry);
   if (kind === "restrictions") return exportRestrictionEntry(entry);
@@ -680,6 +694,7 @@ function functionEntryExpression(entry) {
 function envEntry(env, name) {
   const value = env?.[name];
   if (!value) return null;
+  if (value.kind === "list") return { ...normalizeFunctionEntry(value), kind: "list" };
   return typeof value === "string" ? normalizeFunctionEntry({ id: name, kind: "variable", expression: value }) : normalizeFunctionEntry(value);
 }
 
@@ -772,7 +787,8 @@ function renderMathKeyboard() {
       }
       return left.localeCompare(right);
     });
-  const variables = dataEntries(scene.functions).map((entry) => entry.id).filter(Boolean);
+  extra.push("sum", "prod", "[", "]");
+  const variables = [...dataEntries(scene.functions), ...dataEntries(scene.lists)].map((entry) => entry.id).filter(Boolean);
   return `
     <div class="keyboard-tabs" role="tablist" aria-label="Keyboard tabs">
       <button class="keyboard-tab" data-keyboard-tab="pad" aria-selected="${keyboardTab === "pad"}" type="button">Pad</button>
@@ -877,6 +893,8 @@ function textStatementSignatures(source) {
     if (match) { signatures.push(`transparency:${match[1]}`); continue; }
     match = line.match(/^point\s+([A-Za-z_]\w*)\s*=/i);
     if (match) { signatures.push(`point:${match[1]}`); continue; }
+    match = line.match(/^list\s+([A-Za-z_]\w*)\s*=/i);
+    if (match) { signatures.push(`list:${match[1]}`); continue; }
     if (/^draw\s*\(/i.test(line)) { signatures.push("draw"); continue; }
     signatures.push(`unrecognized:${line}`);
   }
@@ -1138,6 +1156,8 @@ function insertKeyboardValue(value) {
       mathField.keystroke(value);
     } else if (value === "sqrt") {
       mathField.cmd("\\sqrt");
+    } else if (value === "sum" || value === "prod") {
+      mathField.cmd(`\\${value}`);
     } else if (value === "pi") {
       mathField.cmd("\\pi");
     } else if (value === "random") {
@@ -1295,6 +1315,7 @@ function folderIcon() {
 }
 
 function dataRowContent(kind, entry, index, diagnostic = null) {
+  if (kind === "lists") return mathEditor(`lists.${index}.expression`, entry.expression, "List contents", true, "[1, 2, 3]");
   if (kind === "functions") return functionRowContent(entry, index);
   if (kind === "colors") {
     const labels = { red: "red channel", green: "green channel", blue: "blue channel", hue: "hue (degrees)", saturation: "saturation", value: "brightness" };
@@ -1326,6 +1347,7 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
       </div>
       <label class="draw-reference-row"><span>value</span>${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}</label>
       ${drawArgumentControls(index, draw)}
+      ${drawListCount(draw)}
       <div class="draw-components">${components}</div>
       ${missing.length ? `<div class="draw-component-adder">
         <button class="draw-component-add" data-add-draw-component="${index}" type="button" aria-label="Add draw component">+</button>
@@ -1358,6 +1380,18 @@ function drawArgumentControls(drawIndex, draw) {
   return `<div class="draw-arguments">
     ${fn.params.map((param, index) => `<label class="draw-argument-row"><span>${escapeHtml(param)}</span>${mathEditor(`draws.${drawIndex}.arguments.${index}`, args[index], `Input ${param}`, true, `value for ${param}`)}</label>`).join("")}
   </div>`;
+}
+
+function drawListCount(draw) {
+  const source = drawTargetText(draw), env = sceneFunctionEnv(true);
+  if (!usesCollections(source, env)) return "";
+  try {
+    const plan = collectionPlan(source, env);
+    if (plan.kind !== "list") return "";
+    if (plan.dynamicLength) return `<output class="draw-list-count">Variable draw count (up to ${Number(scene.settings.maxListSize ?? 10000).toLocaleString()})</output>`;
+    const count = plan.length({ x: 1, y: 1, env: buildRuntimeEnv(env), locals: {} });
+    return `<output class="draw-list-count">${count.toLocaleString()} draw values</output>`;
+  } catch { return '<output class="draw-list-count">List size unavailable</output>'; }
 }
 
 function colorChannelRow(index, property, label, value, diagnostic = { status: "valid", message: `${label} is valid` }) {
@@ -1429,6 +1463,7 @@ function renderSettingsPanel(diagnostics) {
       <section class="settings-section">
         <h3>Calculation</h3>
         ${settingsField("maxRecursion", "max recursion depth", "number", "settingMaxRecursion")}
+        ${settingsField("maxListSize", "maximum list size", "number", "settingMaxListSize")}
       </section>
       <section class="settings-section">
         <h3>Numerical settings</h3>
@@ -1560,6 +1595,7 @@ function listControlBar(kind, label) {
             ["variable", "Expressions"],
             ["slider", "Sliders"],
             ["function", "Functions"],
+            ["lists", "Lists"],
             ["colors", "Colours"],
             ["colourhsv", "HSV colours"],
             ["restrictions", "Boundaries"],
@@ -1675,6 +1711,13 @@ function dependencyEntryKeys(rootSelection, target = scene) {
 function directDependencyKeys(item, ordered, byId) {
   const ids = new Set();
   const addExpression = (source, localNames = new Set()) => {
+    if (/\b(sum|prod|for)\b|\.length\b|\[/.test(String(source))) {
+      try {
+        const ast = String(source).includes("\\") ? parseLatex(source) : parseLeptonText(source);
+        mapScopedNames(ast, (name) => { if (byId.has(name)) ids.add(name); return name; }, localNames);
+        return;
+      } catch { /* Incomplete edits still show any discoverable dependencies. */ }
+    }
     for (const match of String(source ?? "").matchAll(/\b[A-Za-z_]\w*\b/g)) {
       if (!localNames.has(match[0]) && byId.has(match[0])) ids.add(match[0]);
     }
@@ -1685,7 +1728,7 @@ function directDependencyKeys(item, ordered, byId) {
     addExpression(normalized.expression, normalized.kind === "function" ? new Set(normalized.params) : new Set());
   }
   else if (kind === "colors") colourChannelKeys(entry).forEach((key) => addExpression(entry[key]));
-  else if (kind === "restrictions" || kind === "transparencies") addExpression(entry.expression);
+  else if (["lists", "restrictions", "transparencies"].includes(kind)) addExpression(entry.expression);
   else if (kind === "points") {
     addExpression(entry.x);
     addExpression(entry.y);
@@ -1889,6 +1932,7 @@ function expressionRow(status, message, content, kind = null, index = null, opti
 }
 
 function entryHeadingId(kind, index) {
+  if (kind === "lists") return `<input class="entry-id" data-field="lists.${index}.id" value="${escapeHtml(scene.lists[index]?.id ?? "")}" placeholder="ID" aria-label="List id" />`;
   if (kind === "functions") return `<input class="entry-id" data-field="functions.${index}.id" value="${escapeHtml(scene.functions[index]?.id ?? "")}" placeholder="ID" aria-label="Function id" />`;
   if (kind === "colors") return `<input class="entry-id" data-field="colors.${index}.id" value="${escapeHtml(scene.colors[index]?.id ?? "")}" placeholder="ID" aria-label="Colour id" />`;
   if (kind === "restrictions") return `<input class="entry-id" data-field="restrictions.${index}.id" value="${escapeHtml(scene.restrictions[index]?.id ?? "")}" placeholder="ID" aria-label="Boundary id" />`;
@@ -1921,6 +1965,7 @@ const DATA_TYPE_CATALOG = [
   { type: "transparencies", label: "Transparency" },
   { type: "draws", label: "Draw layer", help: "draws" },
   { type: "points", label: "Point", more: true },
+  { type: "lists", label: "List", help: "listType", more: true },
   { type: "colourhsv", label: "Colour (HSV)", help: "hsvColors", more: true }
 ];
 
@@ -2568,8 +2613,8 @@ function bindEvents() {
     const initialValue = el.dataset.value ?? "";
 
     const mathField = MQ.MathField(el, {
-      autoCommands: "sqrt sum",
-      autoOperatorNames: MATHQUILL_OPERATOR_NAMES,
+      autoCommands: "sqrt sum prod",
+      autoOperatorNames: `${MATHQUILL_OPERATOR_NAMES} for`,
       handlers: {
         edit: () => {
           if (el.dataset.initializing === "true" || !el.contains(document.activeElement)) return;
@@ -3535,7 +3580,7 @@ function updateSettingValue(key, value) {
     aspectRatioCustomOpen = true;
     return;
   }
-  if (["maxRecursion", "unboundedDecimalPlaces"].includes(key)) {
+  if (["maxRecursion", "maxListSize", "unboundedDecimalPlaces"].includes(key)) {
     const number = Number(value);
     if (Number.isFinite(number)) scene.settings[key] = number;
     return;
@@ -3609,9 +3654,18 @@ function renameSceneReferences(collection, oldId, newId) {
   const newName = String(newId ?? "").trim();
   if (!oldName || !newName || oldName === newName || !/^[A-Za-z_]\w*$/.test(newName)) return false;
   const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const replace = (source) => String(source ?? "").replaceAll(new RegExp(`\\b${escaped}\\b`, "g"), newName);
+  const replace = (source) => {
+    if (/\b(sum|prod|for)\b|\.length\b|\[/.test(String(source))) {
+      try {
+        const ast = String(source).includes("\\") ? parseLatex(source) : parseLeptonText(source);
+        return astToLeptonText(mapScopedNames(ast, (name) => name === oldName ? newName : name));
+      } catch { /* Preserve incomplete source while renaming complete tokens. */ }
+    }
+    return String(source ?? "").replaceAll(new RegExp(`\\b${escaped}\\b`, "g"), newName);
+  };
 
-  if (["functions", "restrictions", "points"].includes(collection)) {
+  if (["functions", "lists", "restrictions", "points"].includes(collection)) {
+    scene.lists.forEach((entry) => { if (!isCommentEntry(entry)) entry.expression = replace(entry.expression); });
     scene.functions = scene.functions.map((rawEntry) => {
       if (isCommentEntry(rawEntry)) return rawEntry;
       const entry = functionEntryForScene(rawEntry);
@@ -3625,7 +3679,7 @@ function renameSceneReferences(collection, oldId, newId) {
       return entry;
     });
   }
-  if (collection === "functions") {
+  if (collection === "functions" || collection === "lists") {
     scene.colors.forEach((entry) => {
       if (isCommentEntry(entry)) return;
       colourChannelKeys(entry).forEach((key) => { entry[key] = replace(entry[key]); });
@@ -3968,6 +4022,8 @@ function syncFields() {
 }
 
 function resolveFunctionEntry(id) {
+  const list = dataEntries(scene.lists).find((item) => item.id === id);
+  if (list) return { ...list, kind: "list" };
   const entry = dataEntries(scene.functions).find((item) => item.id === id);
   return entry ? normalizeFunctionEntry(entry) : (id === DEFAULT_DRAW_FUNCTION.id ? DEFAULT_DRAW_FUNCTION : null);
 }
@@ -3983,6 +4039,15 @@ function compileColour(entry) {
     const values = channels.map((evaluate) => evaluate(x, y, env));
     return (entry.model === "hsv" ? hsvToRgb(...values) : values).map(channel);
   };
+}
+
+function validateScalarExpression(source, env, stack = [], localNames = new Set()) {
+  const diagnostic = validateExpression(source, env, stack, localNames);
+  if (diagnostic.status === "invalid" || !usesCollections(source, env, localNames)) return diagnostic;
+  try {
+    if (collectionPlan(source, env, localNames).kind !== "scalar") return { status: "invalid", message: "This field needs a scalar; choose a list element with [index]" };
+  } catch (error) { return { status: error.code === "LIST_SIZE" ? "info" : "invalid", message: error.message }; }
+  return diagnostic;
 }
 
 function normalizedBoundaryExpression(entry) {
@@ -4060,7 +4125,7 @@ function drawComponent(draw, type) {
 }
 
 function drawFunctionEntries() {
-  const functions = dataEntries(scene.functions).map(normalizeFunctionEntry).filter((entry) => entry.kind !== "function" || entry.outputType === "expression");
+  const functions = [...dataEntries(scene.functions).map(normalizeFunctionEntry).filter((entry) => entry.kind !== "function" || entry.outputType === "expression"), ...dataEntries(scene.lists).map((entry) => ({ ...entry, kind: "list" }))];
   return functions.length ? functions : [DEFAULT_DRAW_FUNCTION];
 }
 
@@ -4094,7 +4159,7 @@ function sceneFunctionEnv(includeDefault = false) {
   if (includeDefault && !functions.some((entry) => entry.id === DEFAULT_DRAW_FUNCTION.id)) {
     entries.push([DEFAULT_DRAW_FUNCTION.id, DEFAULT_DRAW_FUNCTION]);
   }
-  return Object.fromEntries(entries);
+  return Object.fromEntries([...entries, ...dataEntries(scene.lists).map((entry) => [entry.id, { ...entry, kind: "list" }])]);
 }
 
 function boundaryExpressionEnv(includeDefault = false) {
@@ -4143,8 +4208,9 @@ function pointLinkedValue(point, env = null) {
 }
 
 function defaultEntryForKind(kind) {
+  if (kind === "lists") return { id: nextEntryId([...scene.functions, ...scene.lists], "list"), kind: "list", expression: "[]" };
   if (kind === "functions") {
-    return { id: nextEntryId(scene.functions, "f"), kind: "variable", expression: "" };
+    return { id: nextEntryId([...scene.functions, ...scene.lists], "f"), kind: "variable", expression: "" };
   }
   if (kind === "colors") {
     return { id: nextEntryId(scene.colors, "c"), red: "0", green: "0", blue: "0" };
@@ -4169,8 +4235,9 @@ function convertedEntryForKind(targetKind, sourceEntry, targetSubtype = "variabl
   const sourceId = String(sourceEntry?.id ?? "").trim();
   const expression = String(sourceEntry?.expression ?? sourceEntry?.equationId ?? firstDataId(scene.functions) ?? "");
   const comment = Object.prototype.hasOwnProperty.call(sourceEntry ?? {}, "comment") ? { comment: sourceEntry.comment ?? "" } : {};
+  if (targetKind === "lists") return { id: sourceId || nextEntryId(scene.lists, "list"), kind: "list", expression, ...comment };
   if (targetKind === "functions") {
-    const next = functionEntryForScene({ id: sourceId || nextEntryId(scene.functions, "f"), kind: targetSubtype, expression });
+    const next = functionEntryForScene({ id: sourceId || nextEntryId([...scene.functions, ...scene.lists], "f"), kind: targetSubtype, expression });
     next.kind = FUNCTION_ENTRY_KINDS.has(targetSubtype) ? targetSubtype : "variable";
     return { ...next, ...comment };
   }
@@ -4587,9 +4654,10 @@ function renderSceneCpuInto(canvas, options = {}) {
     let boundary;
     let transparencyValue;
     let drawArguments = [];
+    const collection = usesCollections(drawTargetText(draw), sceneFunctionEnv(true));
     try {
-      evaluate = compileExpression(fn.expression, fn.kind === "function" ? new Set(fn.params) : new Set());
-      drawArguments = drawArgumentsForFunction(draw, fn).map((argument) => compileExpression(argument));
+      evaluate = collection ? compileExpression(drawTargetText(draw)) : compileExpression(fn.expression, fn.kind === "function" ? new Set(fn.params) : new Set());
+      if (!collection) drawArguments = drawArgumentsForFunction(draw, fn).map((argument) => compileExpression(argument));
       evaluateColour = compileColour(color);
       boundary = compileExpression(restriction.expression);
       transparencyValue = compileExpression(transparency.expression);
@@ -4607,18 +4675,22 @@ function renderSceneCpuInto(canvas, options = {}) {
         if (boundaryValue < 0) continue;
 
         const previousLocals = env.__locals;
-        if (fn.kind === "function") {
+        if (fn.kind === "function" && !collection) {
           env.__locals = Object.fromEntries(fn.params.map((param, index) => [param, drawArguments[index](x, y, env)]));
         }
-        const z = evaluate(x, y, env);
-        if (fn.kind === "function") env.__locals = previousLocals;
-        if (!Number.isFinite(z)) continue;
+        let values;
+        try { values = evaluate(x, y, env); }
+        catch { if (fn.kind === "function" && !collection) env.__locals = previousLocals; continue; }
+        if (fn.kind === "function" && !collection) env.__locals = previousLocals;
+        for (const z of Array.isArray(values) ? values : [values]) {
+          if (!Number.isFinite(z)) continue;
 
-        const opacity = 1 - clampNumber(transparencyValue(z, y, env), 0, 1);
-        if (!Number.isFinite(opacity) || opacity <= 0) continue;
-        ctx.globalAlpha = opacity;
-        ctx.fillStyle = `rgb(${evaluateColour(z, y, env).join(",")})`;
-        ctx.fillRect(xi * pixelWidth, cssHeight - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
+          const opacity = 1 - clampNumber(transparencyValue(z, y, env), 0, 1);
+          if (!Number.isFinite(opacity) || opacity <= 0) continue;
+          ctx.globalAlpha = opacity;
+          ctx.fillStyle = `rgb(${evaluateColour(z, y, env).join(",")})`;
+          ctx.fillRect(xi * pixelWidth, cssHeight - (yi + 1) * pixelHeight, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
+        }
       }
     }
   }
@@ -4682,6 +4754,9 @@ function webGlShaderCacheKey() {
   return JSON.stringify({
     forceGradient: Boolean(window.__leptonForceGradient),
     functions,
+    lists: dataEntries(scene.lists),
+    maxListSize: scene.settings.maxListSize,
+    maxRecursion: scene.settings.maxRecursion,
     colors: dataEntries(scene.colors),
     restrictions: dataEntries(scene.restrictions),
     transparencies: dataEntries(scene.transparencies),
@@ -4721,6 +4796,18 @@ function resolveBackgroundColor() {
 }
 
 function buildFragmentShader() {
+  const previous = activeCollectionGenerator;
+  activeCollectionGenerator = { helpers: [], next: 0 };
+  try {
+    const source = buildFragmentShaderBody();
+    return activeCollectionGenerator.modern || activeCollectionGenerator.helpers.length || source.includes("float listIndex=")
+      ? `#version 300 es\nprecision highp float;\nout vec4 leptonFragmentColor;\n${source.replaceAll("gl_FragColor", "leptonFragmentColor")}`
+      : source;
+  }
+  finally { activeCollectionGenerator = previous; }
+}
+
+function buildFragmentShaderBody() {
   if (window.__leptonForceGradient) {
     return `
       precision highp float;
@@ -4745,18 +4832,21 @@ function buildFragmentShader() {
       if (!fn || !color || !restriction || !transparency) return null;
       if (
         validateExpression(fn.expression, env, [fn.id], fn.kind === "function" ? new Set(fn.params) : new Set()).status === "invalid" ||
-        colourChannelKeys(color).some((key) => validateExpression(color[key], env).status === "invalid") ||
-        validateExpression(restriction.expression, boundaryEnv).status === "invalid" ||
-        validateExpression(transparency.expression, env).status === "invalid"
+        colourChannelKeys(color).some((key) => validateScalarExpression(color[key], env).status === "invalid") ||
+        validateScalarExpression(restriction.expression, boundaryEnv).status === "invalid" ||
+        validateScalarExpression(transparency.expression, env).status === "invalid"
       ) {
         return null;
       }
       try {
-        const localMap = drawLocalGlslMap(draw, fn, env, dynamicMap);
+        const target = drawTargetText(draw);
+        const collection = usesCollections(target, env) ? collectionGlsl(target, env, null, dynamicMap) : null;
+        const localMap = collection ? dynamicMap : drawLocalGlslMap(draw, fn, env, dynamicMap);
         const channels = colourChannelKeys(color).map((key) => expressionToGlsl(color[key], env, "z", [], scene.settings.angleMode, dynamicMap));
         const colourVector = `vec3(${channels.join(", ")})`;
         return {
-          expr: expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, localMap),
+          collection,
+          expr: collection ? null : expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, localMap),
           rgb: color.model === "hsv" ? `leptonHsvToRgb(${colourVector})` : `clamp(${colourVector} / 255.0, 0.0, 1.0)`,
           bound: expressionToGlsl(restriction.expression, boundaryEnv, null, [], scene.settings.angleMode, dynamicMap),
           transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode, dynamicMap),
@@ -4775,11 +4865,15 @@ function buildFragmentShader() {
       {
         float boundValue = ${layer.bound};
         if (${layer.boundCheck}) {
-          float z = ${layer.expr};
+          ${layer.collection?.size != null ? `float listSize=${layer.collection.size}; for(float listIndex=0.0;listIndex<listSize;listIndex+=1.0){` : ""}
+          float z = ${layer.collection?.size != null ? layer.collection.at("listIndex") : layer.collection?.value ?? layer.expr};
           vec3 layerColor = ${layer.rgb};
           float opacity = 1.0 - clamp(${layer.transparency}, 0.0, 1.0);
-          color = mix(color, layerColor, opacity);
-          painted = true;
+          if(${activeCollectionGenerator?.modern ? "!isnan(z) && !isinf(z)" : "z>=-3.402823e38 && z<=3.402823e38"} && opacity>=0.0 && opacity<=1.0){
+            color = mix(color, layerColor, opacity);
+            painted = true;
+          }
+          ${layer.collection?.size != null ? "}" : ""}
         }
       }`
         )
@@ -4882,6 +4976,7 @@ function buildFragmentShader() {
       ) - 1.0;
     }
 
+    ${activeCollectionGenerator.helpers.join("\n")}
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
       float x = mix(u_bounds.x, u_bounds.y, uv.x);
@@ -5038,6 +5133,79 @@ function axis(min, max, count) {
 }
 
 function compileExpression(source, localNames = new Set()) {
+  const definitions = sceneFunctionEnv(true);
+  if (!usesCollections(source, definitions, localNames)) return compileScalarExpression(source, localNames);
+  const compiled = collectionPlan(source, definitions, localNames);
+  return (x, y, env) => compiled.evaluate({ x, y, env, locals: env.__locals ?? {} });
+}
+
+// Keep scalar compilation shared with collection elements. The typed plan handles
+// lexical bindings and list broadcasting before emitting scalar CPU/GLSL code.
+function usesCollections(source, env = {}, locals = new Set(), visited = new Set(), pointOutput = false) {
+  const text = String(source ?? "");
+  if (/\b(?:pointcall|call|ref)\s*\(\s*"/.test(text)) return false;
+  if (/\b(sum|prod)\b|\bfor\s*\(|\.length\b/.test(text)) return true;
+  if (!pointOutput && /(?:^|[,\s({+*/^=\-])\s*(?:\\left\s*)?\[/.test(text)) return true;
+  for (const name of text.match(/\b[A-Za-z_]\w*\b/g) ?? []) {
+    if (locals.has(name) || visited.has(name)) continue;
+    const entry = envEntry(env, name);
+    if (!entry) continue;
+    if (entry.kind === "list") return true;
+    visited.add(name);
+    if (usesCollections(entry.expression, env, new Set(entry.params), visited, entry.outputType === "point")) return true;
+  }
+  return false;
+}
+
+function collectionPlan(source, env = {}, localNames = new Set()) {
+  const maximum = Number(scene.settings.maxListSize ?? 10000);
+  if (!Number.isSafeInteger(maximum) || maximum < 1) throw new Error("Maximum list size must be a positive whole number");
+  const initialLocals = new Map([...localNames].map((name) => [name, { kind: "scalar", tag: "local", binding: name }]));
+  return buildCollectionPlan(source, {
+    parse: (text) => String(text).includes("\\") ? parseLatex(text) : parseLeptonText(text),
+    condition: (node) => parseLeptonText(resolvePiecewiseCondition(astToLeptonText(node))),
+    definition: (name) => envEntry(env, name),
+    point: (name) => dataEntries(scene.points).find((point) => point.id === name),
+    checkScalar: (name) => {
+      if (localNames.has(name) || envEntry(env, name) || ["x", "y", "e", "pi"].includes(name)) return;
+      throw new Error(`Unknown variable: ${name}`);
+    },
+    checkCall: (name, count) => {
+      if (!LATEX_FUNCTIONS[name] && name !== "pow") throw new Error(`Unknown function: ${name}`);
+      assertBuiltinCallArity(`${name}(${Array(count).fill("1").join(",")})`);
+    },
+    scalarCpu: (text, slots) => {
+      const evaluate = compileScalarExpression(text, new Set(slots));
+      return (ctx, values) => {
+        const previous = ctx.env.__locals;
+        ctx.env.__locals = { ...ctx.locals, ...Object.fromEntries(slots.map((key, i) => [key, values[i]])) };
+        try { return evaluate(ctx.x, ctx.y, ctx.env); }
+        finally { ctx.env.__locals = previous; }
+      };
+    },
+    scalarGlsl: (text, locals) => {
+      const placeholders = Object.fromEntries(Object.keys(locals).map((key, i) => [key, `lcplaceholder${i}`]));
+      const replacements = Object.fromEntries(Object.keys(locals).map((key) => [placeholders[key], locals[key]]));
+      const code = scalarExpressionToGlsl(text, env, null, [], scene.settings.angleMode, placeholders);
+      // Coordinate-taking helpers such as random() are inserted after scalar
+      // name expansion, so bind their coordinates to the reduction's scope too.
+      return code.replace(/\b[xy]\b/g, (key) => placeholders[key] ?? key)
+        .replace(/\blcplaceholder\d+\b/g, (key) => `(${replacements[key]})`);
+    },
+    maxRecursion: recursionLimit(), maxListSize: maximum
+  }, initialLocals);
+}
+
+let activeCollectionGenerator = null;
+
+function collectionGlsl(source, env, zName = null, localMap = {}) {
+  const compiled = collectionPlan(source, env, new Set(Object.keys(localMap).filter((key) => !envEntry(env, key))));
+  return emitCollectionPlan(compiled, activeCollectionGenerator ?? { helpers: [], next: 0 }, {
+    x: zName ?? "x", y: "y", locals: localMap
+  });
+}
+
+function compileScalarExpression(source, localNames = new Set()) {
   const normalizedSource = normalizeExpressionDisplayText(source);
   const piecewise = parsePiecewiseExpression(normalizedSource);
   if (piecewise) {
@@ -5336,6 +5504,15 @@ function matchingSquareBracket(source, openIndex) {
 }
 
 function expressionToGlsl(source, env = {}, zName = null, stack = [], angleMode = "radians", localMap = {}) {
+  if (usesCollections(source, env, new Set(Object.keys(localMap)))) {
+    const result = collectionGlsl(source, env, zName, localMap);
+    if (result.size != null) throw new Error("A scalar is required here; select a list element with [index], or draw the list");
+    return result.value;
+  }
+  return scalarExpressionToGlsl(source, env, zName, stack, angleMode, localMap);
+}
+
+function scalarExpressionToGlsl(source, env = {}, zName = null, stack = [], angleMode = "radians", localMap = {}) {
   if (stack.length > recursionLimit()) {
     return recursionBaseGlsl(zName);
   }
@@ -5614,7 +5791,8 @@ function validateScene() {
   const boundaryEnv = boundaryExpressionEnv();
   const drawBoundaryEnv = boundaryExpressionEnv(true);
   const duplicateIds = {
-    functions: duplicateEntryIds(scene.functions),
+    functions: duplicateEntryIds([...scene.functions, ...scene.lists]),
+    lists: duplicateEntryIds([...scene.functions, ...scene.lists]),
     colors: duplicateEntryIds(scene.colors),
     restrictions: duplicateEntryIds(scene.restrictions),
     transparencies: duplicateEntryIds(scene.transparencies ?? []),
@@ -5635,6 +5813,16 @@ function validateScene() {
     summary: "GLSL ready"
   };
   diagnostics.settings = [viewportDiagnostic()];
+  if (!Number.isSafeInteger(Number(scene.settings.maxListSize ?? 10000)) || Number(scene.settings.maxListSize ?? 10000) < 1) {
+    diagnostics.settings.push({ status: "invalid", message: "Maximum list size must be a positive whole number" });
+  }
+  diagnostics.lists = scene.lists.map((entry) => {
+    if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
+    let shape;
+    try { shape = collectionPlan(entry.expression, env).kind === "list" ? null : { status: "invalid", message: "A list declaration needs a list expression" }; }
+    catch (error) { shape = { status: error.code === "LIST_SIZE" ? "info" : "invalid", message: error.message }; }
+    return combineDiagnostics([validateEntryId(entry.id, "List", env, false), duplicateIdDiagnostic(entry.id, "List", duplicateIds.lists), shape, validateExpression(entry.expression, env, [entry.id])]);
+  });
   if (scene.settings.backgroundColor !== "0" && !dataEntries(scene.colors).some((entry) => entry.id === scene.settings.backgroundColor)) {
     diagnostics.settings.push({ status: "invalid", message: `Missing background colour: ${scene.settings.backgroundColor}` });
   }
@@ -5659,9 +5847,9 @@ function validateScene() {
         timeVariableDiagnostic(entry, timeVariableCount),
         timeRateDiagnostic(entry, env),
         sliderRangeDiagnostic(entry),
-        validateExpression(entry.expression, env, [entry.id]),
-        validateExpression(entry.sliderMin, env),
-        validateExpression(entry.sliderMax, env)
+        validateScalarExpression(entry.expression, env, [entry.id]),
+        validateScalarExpression(entry.sliderMin, env),
+        validateScalarExpression(entry.sliderMax, env)
       ]);
     }
     if (entry.kind === "function") {
@@ -5681,7 +5869,7 @@ function validateScene() {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     const idResult = validateEntryId(entry.id, "Color", env, false);
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Color", duplicateIds.colors);
-    const channels = Object.fromEntries(colourChannelKeys(entry).map((key) => [key, validateExpression(entry[key], env)]));
+    const channels = Object.fromEntries(colourChannelKeys(entry).map((key) => [key, validateScalarExpression(entry[key], env)]));
     const combined = combineDiagnostics([
       duplicateDiagnostic,
       idResult,
@@ -5694,14 +5882,14 @@ function validateScene() {
     const idResult = validateEntryId(entry.id, "Boundary", env, false);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Boundary", duplicateIds.restrictions);
-    return combineDiagnostics([duplicateDiagnostic, idResult, validateExpression(entry.expression, boundaryEnv, [entry.id])]);
+    return combineDiagnostics([duplicateDiagnostic, idResult, validateScalarExpression(entry.expression, boundaryEnv, [entry.id])]);
   });
   diagnostics.transparencies = (scene.transparencies ?? []).map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     return combineDiagnostics([
       duplicateIdDiagnostic(entry.id, "Transparency", duplicateIds.transparencies),
       validateEntryId(entry.id, "Transparency", env, false),
-      validateExpression(entry.expression, env)
+      validateScalarExpression(entry.expression, env)
     ]);
   });
   diagnostics.draws = scene.draws.map((entry) => {
@@ -5722,10 +5910,11 @@ function validateScene() {
     if (normalizeFunctionEntry(fn).outputType === "point") return { status: "invalid", message: "Draw layers require an expression-output value" };
     const affected = combineDiagnostics([
       ...(fn.kind === "function" ? drawArgumentsForFunction(entry, fn).map((argument) => validateExpression(argument, drawEnv)) : []),
+      usesCollections(drawTargetText(entry), drawEnv) ? validateExpression(drawTargetText(entry), drawEnv) : null,
       validateExpression(fn.expression, drawEnv, [fn.id], fn.kind === "function" ? new Set(fn.params) : new Set()),
-      ...colourChannelKeys(color).map((key) => validateExpression(color[key], drawEnv)),
-      validateExpression(restriction.expression, drawBoundaryEnv),
-      validateExpression(transparency.expression, drawEnv)
+      ...colourChannelKeys(color).map((key) => validateScalarExpression(color[key], drawEnv)),
+      validateScalarExpression(restriction.expression, drawBoundaryEnv),
+      validateScalarExpression(transparency.expression, drawEnv)
     ]);
     return affected.status === "invalid"
       ? { status: "invalid", message: `Draw layer skipped: ${affected.message}` }
@@ -5743,17 +5932,17 @@ function validateScene() {
     return combineDiagnostics([
       duplicateIdDiagnostic(entry.id ?? "", "Point", duplicateIds.points),
       validateEntryId(entry.id ?? "", "Point", env, false),
-      validateExpression(entry.x, env),
-      validateExpression(entry.y, env),
+      validateScalarExpression(entry.x, env),
+      validateScalarExpression(entry.y, env),
       color
-        ? combineDiagnostics(colourChannelKeys(color).map((key) => validateExpression(color[key], env)))
+        ? combineDiagnostics(colourChannelKeys(color).map((key) => validateScalarExpression(color[key], env)))
         : { status: "invalid", message: `Missing point color: ${entry.colorId}` },
       pointLinkDiagnostic(entry, env)
     ]);
   });
   diagnostics.folders = aggregateFolderDiagnostics(diagnostics);
 
-  const all = [...diagnostics.functions, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.transparencies, ...diagnostics.draws, ...diagnostics.points, ...diagnostics.folders, ...diagnostics.settings];
+  const all = [...diagnostics.functions, ...diagnostics.lists, ...diagnostics.colors, ...diagnostics.restrictions, ...diagnostics.transparencies, ...diagnostics.draws, ...diagnostics.points, ...diagnostics.folders, ...diagnostics.settings];
   const firstError = all.find((item) => item.status === "invalid");
   const firstInfo = all.find((item) => item.status === "info");
   const firstWarning = all.find((item) => item.status === "warning");
@@ -6056,6 +6245,15 @@ function assertExpressionDependencies(source, env, localNames = new Set()) {
 
 function validateExpression(source, env, stack = [], localNames = new Set()) {
   try {
+    if (usesCollections(source, env, localNames)) {
+      const plan = collectionPlan(source, env, localNames);
+      const ctx = { x: 1, y: 1, env: buildRuntimeEnv(env), locals: Object.fromEntries([...localNames].map((name) => [name, 1])) };
+      const nodeCount = plan.cost(ctx);
+      if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes at x=y=1); graph may not render` };
+      plan.evaluate(ctx);
+      emitCollectionPlan(plan, { helpers: [], next: 0 }, { x: "x", y: "y", locals: Object.fromEntries([...localNames].map((name) => [name, "1.0"])) });
+      return { status: "valid", message: plan.kind === "list" ? "List expression is valid" : "Expression is valid" };
+    }
     const normalized = normalizeExpressionText(source);
     assertCompleteExpression(normalized);
     assertBuiltinCallArity(normalized);
@@ -6075,11 +6273,12 @@ function validateExpression(source, env, stack = [], localNames = new Set()) {
     }
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
-    return { status: "invalid", message: error.message };
+    return { status: error.code === "LIST_SIZE" ? "info" : "invalid", message: error.message };
   }
 }
 
 function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map(), localNames = new Set()) {
+  if (usesCollections(source, env, localNames)) return collectionPlan(source, env, localNames).cost({ x: 1, y: 1, env: buildRuntimeEnv(env), locals: Object.fromEntries([...localNames].map((name) => [name, 1])) });
   const normalized = normalizeExpressionText(source).replaceAll(/~([A-Za-z]\w*)~/g, "$1");
   let total = countLocalExpressionNodes(normalized);
   const identifiers = normalized.matchAll(/\b[A-Za-z_]\w*\b/g);
@@ -6814,6 +7013,10 @@ function formatPowerExponentSource(source) {
 }
 
 function convertDivisionsToFrac(source) {
+  if (/[\[\]]|\b(sum|prod)\b/.test(source)) {
+    try { return astToLeptonText(String(source).includes("\\") ? parseLatex(source) : parseLeptonText(source)); }
+    catch { return String(source); }
+  }
   const fraction = splitTopLevelFraction(source);
   if (fraction) {
     const prefix = convertDivisionsToFrac(fraction.prefix);
@@ -6873,7 +7076,7 @@ function tokenizeLatex(source) {
       }
       continue;
     }
-    let numMatch = source.slice(i).match(/^\d+(?:\.\d+)?/);
+    let numMatch = source.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/);
     if (numMatch) {
       tokens.push({ type: "number", value: Number(numMatch[0]) });
       i += numMatch[0].length;
@@ -6913,7 +7116,7 @@ function tokenizeLeptonText(source) {
       i++;
       continue;
     }
-    let numMatch = source.slice(i).match(/^\d+(?:\.\d+)?/);
+    let numMatch = source.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/);
     if (numMatch) {
       tokens.push({ type: "number", value: Number(numMatch[0]) });
       i += numMatch[0].length;
@@ -6955,6 +7158,7 @@ function isPrefixToken(token) {
 
 function isTerminatorToken(token) {
   if (!token) return true;
+  if (["for", "\\for"].includes(token.value)) return true;
   if (token.type === "command" && ["\\right", "\\rvert", "\\rfloor", "\\rceil"].includes(token.value)) return true;
   return token.type === "operator" && [")", "}", "]", ","].includes(token.value);
 }
@@ -6991,6 +7195,19 @@ function createParser(tokens, isLatexMode) {
     
     if (token.type === "identifier") {
       const name = token.value;
+      if (name === "sum" || name === "prod") {
+        consume("operator", "(");
+        const binding = consume("identifier").value;
+        consume("operator", "=");
+        const lower = parseInfixExpression(0);
+        consume("operator", "~");
+        const upper = parseInfixExpression(0);
+        consume("operator", ")");
+        consume("operator", "{");
+        const body = parseInfixExpression(0);
+        consume("operator", "}");
+        return { type: "aggregate", name, binding, lower, upper, body };
+      }
       
       // Support Lepton frac(a)(b) or frac{a}{b} or frac(a, b)
       if (name === "frac" && !isLatexMode) {
@@ -6999,6 +7216,10 @@ function createParser(tokens, isLatexMode) {
           if (nextToken.value === "(") {
             consume("operator", "(");
             const num = parseInfixExpression(0);
+            if (peek()?.value === ",") {
+              next(); const den = parseInfixExpression(0); consume("operator", ")");
+              return { type: "fraction", num, den };
+            }
             consume("operator", ")");
             if (peek() && peek().type === "operator" && peek().value === "(") {
               consume("operator", "(");
@@ -7049,9 +7270,40 @@ function createParser(tokens, isLatexMode) {
       return { type: "identifier", name };
     }
     
-    if (token.type === "operator" && (token.value === "(" || token.value === "{" || token.value === "[")) {
+    if (token.type === "operator" && token.value === "[") {
+      const items = [];
+      if (peek()?.value !== "]") {
+        items.push(parseInfixExpression(0));
+        if (["for", "\\for"].includes(peek()?.value)) {
+          next(); consume("operator", "(");
+          const binding = consume("identifier").value;
+          consume("operator", "=");
+          const lower = parseInfixExpression(0);
+          consume("operator", ",");
+          const upper = parseInfixExpression(0);
+          consume("operator", ")"); consume("operator", "]");
+          return { type: "comprehension", binding, lower, upper, body: items[0] };
+        }
+        while (peek()?.value === ",") { next(); items.push(parseInfixExpression(0)); }
+      }
+      consume("operator", "]");
+      return { type: "list", items };
+    }
+    if (token.type === "operator" && (token.value === "(" || token.value === "{")) {
       const closeChar = token.value === "(" ? ")" : token.value === "{" ? "}" : "]";
       const expr = parseInfixExpression(0);
+      if (token.value === "{" && peek()?.value === ":") {
+        const branches = [];
+        let condition = expr, fallback = null;
+        while (peek()?.value === ":") {
+          next(); branches.push({ condition, value: parseInfixExpression(0) });
+          if (peek()?.value !== ",") break;
+          next(); condition = parseInfixExpression(0);
+          if (peek()?.value !== ":") { fallback = condition; break; }
+        }
+        consume("operator", "}");
+        return { type: "piecewise", branches, fallback };
+      }
       consume("operator", closeChar);
       return expr;
     }
@@ -7063,6 +7315,16 @@ function createParser(tokens, isLatexMode) {
     
     if (token.type === "command") {
       const name = token.value.startsWith("\\") ? token.value.slice(1) : token.value;
+      if (name === "sum" || name === "prod") {
+        consume("operator", "_"); consume("operator", "{");
+        const binding = consume("identifier").value;
+        consume("operator", "=");
+        const lower = parseInfixExpression(0);
+        consume("operator", "}"); consume("operator", "^");
+        const upper = parsePrefix();
+        const body = parseInfixExpression(29);
+        return { type: "aggregate", name, binding, lower, upper, body };
+      }
       
       // LaTeX fraction command: \frac{a}{b}
       if (name === "frac") {
@@ -7166,6 +7428,15 @@ function createParser(tokens, isLatexMode) {
     
     while (true) {
       const nextToken = peek();
+      if (nextToken?.value === "[") {
+        next(); const subscript = parseInfixExpression(0); consume("operator", "]");
+        left = { type: "index", target: left, index: subscript }; continue;
+      }
+      if (nextToken?.value === ".") {
+        next(); const property = consume("identifier").value;
+        if (!["length", "x", "y"].includes(property)) throw new Error(`Unknown property: ${property}`);
+        left = { type: "member", target: left, property }; continue;
+      }
       if (isTerminatorToken(nextToken)) {
         break;
       }
@@ -7180,12 +7451,14 @@ function createParser(tokens, isLatexMode) {
         continue;
       }
       
-      const nextPrecedence = nextToken?.type === "operator" ? getOpPrecedence(nextToken.value) : 0;
+      const comparison = ["<", ">", "=", "!"].includes(nextToken?.value);
+      const nextPrecedence = nextToken?.type === "operator" ? (comparison ? 5 : getOpPrecedence(nextToken.value)) : 0;
       if (nextPrecedence <= precedence) {
         break;
       }
       
-      const opToken = next();
+      const opToken = { ...next() };
+      if (comparison && peek()?.value === "=") opToken.value += next().value;
       const right = parseInfixExpression(opToken.value === "^" ? nextPrecedence - 1 : nextPrecedence);
       
       if (opToken.value === "/") {
@@ -7213,6 +7486,8 @@ function parseLatex(source) {
   // presentation-only; retaining them makes a multi-argument operatorname call
   // look like one grouped argument to the AST parser.
   const normalized = String(source ?? "")
+    .replace(/\\(?:left|right)\s*\\([{}])/g, "$1")
+    .replace(/\\(?:leq|le)\b/g, "<=").replace(/\\(?:geq|ge)\b/g, ">=").replace(/\\(?:neq|ne)\b/g, "!=")
     .replace(/\\left\s*(?=[()[\]{}])/g, "")
     .replace(/\\right\s*(?=[()[\]{}])/g, "");
   const tokens = tokenizeLatex(normalized);
@@ -7226,12 +7501,34 @@ function parseLeptonText(source) {
 
 function powerBaseNeedsGrouping(base) {
   // Powers associate to the right: (a^b)^c must not be serialized as a^b^c.
-  return base.type === "binary" || base.type === "unary" || base.type === "power";
+  return base.type === "binary" || base.type === "unary" || base.type === "power" || base.type === "aggregate";
+}
+
+function postfixTarget(node, latex = false) {
+  const text = latex ? astToLatex(node) : astToLeptonText(node);
+  return ["binary", "unary", "power", "aggregate"].includes(node.type) ? (latex ? `\\left(${text}\\right)` : `(${text})`) : text;
+}
+
+function numberText(value) {
+  const text = String(value);
+  if (!/e/i.test(text)) return text;
+  const [coefficient, exponent] = text.toLowerCase().split("e");
+  const sign = coefficient.startsWith("-") ? "-" : "";
+  const unsigned = coefficient.replace("-", "");
+  const position = (unsigned.indexOf(".") < 0 ? unsigned.length : unsigned.indexOf(".")) + Number(exponent);
+  const digits = unsigned.replace(".", "");
+  return sign + (position <= 0 ? `0.${"0".repeat(-position)}${digits}` : position >= digits.length ? digits + "0".repeat(position - digits.length) : `${digits.slice(0, position)}.${digits.slice(position)}`);
 }
 
 function astToLatex(node) {
+  if (node.type === "piecewise") return `\\left\\{${node.branches.map(({ condition, value }) => `${astToLatex(condition)}:${astToLatex(value)}`).concat(node.fallback ? [astToLatex(node.fallback)] : []).join(",")}\\right\\}`;
+  if (node.type === "list") return `\\left[${node.items.map(astToLatex).join(",")}\\right]`;
+  if (node.type === "index") return `${postfixTarget(node.target, true)}\\left[${astToLatex(node.index)}\\right]`;
+  if (node.type === "member") return `${postfixTarget(node.target, true)}.${node.property}`;
+  if (node.type === "comprehension") return `\\left[${astToLatex(node.body)}\\ \\operatorname{for}\\left(${node.binding}=${astToLatex(node.lower)},${astToLatex(node.upper)}\\right)\\right]`;
+  if (node.type === "aggregate") return `\\${node.name}_{${node.binding}=${astToLatex(node.lower)}}^{${astToLatex(node.upper)}}\\left(${astToLatex(node.body)}\\right)`;
   if (node.type === "number") {
-    return String(node.value);
+    return numberText(node.value);
   }
   if (node.type === "identifier") {
     if (node.name === "pi") return "\\pi";
@@ -7286,8 +7583,14 @@ function astToLatex(node) {
 }
 
 function astToLeptonText(node) {
+  if (node.type === "piecewise") return `{${node.branches.map(({ condition, value }) => `${astToLeptonText(condition)}:${astToLeptonText(value)}`).concat(node.fallback ? [astToLeptonText(node.fallback)] : []).join(",")}}`;
+  if (node.type === "list") return `[${node.items.map(astToLeptonText).join(",")}]`;
+  if (node.type === "index") return `${postfixTarget(node.target)}[${astToLeptonText(node.index)}]`;
+  if (node.type === "member") return `${postfixTarget(node.target)}.${node.property}`;
+  if (node.type === "comprehension") return `[${astToLeptonText(node.body)} for(${node.binding}=${astToLeptonText(node.lower)},${astToLeptonText(node.upper)})]`;
+  if (node.type === "aggregate") return `${node.name}(${node.binding}=${astToLeptonText(node.lower)}~${astToLeptonText(node.upper)}){${astToLeptonText(node.body)}}`;
   if (node.type === "number") {
-    return String(node.value);
+    return numberText(node.value);
   }
   if (node.type === "identifier") {
     return node.name;
@@ -7332,8 +7635,9 @@ function astToLeptonText(node) {
 }
 
 function astToMathString(node) {
+  if (["piecewise", "list", "index", "member", "comprehension", "aggregate"].includes(node.type)) return astToLeptonText(node);
   if (node.type === "number") {
-    return String(node.value);
+    return numberText(node.value);
   }
   if (node.type === "identifier") {
     return node.name;
@@ -7372,8 +7676,9 @@ function astToMathString(node) {
 }
 
 function astToEditableHtml(node) {
+  if (["piecewise", "list", "index", "member", "comprehension", "aggregate"].includes(node.type)) return escapeHtml(astToLeptonText(node));
   if (node.type === "number") {
-    return String(node.value);
+    return numberText(node.value);
   }
   if (node.type === "identifier") {
     return node.name;
@@ -7958,6 +8263,7 @@ function setSceneSetting(target, key, value) {
     y_min: "yMin",
     y_max: "yMax",
     max_recursion: "maxRecursion",
+    max_list_size: "maxListSize",
     angle_mode: "angleMode",
     background_color: "backgroundColor",
     ensure_square_grid: "ensureSquareGrid",
@@ -7982,9 +8288,10 @@ function setSceneSetting(target, key, value) {
     if (mapped === "showYNumbers" && target.settings.showYAxis === false) target.settings.showYNumbers = false;
   } else if (mapped === "aspectRatio") {
     target.settings[mapped] = String(value ?? "").trim() || "1:1";
-  } else if (["maxRecursion", "unboundedDecimalPlaces", "randomSeed"].includes(mapped)) {
+  } else if (["maxRecursion", "maxListSize", "unboundedDecimalPlaces", "randomSeed"].includes(mapped)) {
     const number = Number(value);
     if (Number.isFinite(number)) target.settings[mapped] = number;
+    else if (mapped === "maxListSize") target.settings[mapped] = String(value);
   } else {
     target.settings[mapped] = String(value ?? "").trim();
   }
@@ -7999,6 +8306,7 @@ function exportScene() {
     exportSettingLine("y_min", scene.settings.yMin),
     exportSettingLine("y_max", scene.settings.yMax),
     exportSettingLine("max_recursion", scene.settings.maxRecursion),
+    exportSettingLine("max_list_size", scene.settings.maxListSize ?? 10000),
     exportSettingLine("angle_mode", normalizeAngleMode(scene.settings.angleMode)),
     exportSettingLine("background_color", scene.settings.backgroundColor ?? "0"),
     exportSettingLine("ensure_square_grid", formatLeptonBoolean(scene.settings.ensureSquareGrid !== false)),
@@ -8310,6 +8618,13 @@ function importScene(raw) {
         setSceneSetting(next, assignment[1], assignment[2]);
         if (comment.trim()) next.settingLineComments[assignment[1]] = comment.trim();
       }
+    } else if (/^list\s+/i.test(line)) {
+      const assignment = line.match(/^list\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
+      if (assignment) {
+        flushPendingComments("lists");
+        currentCommentSection = "lists";
+        pushDataEntry(next, "lists", withInlineComment({ id: assignment[1], kind: "list", expression: convertDivisionsToFrac(assignment[2].trim()) }, comment));
+      }
     } else if (/^(variable|expression)\s+/i.test(line)) {
       const assignment = line.match(/^(?:variable|expression)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
@@ -8367,7 +8682,7 @@ function importScene(raw) {
       const assignment = line.match(/^(?:colour|color)(hsv)?\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
         const entry = { id: assignment[2], ...(assignment[1] ? { model: "hsv" } : {}) };
-        const parts = assignment[3].split("~").map((part) => part.trim());
+        const parts = splitTopLevelText(assignment[3], "~").map((part) => part.trim());
         colourChannelKeys(entry).forEach((key, index) => { entry[key] = parts[index] ?? "0"; });
         flushPendingComments("colors");
         currentCommentSection = "colors";
@@ -8377,7 +8692,7 @@ function importScene(raw) {
       const assignment = line.match(/^(?:boundary|restriction)\s+([A-Za-z_]\w*)\s*=\s*(.*)$/i);
       if (assignment) {
         const propertyBlock = splitTrailingProperties(assignment[2], new Set(["when"]));
-        const [expression = "1", flag = "False"] = propertyBlock.body.split("~").map((part) => part.trim());
+        const [expression = "1", flag = "False"] = splitTopLevelText(propertyBlock.body, "~").map((part) => part.trim());
         const boundary = legacyBoundaryExpression(expression, flag);
         if (propertyBlock.properties.when) boundary.checkSmaller = /^(lte|less|less_than_or_equal|<=0)$/i.test(propertyBlock.properties.when);
         flushPendingComments("restrictions");
@@ -8744,7 +9059,7 @@ function collectTextDeclaredIdentifiers(source) {
   const ids = new Set();
   String(source ?? "").split("\n").forEach((line) => {
     const { code } = splitLeptonComment(line);
-    const declaration = code.match(/^\s*(?:variable|expression|slider|function|map|colour(?:hsv)?|color(?:hsv)?|boundary|restriction|transparency|point)\s+([A-Za-z_]\w*)/i);
+    const declaration = code.match(/^\s*(?:list|variable|expression|slider|function|map|colour(?:hsv)?|color(?:hsv)?|boundary|restriction|transparency|point)\s+([A-Za-z_]\w*)/i);
     if (declaration) ids.add(declaration[1]);
     const time = code.match(/^\s*time\s+(?:bounded|unbounded|bounded_looped)\s+([A-Za-z_]\w*)/i);
     if (time) ids.add(time[1]);
@@ -8762,7 +9077,7 @@ function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
   if (folder) {
     return `${escapeHtml(folder[1])}<span class="syntax-keyword">${folder[2]}</span>${escapeHtml(folder[3])}<span class="syntax-variable">${escapeHtml(folder[4])}</span><span class="syntax-operator">${escapeHtml(folder[5])}</span>${escapeHtml(folder[6])}`;
   }
-  const declaration = line.match(/^(\s*)(set|variable|expression|slider|time|function|map|colour(?:hsv)?|color(?:hsv)?|boundary|restriction|transparency|point)(\b)/i);
+  const declaration = line.match(/^(\s*)(set|list|variable|expression|slider|time|function|map|colour(?:hsv)?|color(?:hsv)?|boundary|restriction|transparency|point)(\b)/i);
   if (declaration) {
     const prefix = escapeHtml(declaration[1]);
     const keyword = declaration[2].toLowerCase();
@@ -8775,8 +9090,8 @@ function highlightLeptonCode(line, context = { declaredIds: new Set() }) {
     return `${prefix}<span class="syntax-keyword">${declaration[2]}</span>${highlightLeptonTokens(rest, {
       ...context,
       markFirstNameAsSetting: keyword === "set",
-      mathDefinition: ["variable", "expression", "slider", "time", "function", "map"].includes(keyword),
-      localIds: new Set(functionParams),
+      mathDefinition: ["list", "variable", "expression", "slider", "time", "function", "map"].includes(keyword),
+      localIds: new Set([...functionParams, ...[...rest.matchAll(/\b(?:sum|prod|for)\s*\(\s*([A-Za-z_]\w*)\s*=/g)].map((match) => match[1])]),
       propertyStart
     })}`;
   }

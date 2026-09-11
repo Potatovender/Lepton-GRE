@@ -74,6 +74,32 @@ Parameterized function locals shadow outer values. Expressions and sliders resol
 
 ## Rendering
 
+### Collection Plans
+
+`src/math/collections.js` builds a typed scalar/list/point plan from the runtime's
+existing AST. It does not tokenize or parse Lepton independently. The host adapter
+provides definitions and the existing scalar CPU/GLSL compilers. Lexical index
+bindings, function arguments, broadcasting, indexing, lengths, and reduction
+identities are resolved here. `scene.lists` uses the same UID/order/comment model
+as the other collections.
+
+GPU lists are represented by a length expression and an element evaluator, not
+10,000 floats allocated at every pixel. Comprehensions evaluate an element lazily;
+sums/products emit scoped helper functions with loops. Draw lists loop in element
+order. `buildFragmentShader` collects helpers and opts into GLSL 300 ES for
+collections, including explicit NaN/Infinity checks and well-defined invalid
+square-root bounds. The driver selects a matching vertex dialect. Scalar shaders remain
+unchanged. `maxListSize` and list definitions participate in the shader cache key.
+
+The cost estimator memoizes shared references and caps only the displayed cost,
+not numerical results. Nested bounds dependent on an outer index are counted per
+term until the display cap. There is no general computation-step budget. Do not
+claim that GPU/compiler limits reliably prevent hangs on pathological input.
+
+Scoped AST name traversal also supports renaming and dependency filtering without
+mistaking a local summation index for a global entry. Scalar-only UI fields reject
+whole-list values; indexing a list in a colour/boundary/transparency is supported.
+
 The primary renderer draws two full-screen triangles and evaluates each visible draw layer in the fragment shader. Viewport bounds, clipping, random seed, background colour, resolution, and animated time values are uniforms.
 
 The WebGL cache key contains graph structure but replaces current time values with a stable marker. Consequently:

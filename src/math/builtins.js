@@ -61,5 +61,5 @@ export const STANDARD_LATEX_COMMANDS = Object.freeze(Object.fromEntries(
 ));
 export const MATHQUILL_OPERATOR_NAMES = Object.keys(LATEX_FUNCTIONS).filter((name) => !["sqrt", "frac"].includes(name)).join(" ");
 export const BUILTIN_NAMES = new Set([
-  ...Object.keys(LATEX_FUNCTIONS), "x", "y", "z", "pi", "e", "pow", "Math", "PI", "ref", "NaN"
+  ...Object.keys(LATEX_FUNCTIONS), "sum", "prod", "for", "x", "y", "z", "pi", "e", "pow", "Math", "PI", "ref", "NaN"
 ]);

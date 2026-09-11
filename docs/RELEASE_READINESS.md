@@ -1,6 +1,6 @@
 # Release Readiness
 
-Checked on 2026-09-10 for `20260910-more-data-hsv`. This supersedes the
+Checked on 2026-09-11 for `20260911-lists-reductions`. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -12,12 +12,23 @@ version/commit is in [release.json](https://potatovender.github.io/Lepton-GRE/re
 A query string alone does not publish new code.
 
 The Pages workflow now installs locked dependencies and runs verification before
-uploading an explicit 37-file public artifact. Deploy depends on that build of the
+uploading an explicit 38-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Corrections
 
+- Lists, comprehensions, summation, and products use typed collection plans
+  shared by CPU and GLSL. Lists broadcast scalars, index from zero, and draw in
+  element order. Limits accept coordinates and have lexical loop bindings.
+  MathQuill provides editable sum/product limits; collection data and comments
+  survive repeated editor and local-save round trips. The maximum list size
+  defaults to 10,000, with blue size warnings and no silent truncation.
+- Collection/reduction shaders use GLSL ES 3.00, with a matching vertex shader.
+  WebGL 1 retains scalar-graph support and reports an explicit error for dynamic
+  collection shaders. Large reductions are not given an additional hard iteration cap.
+  Explicit undefined-value handling avoids a WebKit/Chromium discrepancy for
+  negative square roots used as coordinate-dependent reduction bounds.
 - The type chooser has a More data catalog, including points and HSV colours.
   HSV supports wrapping hue in degrees and clamped saturation/brightness, across
   CPU/GLSL rendering, point colours, backgrounds, previews, and export. It shares
@@ -82,9 +93,14 @@ screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Verification
 
-- **160** runtime/model/grammar checks, **17** syntax unit tests, and **11**
+- **165** runtime/model/grammar checks, **17** syntax unit tests, and **13**
   standalone GPU-driver tests passed.
 - All **9** maintained sample files passed current-syntax migration checks.
+- Collection checks include independent GPU pixels for nested reductions,
+  element-wise operations, point-function composition, coordinate-dependent
+  bounds, exact list limits, and 10,000-term workloads. Browser flows cover
+  actual sum/product/comprehension typing, mobile creation, maximum-list settings,
+  ordered draw counts, and saved folders/comments/previews.
 - All nine sample sources remain canonically identical after repeated import/export
   cycles, with no dropped declarations. Mixed RGB/HSV scenes retain comments,
   folders, references, and incomplete entries through round trips and local saves.
@@ -132,6 +148,10 @@ from Git and deployment. Focused caret screenshots are in
   simulation is not the same as testing an operating system's software keyboard.
 - Correct independent pixel calculations do not prove performance on low-powered
   GPUs. High-detail scenes can still compile slowly or render at low FPS.
+- Coordinate-dependent list sizes and sum/product bounds can change at each
+  pixel. Complexity is estimated, not a guaranteed frame-time limit. Huge or
+  nested reductions may stall the page or fail on GPU limits; blue warnings are
+  not a reliable automatic hang-prevention mechanism.
 - Saves are local to an origin and browser, not cloud backups. Copy Lepton text
   before clearing website data, moving domains, or deleting saved graphs.
 - Select a Lepton license if open-source reuse is intended. No license has been

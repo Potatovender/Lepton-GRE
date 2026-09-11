@@ -26,6 +26,7 @@ set x_max = 10
 set y_min = -10
 set y_max = 10
 set max_recursion = 100
+set max_list_size = 10000
 set angle_mode = radians
 set background_color = 0
 set ensure_square_grid = True
@@ -104,6 +105,58 @@ expression flattened = total(offset(x,y),offset(2,3))
 ```
 
 Point addition and multiplication operate component by component. A scalar mixed with a point is applied to both coordinates. When a point-valued call is passed to another function, it fills two consecutive scalar parameters in x-then-y order. Functions and expressions share one identifier namespace and cannot use the same ID.
+
+## Lists, Summation and Products
+
+Choose **More data > List**. Lists are separate from points and currently contain
+one-dimensional scalar expressions, including coordinates, sliders, and calls:
+
+```text
+list values = [1,2,3]
+list squares = [c^2 for(c=1,10)]
+expression first = values[0]
+expression count = values.length
+expression shifted = values+10
+expression weighted = values*[2,3,4]
+expression series = sum(i=1~40){sin(i*x)/i}
+expression factorial = prod(i=1~5){i}
+list totals = sum(i=1~3){[i,2*i]}
+draw(squares)
+```
+
+- Indexing is **zero-based**; invalid/fractional/out-of-range indices are undefined.
+  `.x` and `.y` remain point-only selectors. `.length` is list-only.
+- Arithmetic and built-in functions act element-wise. Scalars broadcast to every
+  element. List/list lengths must match; they are never truncated to fit.
+  `values+10` gives `[11,12,13]`; `weighted` is `[2,6,12]`; `totals` is `[6,12]`.
+- Passing a named list to a parameterized function keeps it as one list argument.
+  For compatibility, an inline two-item literal can fill two scalar parameters
+  only when the function's arity requires it. Named points still fill two slots.
+- `[body for(index=lower,upper)]` constructs a list; it is not an imperative loop.
+  Nested lists and point-valued elements are not supported in this release.
+- `sum(index=lower~upper){body}` and `prod(index=lower~upper){body}` visit the exact
+  lower bound, then add 1 each step while the index is <= the upper bound. Bounds
+  may be fractional and may use `x`, `y`, sliders, and functions. Use `floor(...)`
+  explicitly when integer bounds are desired. Bounds must evaluate to finite
+  scalars. Empty sums return 0; empty products return 1 (element-wise for lists).
+- Indices are local to the body. Bounds use the outer scope. Nested reductions
+  can reuse an index name without overwriting it. Referenced global expressions
+  retain their own graph-coordinate meaning.
+- Standard displays editable LaTeX limits: `\sum_{i=1}^{40}(...)` and
+  `\prod_{i=1}^{5}(...)`. In a blank math field, type `sum`/`prod`, enter `i=1`,
+  press Up to enter the upper bound, then Right to enter a parenthesized body.
+  The on-screen keyboard offers these operators too.
+- Drawing a list paints index 0 first, then 1, etc. Each receives the draw layer's
+  colour, boundary and transparency. Later elements overlay earlier ones.
+  Standard shows the draw count, or a variable count for coordinate/time bounds.
+- `max_list_size` limits each list to 10,000 elements by default. Oversized lists
+  are blue-flagged and undefined, not silently truncated. Structural errors remain
+  red. Work estimates include repeated terms and expanded references, sampled at
+  x=y=1 for coordinate-dependent work. The display caps counts above 65,536.
+  There is no separate summation-steps setting: very large/nested computations
+  can fail GPU limits or stall. A blue warning does **not** guarantee safe runtime.
+- Collection GPU evaluation requires **WebGL 2 / GLSL 3**. Scalar scenes retain the older
+  shader path. CPU reference evaluation supports the same collection semantics.
 
 ## Colours
 

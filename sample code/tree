@@ -3,6 +3,7 @@ set x_max = 10
 set y_min = -10
 set y_max = 10
 set max_recursion = 100
+set max_list_size = 10000
 set angle_mode = radians
 set background_color = 0
 set ensure_square_grid = True

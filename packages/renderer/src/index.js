@@ -30,7 +30,9 @@ function compileProgram(gl, source) {
   let fragment;
   let program;
   try {
-    vertex = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE);
+    const modern = /^\s*#version 300 es\b/.test(source);
+    const vertexSource = modern ? `#version 300 es\n${VERTEX_SOURCE.replace("attribute", "in")}` : VERTEX_SOURCE;
+    vertex = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
     fragment = compileShader(gl, gl.FRAGMENT_SHADER, source);
     program = gl.createProgram();
     if (!program) throw new RendererError("The GPU could not allocate a program.", source);
@@ -60,7 +62,8 @@ function validateBounds(bounds) {
 export function renderFrame(canvas, options) {
   validateBounds(options.bounds);
   if (options.clipBounds) validateBounds(options.clipBounds);
-  const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true }) ?? canvas.getContext("webgl", { preserveDrawingBuffer: true });
+  const webGl2 = canvas.getContext("webgl2", { preserveDrawingBuffer: true });
+  const gl = webGl2 ?? canvas.getContext("webgl", { preserveDrawingBuffer: true });
   if (!gl) return { supported: false, compiled: false, compileMs: 0, source: "" };
   // Retain the context for disposal even when the first render fails.
   contexts.set(canvas, gl);
@@ -91,6 +94,7 @@ export function renderFrame(canvas, options) {
     const source = typeof options.fragmentSource === "function" ? options.fragmentSource() : options.fragmentSource;
     if (typeof source !== "string" || !source.trim()) throw new RendererError("Fragment source is empty.");
     if (source.length > (options.maxSourceLength ?? MAX_FRAGMENT_CHARACTERS)) throw new RendererError("Generated shader exceeds the source-size safety budget.", source);
+    if (!webGl2 && /^\s*#version 300 es\b/.test(source)) throw new RendererError("This graph uses collection shaders and requires WebGL 2. Try a browser/device with WebGL 2 enabled.", source);
     const program = compileProgram(gl, source);
     const buffer = gl.createBuffer();
     if (!buffer) { gl.deleteProgram(program); throw new RendererError("The GPU could not allocate a vertex buffer.", source); }

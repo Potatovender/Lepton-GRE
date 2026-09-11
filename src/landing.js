@@ -1,4 +1,4 @@
-const APP_VERSION = "20260910-more-data-hsv";
+const APP_VERSION = "20260911-lists-reductions";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

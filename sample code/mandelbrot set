@@ -3,6 +3,7 @@ set x_max = 1
 set y_min = -2
 set y_max = 2
 set max_recursion = 12
+set max_list_size = 10000
 set angle_mode = radians
 expression real = real^2-imaginary^2+x
 expression imaginary = 2*real*imaginary+y

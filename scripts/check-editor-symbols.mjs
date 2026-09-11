@@ -4,12 +4,13 @@ import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PREC
 import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js";
 import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "../src/math/builtins.js";
 import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "../src/math/colour.js";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "../src/math/collections.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260910-more-data-hsv";
+const cacheVersion = "20260911-lists-reductions";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -87,7 +88,7 @@ const sandbox = {
   STANDARD_LATEX_COMMANDS,
   MATHQUILL_OPERATOR_NAMES,
   BUILTIN_NAMES,
-  colourChannelKeys, hsvToRgb, HSV_GLSL
+  colourChannelKeys, hsvToRgb, HSV_GLSL, buildCollectionPlan, emitCollectionPlan, mapScopedNames
 };
 
 vm.createContext(sandbox);
@@ -100,6 +101,110 @@ vm.runInContext(
 );
 
 const functionNames = Object.keys(sandbox.__debugLatexFunctions);
+
+check("collection arithmetic, indexing, aggregates and comprehensions share CPU semantics", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`list values = [1,2,3]
+list generated = [c^2 for(c=1,3)]
+function twice(a) = 2*a
+expression answer = sum(i=1~3){i^2}`));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv());
+  const cases = [
+    ["values+10", [11,12,13]], ["values*[2,3,4]", [2,6,12]],
+    ["generated[1]", 4], ["values.length", 3], ["twice(values)", [2,4,6]],
+    ["sum(i=1~3){i^2}", 14], ["prod(i=1~5){i}", 120],
+    ["sum(i=1~3){[i,2*i]}", [6,12]], ["sum(i=3~1){i}", 0], ["prod(i=3~1){i}", 1],
+    ["sum(i=1~2){prod(j=1~3){i+j}}", 84], ["sum(i=floor(x)~floor(y)){i}", 9],
+    ["sum(i=0.5~2.9){i}", 4.5], ["sum(i=1~3){random-random()}", 0]
+  ];
+  for (const [input, expected] of cases) {
+    const actual = sandbox.compileExpression(input)(2,4,env);
+    assert(JSON.stringify(actual) === JSON.stringify(expected), `${input}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
+  }
+});
+
+check("collection text and MathQuill LaTeX round trips retain binding and bounds", () => {
+  for (const text of ["sum(i=1~40){i^2}", "prod(i=1~4){sin(i)}", "[c^2 for(c=1,10)]", "values[1]+values.length", "sum(i=1~3){prod(j=1~2){i+j}}", "[x/y,frac{y}{2}]", "(sum(i=1~2){[i,2*i]})[0]", "([1,2]+[3,4])[0]", "(sum(i=1~3){i})^2", "sum(i=1~3){{i>1:i,0}}", "[{c<=3:c^2,0} for(c=1,5)]"]) {
+    const ast = sandbox.parseLeptonText(text);
+    const latex = sandbox.astToLatex(ast);
+    const roundTrip = sandbox.astToLeptonText(sandbox.parseLatex(latex));
+    assert(roundTrip === sandbox.astToLeptonText(ast), `${text} -> ${latex} -> ${roundTrip}`);
+  }
+});
+
+check("collection scope, errors and blue size diagnostics preserve data", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`set max_list_size = 3
+expression i = 99
+expression xcopy = x
+list values = [1,2,3]
+list variableSize = [c for(c=1,x)]
+function fn(a) = sum(i=1~a){i}
+point p = [2,3]
+function pair(a,b) -> point = [a,b]
+function shifted(a,b) -> point = pair(a,b)+1`));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv());
+  for (const [source, expected] of [
+    ["sum(i=1~3){i}+i", 105], ["fn(3)", 6], ["sum(i=1~2){sum(i=1~3){i}}", 12],
+    ["sum(i=1~2){xcopy}", 10], ["sum(i=1~2){p.x+i}", 7],
+    ["sum(i=1~2){shifted(i,3).x}", 5], ["sum(i=1~3){{i>1:i,0}}", 5],
+    ["sum(i=1~3){{i=2:10,0}}", 10], ["([1,2]+[3,4])[0]", 4],
+    ["(sum(i=1~3){i})^2", 36], ["sum(i=2~1){[1,2]}", [0,0]], ["prod(i=2~1){[1,2]}", [1,1]]
+  ]) {
+    const actual = sandbox.compileExpression(source)(5,4,env);
+    assert(JSON.stringify(actual) === JSON.stringify(expected), `${source} = ${JSON.stringify(actual)}`);
+  }
+  for (const source of ["values+[1,2]", "[missing for(c=1,2)]", "[[1,2]]", "[p]", "values.x", "sum(i=values~3){i}", "prod(i=1~3){}", "values+"]) {
+    assert(sandbox.validateExpression(source, sandbox.sceneFunctionEnv()).status === "invalid", source);
+  }
+  assert(sandbox.validateExpression("[c for(c=1,4)]", sandbox.sceneFunctionEnv()).status === "info", "maximum should blue flag");
+  assert(sandbox.validateExpression("[random,random()]", sandbox.sceneFunctionEnv()).status !== "invalid", "bare random is valid in lists");
+  assert(sandbox.validateScalarExpression("values", sandbox.sceneFunctionEnv()).status === "invalid", "whole list in scalar field accepted");
+  assert(Number.isNaN(sandbox.compileExpression("values[3]")(0,0,env)), "invalid index must be undefined");
+  assert(Number.isNaN(sandbox.compileExpression("values[0.5]")(0,0,env)), "fractional index must be undefined");
+  sandbox.renameSceneReferences("functions", "i", "renamed");
+  assert(sandbox.__debugScene.functions.find((entry) => entry.id === "fn").expression.includes("sum(i=1~a){i}"), "renaming global changed local binding");
+  sandbox.__debugSetScene(sandbox.importScene(`list f1 = [1,2]
+expression length = 100
+expression count = f1.length+length`));
+  sandbox.renameSceneReferences("functions", "length", "renamed");
+  assert(sandbox.__debugScene.functions.find((entry) => entry.id === "count").expression === "f1.length+renamed", "renaming global changed length property");
+  assert(sandbox.defaultEntryForKind("functions").id !== "f1", "new expression ID collides with a list");
+});
+
+check("list declarations, mixed folders and settings survive import and export", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`set max_list_size = 500
+folder Lists = {
+ // squares
+ list values = [c^2 for(c=1,5)] // inclusive
+ colour shade = sum(i=1~2){i}~0~255
+ draw(values) {colour=shade}
+}`));
+  assert(!sandbox.validateScene().hasErrors, JSON.stringify(sandbox.validateScene()));
+  const text = sandbox.exportScene();
+  assert(text.includes("list values") && text.includes("max_list_size = 500") && text.includes("// inclusive"), text);
+  sandbox.__debugSetScene(sandbox.importScene(text));
+  assert(sandbox.exportScene() === text, sandbox.exportScene());
+  const shader = sandbox.buildFragmentShader();
+  assert(shader.includes("listIndex") && shader.includes("leptonCollection"), shader.slice(-2000));
+});
+
+check("collection functions retain lexical scope and point output composition", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`list numbers = [1,2,3]
+expression outer = x
+function evaluate(x) = sum(i=1~2){outer}+x
+function pair(a) -> point = [sum(i=1~a){i},prod(i=1~a){i}]
+function scalar(a) = pair(a).x+pair(a)[1]
+function vector(a) = a^2+1`));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv());
+  for (const [input, expected] of [
+    ["evaluate(10)", 14], ["pair(3).x", 6], ["pair(3)[1]", 6], ["scalar(3)", 12],
+    ["vector(numbers)", [2,5,10]], ["sin(numbers)", [Math.sin(1),Math.sin(2),Math.sin(3)]],
+    ["clamp(numbers,1.5,2.5)", [1.5,2,2.5]], ["sum(i=1~3){sum(j=1~i){j}}", 10]
+  ]) {
+    const actual = sandbox.compileExpression(input)(2,4,env);
+    assert(JSON.stringify(actual) === JSON.stringify(expected), `${input}: ${JSON.stringify(actual)}`);
+  }
+  assert(!sandbox.validateScene().hasErrors, JSON.stringify(sandbox.validateScene()));
+});
 
 check("runtime favicon links use the Lepton icon", () => {
   assert(headLinks.length === 3, JSON.stringify(headLinks));
@@ -1436,8 +1541,8 @@ check("point arithmetic broadcasts scalars and multiplies point components", () 
   sandbox.__debugSetScene(sandbox.importScene(`function base(x,y) -> point = [x,y]
 function shifted(x,y) -> point = base(x,y)+2
 function scaled(x,y) -> point = shifted(x,y)*base(3,4)
-function sum(a,b) = a+b
-expression result = sum(scaled(1,2))`));
+function total(a,b) = a+b
+expression result = total(scaled(1,2))`));
   assert(!sandbox.validateScene().hasErrors, JSON.stringify(sandbox.validateScene()));
   const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv(true));
   assert(sandbox.compileExpression("result")(0,0,env) === 25, "expected [9,16] to sum to 25");
@@ -2200,6 +2305,7 @@ check("storage quota errors are recognized for save feedback", () => {
 });
 
 function check(name, fn) {
+  if (process.env.LEPTON_CHECK_FILTER && !name.includes(process.env.LEPTON_CHECK_FILTER)) return;
   try {
     fn();
     console.log(`ok - ${name}`);

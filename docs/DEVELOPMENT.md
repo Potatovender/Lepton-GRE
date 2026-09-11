@@ -21,6 +21,7 @@ Useful scripts:
 | `npm run test` | Run focused Vitest syntax tests and isolated renderer tests. |
 | `npm run test:renderer` | Test GPU resource lifecycle, cache reuse, dimensions, and failures without a browser. |
 | `npm run test:browser` | Run real keyboard/selection and MathQuill remount checks against `dist/` (build first; install Chromium with `npx playwright install chromium`). |
+| `npm run test:collections` | Check list/reduction CPU-to-GPU parity, editable limits, list creation, persistence, and mobile layout in a real browser. |
 | `npm run typecheck` | Validate TypeScript declarations and test configuration. |
 | `npm run verify` | Run build, unit tests, and type checking. |
 | `npm run update:mathquill` | Restore the pinned MathQuill assets, verifying hashes before replacement. |
@@ -82,6 +83,7 @@ Before release, verify:
 - favicon on landing, blank, URL scene, and all sample links;
 - Standard/Text/Standard round trip with folders, standalone and inline comments, fractions, exponents, piecewise expressions, and custom functions;
 - expression, slider, time slider, parameterized function, colour, boundary, transparency, point, folder, comment, and draw rows;
+- list literals/comprehensions, zero-based indexing, scalar broadcasting, local sum/product scopes, dynamic bounds, ordered list drawing, and blue size warnings;
 - rename reference propagation, duplicate/reserved-name diagnostics, dependency filtering, sorting, nested drag/drop, and dropdown creation;
 - animated time playback, live slider-bound edits, FPS output, pan/zoom, coordinate-grid switches, settings return, and sidebar resize;
 - save/load/new/export and an export whose aspect ratio differs from the visible renderer;
@@ -100,6 +102,11 @@ to a local or public base URL to verify a deployment. Optional
 The same suite checks that Vite serves sample source files byte-for-byte without
 injecting source-map comments. Use the URL printed by Vite or its automatic port;
 some otherwise unused ports (including 4190) are blocked by browser networking.
+
+Collections use `src/math/collections.js` for typed plans and reuse the scalar
+CPU/GLSL compiler for element operations. GPU collection evaluation uses GLSL ES
+3.00 and requires WebGL 2, including explicit undefined-value checks. A long sum can still monopolize CPU or GPU
+time: blue complexity warnings are advisory, not a watchdog or a work budget.
 
 ## Release Checklist
 

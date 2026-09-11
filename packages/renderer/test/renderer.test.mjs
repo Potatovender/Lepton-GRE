@@ -2,11 +2,11 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {renderFrame, disposeRenderer, RendererError} from "../src/index.js";
 
-function fixture({compile = true, link = true, supported = true} = {}) {
-  const calls = {programs: 0, shadersDeleted: 0, programsDeleted: 0, buffersDeleted: 0, draws: 0, finishes: 0, uniforms: [], contextRequests: 0, contextsLost: 0};
+function fixture({compile = true, link = true, supported = true, webgl2 = true} = {}) {
+  const calls = {programs: 0, shadersDeleted: 0, programsDeleted: 0, buffersDeleted: 0, draws: 0, finishes: 0, uniforms: [], sources: [], contextRequests: 0, contextsLost: 0};
   const gl = {
     VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, MAX_RENDERBUFFER_SIZE: 5,
-    createShader: () => ({}), shaderSource() {}, compileShader() {}, getShaderParameter: () => compile,
+    createShader: () => ({}), shaderSource(_shader, source) { calls.sources.push(source); }, compileShader() {}, getShaderParameter: () => compile,
     getShaderInfoLog: () => "test compile failure", deleteShader() { calls.shadersDeleted++; },
     createProgram() { calls.programs++; return {}; }, attachShader() {}, linkProgram() {}, getProgramParameter: () => link,
     getProgramInfoLog: () => "test link failure", deleteProgram() { calls.programsDeleted++; },
@@ -17,7 +17,7 @@ function fixture({compile = true, link = true, supported = true} = {}) {
     clearColor() {}, clear() {}, drawArrays() { calls.draws++; }, finish() { calls.finishes++; },
     getExtension: (name) => name === "WEBGL_lose_context" ? {loseContext() { calls.contextsLost++; }} : null
   };
-  const canvas = {width: 0, height: 0, getContext() { calls.contextRequests++; return supported ? gl : null; }};
+  const canvas = {width: 0, height: 0, getContext(type) { calls.contextRequests++; return supported && (type !== "webgl2" || webgl2) ? gl : null; }};
   const options = {width: 100, height: 50, bounds: {xMin: -2, xMax: 2, yMin: -1, yMax: 1},
     shaderKey: "test", fragmentSource: "void main(){gl_FragColor=vec4(1.0);}", floats: {u_time_0: 1}};
   return {canvas, options, calls, gl};
@@ -107,6 +107,19 @@ test("disposal does not acquire a context on an unused canvas", () => {
 test("missing WebGL reports unsupported without pretending to render", () => {
   const {canvas, options} = fixture({supported: false});
   assert.equal(renderFrame(canvas, options).supported, false);
+});
+test("GLSL 300 fragment shaders receive a matching vertex shader", () => {
+  const {canvas, options, calls} = fixture();
+  renderFrame(canvas, {...options, fragmentSource: "#version 300 es\nprecision highp float;out vec4 colour;void main(){colour=vec4(1.0);}"});
+  assert(calls.sources.every((source) => source.startsWith("#version 300 es")));
+  assert(calls.sources[0].includes("in vec2"));
+  assert.equal(calls.draws, 1);
+});
+test("dynamic loop shaders clearly require WebGL 2 while scalar shaders retain WebGL 1 support", () => {
+  const {canvas, options, calls} = fixture({webgl2: false});
+  renderFrame(canvas, options);
+  assert.throws(() => renderFrame(canvas, {...options, shaderKey: "modern", fragmentSource: "#version 300 es\nvoid main(){}"}), /requires WebGL 2/);
+  assert.equal(calls.draws, 1);
 });
 test("invalid ranges, GPU sizes, and shader budgets fail before drawing", () => {
   const {canvas, options, calls} = fixture();

@@ -40,8 +40,10 @@ renderFrame(canvas, {
 disposeRenderer(canvas, { loseContext: true });
 ```
 
-The supplied shader uses GLSL ES 1.00 syntax. The driver requests WebGL 2 then
-WebGL 1, and provides six vertices covering the canvas. Increment `shaderKey`
+The driver accepts GLSL ES 1.00 and `#version 300 es` fragment shaders and chooses
+the matching vertex shader. List/reduction evaluation uses ES 3.00 and requires
+WebGL 2; ES 1.00 scalar graphs retain the WebGL 1 fallback. The driver provides
+six vertices covering the canvas. Increment `shaderKey`
 when source structure changes. Numeric time, bounds, and background changes
 reuse the existing program. A `fragmentSource` factory runs only on cache misses.
 

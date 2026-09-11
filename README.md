@@ -19,6 +19,8 @@ Lepton GRE (Lepton Graph Rendering Interface) is a browser-based mathematical fi
 - More data catalog for supported entry types, including points and HSV colours
   with looping hue and clamped saturation/brightness. RGB and HSV share colour references.
 - Piecewise expressions, recursive references with a configurable depth, and dependency-focused workspace filtering.
+- Scalar lists, indexed access, element-wise arithmetic, list comprehensions,
+  summation/products with editable LaTeX limits, and ordered list drawing.
 - Full-canvas WebGL rendering, coordinate-grid controls, pan/zoom, local saves, PNG export, and sample scenes.
 - Live diagnostics for syntax, naming, recursion size, dependencies, channels, settings, and draw components.
 - Phone layout with the graph above the editor, adapting to the visible viewport while typing.
@@ -76,6 +78,7 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `src/math/expression-syntax.js` | Shared implicit-multiplication and power-precedence transformations. |
 | `src/math/builtins.js` | Shared built-in names, arity, display aliases, LaTeX commands, and MathQuill operator suggestions. |
 | `src/math/colour.js` | Colour channel definitions and matching CPU/GLSL HSV conversion. |
+| `src/math/collections.js` | Typed collection plans, scoped bindings, broadcasting, reductions, and lazy GLSL element evaluation. |
 | `src/landing.js` | Landing-page sample source and launch URL generation. |
 | `src/styles.css` | Landing and grapher styles. |
 | `src/libs/mathquill/` | Vendored equation editor assets. |
@@ -84,6 +87,7 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `scripts/site-files.mjs`, `scripts/stage-site.mjs` | Explicit public-file list and release metadata generation. |
 | `scripts/check-editor-symbols.mjs` | Executable grammar, parser, model, UI-contract, and GLSL regression suite. |
 | `scripts/check-editor-browser.mjs` | Actual typing, caret/selection scrolling, and repeated editor-mount checks against the staged release. |
+| `scripts/check-collections-browser.mjs` | Collection CPU/GPU cases, real sum/product typing, list editing and round trips. |
 | `tests/` | Focused Vitest tests for the standalone expression-syntax module. |
 | `sample code/` | The single source of truth for copyable landing-page samples. `npm run migrate:samples` upgrades recognized legacy forms after grammar changes. |
 | `docs/` | Architecture, language, development, and design references. |
@@ -97,6 +101,9 @@ See the [release-readiness audit](docs/RELEASE_READINESS.md) for current validat
 tested workflows and remaining device-specific checks.
 
 Lepton requires a modern browser with ES modules, Canvas, and WebGL. WebGL is the primary renderer; a CPU renderer remains as a compatibility fallback. PNG export uses the same GLSL scene and configured viewport as the live graph.
+
+Collection/reduction rendering requires WebGL 2. Very large lists or nested sums can
+still exceed GPU resources; blue complexity warnings are not an execution budget.
 
 At phone widths (760 CSS pixels or less), the graph fills the upper half and the
 editor fills the lower half. The layout follows the visible viewport as the
