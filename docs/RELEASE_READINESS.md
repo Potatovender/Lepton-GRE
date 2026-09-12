@@ -1,6 +1,6 @@
 # Release Readiness
 
-Checked on 2026-09-11 for `20260911-lists-reductions`. This supersedes the
+Checked on 2026-09-12 for `20260912-enter-folder-lines`. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -18,6 +18,11 @@ screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Corrections
 
+- Pressing Enter after editing a Standard-mode data row creates a blank
+  expression immediately after that row, inherits its folder membership, focuses
+  the new editor, and leaves all existing mixed data in place. Graphs opened from
+  URLs, samples, imports, or local saves start with every folder closed; opening
+  and closing folders remains UI state and does not alter exported Lepton text.
 - Lists, comprehensions, summation, and products use typed collection plans
   shared by CPU and GLSL. Lists broadcast scalars, index from zero, and draw in
   element order. Limits accept coordinates and have lexical loop bindings.
@@ -93,7 +98,7 @@ screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Verification
 
-- **165** runtime/model/grammar checks, **17** syntax unit tests, and **13**
+- **167** runtime/model/grammar checks, **17** syntax unit tests, and **13**
   standalone GPU-driver tests passed.
 - All **9** maintained sample files passed current-syntax migration checks.
 - Collection checks include independent GPU pixels for nested reductions,
@@ -112,6 +117,9 @@ screenshots, and unrelated ItGE experiments are not deployed.
   links, and nonblank graph output passed the load smoke checks.
 - Three Text Apply/Reload/Standard cycles preserved fractions and comments and
   remounted MathQuill. Keyboard edits in the middle retained the caret position.
+- Browser interaction checks confirm that Enter places and focuses a new line
+  beneath a root or nested-folder row, while URL and saved-graph loads keep nested
+  folder contents intact and initially collapsed.
 - The checked-in Playwright suite measures scroll offsets, not just saved text:
   middle typing/backspace, arrows, Home/End, and both drag-selection directions
   pass at 380/760/1100 px desktop sidebars and a 390 px phone viewport. Additional

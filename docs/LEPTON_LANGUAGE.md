@@ -1,6 +1,11 @@
 # Lepton Language Reference
 
-Lepton text is the lossless text representation of the Standard workspace. Order, folders, comments, settings, and draw-component order round-trip between both views.
+Lepton text is the lossless text representation of the Standard workspace. Order,
+folders, comments, settings, and draw-component order round-trip between both
+views. Loaded folders begin closed in Standard view. Expanding or collapsing
+them is editor-only state and never changes this text representation. Pressing
+Enter on a Standard-view data row inserts a new expression immediately below it
+and preserves the current folder.
 
 ## Comments and Folders
 

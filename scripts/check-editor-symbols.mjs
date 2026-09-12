@@ -10,7 +10,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260911-lists-reductions";
+const cacheVersion = "20260912-enter-folder-lines";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -1258,6 +1258,57 @@ draw(eq,rgb,rest,False)`;
   const second = sandbox.importScene(exported);
   assert(second.folders.length === 2, JSON.stringify(second.folders));
   assert(second.dataOrder.filter((ref) => ref.parentUid).length >= 3, JSON.stringify(second.dataOrder));
+});
+
+check("Enter insertion keeps mixed sibling order and nested folder membership", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`expression first = x
+folder group = {
+  colour pigment = 1~2~3
+  folder nested = {
+    list values = [1,2]
+    expression middle = y
+    // keep beside the next item
+    boundary edge = x
+  }
+}
+draw(first){colour=pigment}
+expression last = 3`));
+  for (const [kind, index] of [["functions", 0], ["colors", 0], ["lists", 0], ["functions", 1], ["restrictions", 0], ["draws", 0], ["functions", 2], ["folders", 1]]) {
+    const before = sandbox.orderedDataEntries();
+    const sourceIndex = before.findIndex((item) => item.kind === kind && item.index === index);
+    const source = before[sourceIndex];
+    assert(source, `${kind}.${index} missing`);
+    const created = sandbox.addEntryAfter(kind, index);
+    const after = sandbox.orderedDataEntries();
+    const inserted = after[sourceIndex + 1];
+    assert(inserted.kind === created.kind && inserted.index === created.index, JSON.stringify(after));
+    assert(inserted.parentUid === source.parentUid, "new line escaped its folder");
+    assert(inserted.entry.expression === "" && inserted.entry.id, JSON.stringify(inserted));
+    assert(after.filter((item) => item.entry._uid !== inserted.entry._uid).map((item) => item.entry._uid).join() === before.map((item) => item.entry._uid).join(), "existing order changed");
+  }
+  const exported = sandbox.exportScene();
+  sandbox.__debugSetScene(sandbox.importScene(exported));
+  assert(sandbox.exportScene() === exported, "inserted lines did not round trip");
+});
+
+check("graph loading closes nested folders without changing source or new-folder behavior", () => {
+  const source = `folder outer = { // retain this
+  expression first = x
+  folder inner = {
+    list values = [1,2]
+  }
+}
+draw(first)`;
+  sandbox.__debugSetScene(sandbox.importScene(source));
+  const canonical = sandbox.exportScene();
+  sandbox.__debugSetScene(sandbox.importLoadedScene(canonical));
+  assert(sandbox.__debugScene.folders.every((folder) => folder.collapsed), "loaded folder is open");
+  assert(sandbox.visibleDataEntries().length === 2, "collapsed descendants remain visible");
+  assert(sandbox.exportScene() === canonical, "closing folders modified graph source");
+  sandbox.__debugScene.folders[0].collapsed = false;
+  assert(sandbox.visibleDataEntries().length === 4, "nested folder did not remain closed");
+  const created = sandbox.addEntry("folders");
+  assert(sandbox.__debugScene.folders[created.index].collapsed === false, "new folder should open for editing");
 });
 
 check("folder comments round-trip on the folder declaration", () => {

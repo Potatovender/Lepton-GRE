@@ -166,6 +166,8 @@ draw(values)`);
   await page.locator('[data-action="open-library"]').click();
   await page.locator('.saved-graph-thumb').first().evaluate(async (img) => { await img.decode(); if (!img.naturalWidth) throw new Error('Missing collection preview'); });
   await page.locator('[data-load-saved-graph]').first().click();
+  assert.equal(await page.locator('[data-toggle-folder]').first().getAttribute('aria-expanded'), 'false');
+  await page.locator('[data-toggle-folder]').first().click();
   await page.locator('.mathquill-field[data-field^="lists."][data-field$=".expression"] .mq-root-block').waitFor();
   await page.locator('[data-display-mode="text"]').click();
   assert.equal(await page.locator('[data-scene-text]').inputValue(), savedSource);

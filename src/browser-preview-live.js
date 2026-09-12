@@ -1,8 +1,8 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260911-lists-reductions";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260911-lists-reductions";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260911-lists-reductions";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260911-lists-reductions";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260911-lists-reductions";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260912-enter-folder-lines";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260912-enter-folder-lines";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260912-enter-folder-lines";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260912-enter-folder-lines";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260912-enter-folder-lines";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -49,7 +49,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260911-lists-reductions";
+const APP_VERSION = "20260912-enter-folder-lines";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -214,7 +214,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "functions",
     title: "Step 1: Create data",
-    body: "The Data workspace holds everything except settings. New line adds an expression; its ... menu chooses another type. More data opens the complete catalog, including points, lists, and HSV colours. Folders organize related entries without changing compilation."
+    body: "The Data workspace holds everything except settings. New line adds an expression; its ... menu chooses another type. Press Enter after editing a row to make the next expression directly below it. Inside an open folder, that new row stays in the same folder. More data opens the complete catalog, including points, lists, and HSV colours. Loaded folders start closed and can be opened without changing compilation."
   },
   {
     mode: "standard",
@@ -1104,18 +1104,27 @@ function addDataLineFromEnter(event, field) {
   if (event.key !== "Enter" || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false;
   if (displayMode !== "standard" || settingsPanelOpen || field.closest?.(".reference-picker, .new-entry-menu, .entry-type-menu")) return false;
   if (field.tagName === "TEXTAREA" || isCommentEntry(scene[field.dataset.field?.split(".")[0]]?.[Number(field.dataset.field?.split(".")[1])])) return false;
-  const collection = field.dataset.field?.split(".")[0];
-  if (!DATA_ENTRY_KINDS.includes(collection) || collection === "draws") return false;
+  const [collection, rawIndex] = field.dataset.field?.split(".") ?? [];
+  const index = Number(rawIndex);
+  if (!DATA_ENTRY_KINDS.includes(collection) || !scene[collection]?.[index]) return false;
   event.preventDefault();
   syncFields();
   const before = sceneSnapshot();
   listControls.data.query = "";
   listControls.data.sort = "custom";
   listControls.data.type = "all";
-  const target = addEntry("functions");
+  const target = addEntryAfter(collection, index);
   recordSceneHistory(before);
-  pendingScrollTarget = target ? { ...target, bottom: true } : null;
+  pendingScrollTarget = target;
   renderApp();
+  if (target) {
+    activeKeyboardTarget = `${target.kind}.${target.index}.expression`;
+    requestAnimationFrame(() => {
+      const nextField = root.querySelector(`[data-field="${target.kind}.${target.index}.expression"]`);
+      nextField?.__mathField?.focus();
+      if (nextField) keepHorizontalCaretVisible(nextField);
+    });
+  }
   return true;
 }
 
@@ -2250,7 +2259,7 @@ function bindEvents() {
       const saved = loadSavedGraphs().find((graph) => graph.id === button.dataset.loadSavedGraph);
       if (!saved) return;
       const before = sceneSnapshot();
-      scene = importScene(saved.scene);
+      scene = importLoadedScene(saved.scene);
       activeSavedGraphId = saved.id;
       viewport = sceneViewport();
       if (isValidViewport(viewport)) saveViewport();
@@ -2598,7 +2607,7 @@ function bindEvents() {
     const raw = window.prompt("Paste exported scene");
     if (raw) {
       const before = sceneSnapshot();
-      scene = importScene(raw);
+      scene = importLoadedScene(raw);
       activeSavedGraphId = null;
       displayMode = "standard";
       activeTab = "functions";
@@ -4322,6 +4331,14 @@ function addEntry(kind, type = "data") {
     scene.dataOrder.push({ kind, uid: entry._uid });
   }
   return { kind, index: scene[kind].length - 1 };
+}
+
+function addEntryAfter(kind, index) {
+  if (!DATA_ENTRY_KINDS.includes(kind) || !scene[kind]?.[index]) return null;
+  const target = addEntry("functions");
+  // Reuse the mixed-order placement so the new sibling inherits its folder.
+  moveMixedDataEntry(target.kind, target.index, kind, index, "after");
+  return target;
 }
 
 function createReferenceEntry(field) {
@@ -8529,6 +8546,12 @@ function textModeExpression(source) {
   return convertFracToDivisions(normalized);
 }
 
+function importLoadedScene(raw) {
+  const imported = importScene(raw);
+  for (const folder of imported.folders) folder.collapsed = true;
+  return imported;
+}
+
 function importScene(raw) {
   const next = structuredClone(DEFAULT_SCENE);
   next.functions = [];
@@ -9516,7 +9539,7 @@ window.__leptonDebug = {
   loadScene(source) {
     const previousScene = scene;
     const previousViewport = viewport;
-    scene = importScene(String(source ?? ""));
+    scene = importLoadedScene(String(source ?? ""));
     viewport = sceneViewport();
     if (!isValidViewport(viewport)) {
       scene = previousScene;
@@ -9691,7 +9714,7 @@ async function loadSceneFromUrl() {
       const sampleVersion = params.get("v") || APP_VERSION;
       const response = await fetch(`./sample%20code/${encodeURIComponent(SAMPLE_SCENE_FILES[sampleId])}?v=${encodeURIComponent(sampleVersion)}`);
       if (!response.ok) throw new Error(`Sample request failed (${response.status})`);
-      scene = importScene(await response.text());
+      scene = importLoadedScene(await response.text());
       viewport = sceneViewport();
       saveViewport();
       sceneHistory.undo = [];
@@ -9701,7 +9724,7 @@ async function loadSceneFromUrl() {
     }
     const encodedScene = params.get("scene");
     if (!encodedScene) return;
-    scene = importScene(encodedScene);
+    scene = importLoadedScene(encodedScene);
     viewport = sceneViewport();
     saveViewport();
     sceneHistory.undo = [];

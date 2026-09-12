@@ -1,4 +1,4 @@
-const APP_VERSION = "20260911-lists-reductions";
+const APP_VERSION = "20260912-enter-folder-lines";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

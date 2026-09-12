@@ -254,10 +254,47 @@ folder Colours = {
   });
   assert(preview.width === 160 && preview.height === 100 && preview.colours > 50 && preview.size < 24000, JSON.stringify(preview));
   await page.locator("[data-load-saved-graph]").first().click();
+  assert.equal(await page.locator('[data-toggle-folder]').first().getAttribute('aria-expanded'), 'false', "Loaded folder did not start closed");
+  await page.locator('[data-toggle-folder]').first().click();
   await page.locator('.mathquill-field[data-field="colors.0.hue"] .mq-root-block').waitFor();
   await page.locator('[data-display-mode="text"]').click();
   assert.equal(await page.locator("[data-scene-text]").inputValue(), savedSource, "Save/reload/load lost data");
   console.log("ok - mixed-type saved graph reloads without losing data and retains a compact nonblank preview");
+
+  await page.goto(`${base}app.html?scene=${encodeURIComponent(`expression root = x
+folder Outer = {
+  expression inside = y
+  folder Inner = {
+    expression nested = x+y
+  }
+}
+expression tail = 1`)}`);
+  const folderToggles = page.locator('[data-toggle-folder]');
+  assert.equal(await folderToggles.count(), 1, "Closed outer folder exposed its nested folder");
+  assert.equal(await folderToggles.first().getAttribute('aria-expanded'), 'false', "URL-loaded folder did not start closed");
+  await folderToggles.first().click();
+  assert.equal(await page.locator('[data-toggle-folder]').count(), 2, "Opening the outer folder did not expose its nested folder");
+  assert.equal(await page.locator('[data-toggle-folder]').nth(1).getAttribute('aria-expanded'), 'false', "Nested loaded folder did not start closed");
+  const inside = page.locator('.mathquill-field[data-field="functions.1.expression"]');
+  await inside.click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  const focused = page.locator('.mathquill-field[data-field="functions.4.expression"]');
+  await focused.locator('.mq-root-block').waitFor();
+  await settle(page);
+  await page.keyboard.type('7');
+  await settle(page);
+  assert.equal(await focused.getAttribute('data-value'), '7', "Enter did not focus the new line for continued typing");
+  const enterPlacement = await page.evaluate(() => {
+    const ordered = window.__leptonDebug.scene().dataOrder;
+    const functions = window.__leptonDebug.scene().functions;
+    const source = ordered.findIndex((ref) => ref.kind === 'functions' && ref.uid === functions[1]._uid);
+    const created = ordered.findIndex((ref) => ref.kind === 'functions' && ref.uid === functions[4]._uid);
+    return { source, created, sourceParent: ordered[source]?.parentUid, createdParent: ordered[created]?.parentUid };
+  });
+  assert.equal(enterPlacement.created, enterPlacement.source + 1, JSON.stringify(enterPlacement));
+  assert.equal(enterPlacement.createdParent, enterPlacement.sourceParent, "Enter-created line escaped the current folder");
+  console.log("ok - Enter inserts and focuses the next expression inside the current folder; loaded folders start closed");
 
   if (!process.env.LEPTON_TEST_URL) {
     const dev = await createServer({ server: { host: "127.0.0.1", port: 0 } });
