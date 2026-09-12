@@ -1,6 +1,6 @@
 # Release Readiness
 
-Checked on 2026-09-12 for `20260912-enter-folder-lines`. This supersedes the
+Checked on 2026-09-12 for `20260912-enter-folder-lines2`. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -22,7 +22,8 @@ screenshots, and unrelated ItGE experiments are not deployed.
   expression immediately after that row, inherits its folder membership, focuses
   the new editor, and leaves all existing mixed data in place. Graphs opened from
   URLs, samples, imports, or local saves start with every folder closed; opening
-  and closing folders remains UI state and does not alter exported Lepton text.
+  and closing folders remains UI state, does not alter exported Lepton text, and
+  does not mark an otherwise unchanged graph as unsaved.
 - Lists, comprehensions, summation, and products use typed collection plans
   shared by CPU and GLSL. Lists broadcast scalars, index from zero, and draw in
   element order. Limits accept coordinates and have lexical loop bindings.

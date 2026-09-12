@@ -1,8 +1,8 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260912-enter-folder-lines";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260912-enter-folder-lines";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260912-enter-folder-lines";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260912-enter-folder-lines";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260912-enter-folder-lines";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260912-enter-folder-lines2";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260912-enter-folder-lines2";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260912-enter-folder-lines2";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260912-enter-folder-lines2";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260912-enter-folder-lines2";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -49,7 +49,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260912-enter-folder-lines";
+const APP_VERSION = "20260912-enter-folder-lines2";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -2879,11 +2879,9 @@ function bindEvents() {
 
   root.querySelectorAll("[data-toggle-folder]").forEach((button) => {
     button.addEventListener("click", () => {
-      const before = sceneSnapshot();
       const folder = scene.folders?.[Number(button.dataset.toggleFolder)];
       if (!folder) return;
       folder.collapsed = !folder.collapsed;
-      recordSceneHistory(before);
       renderApp();
     });
   });

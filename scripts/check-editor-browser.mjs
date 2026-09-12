@@ -273,6 +273,7 @@ expression tail = 1`)}`);
   assert.equal(await folderToggles.count(), 1, "Closed outer folder exposed its nested folder");
   assert.equal(await folderToggles.first().getAttribute('aria-expanded'), 'false', "URL-loaded folder did not start closed");
   await folderToggles.first().click();
+  assert(!(await page.locator('.graph-actions-trigger').evaluate((button) => button.classList.contains('primary'))), "Opening a folder marked unchanged graph data as unsaved");
   assert.equal(await page.locator('[data-toggle-folder]').count(), 2, "Opening the outer folder did not expose its nested folder");
   assert.equal(await page.locator('[data-toggle-folder]').nth(1).getAttribute('aria-expanded'), 'false', "Nested loaded folder did not start closed");
   const inside = page.locator('.mathquill-field[data-field="functions.1.expression"]');
