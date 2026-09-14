@@ -45,7 +45,7 @@
   <!-- Full-height sidebar context -->
   <rect class="sidebar" x="80" y="60" width="880" height="1200" rx="0"/>
   <rect class="header" x="80" y="60" width="880" height="74"/>
-  <text x="112" y="107" class="label">Lepton GRE</text>
+  <text x="112" y="107" class="label">Lepton Grapher</text>
   <rect class="tab-on" x="430" y="78" width="140" height="38" rx="9"/>
   <text x="476" y="103" class="small">Standard</text>
   <rect class="tab" x="580" y="78" width="140" height="38" rx="9"/>

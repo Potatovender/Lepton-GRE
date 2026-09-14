@@ -1,8 +1,8 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260914-mod-upright-names";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260914-mod-upright-names";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260914-mod-upright-names";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260914-mod-upright-names";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260914-mod-upright-names";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260914-functions-reference";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260914-functions-reference";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260914-functions-reference";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260914-functions-reference";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260914-functions-reference";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -49,7 +49,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260914-mod-upright-names";
+const APP_VERSION = "20260914-functions-reference";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -74,6 +74,10 @@ let selectedDependencyEntry = null;
 
 const GENERATED_GLSL_NAMES = new Set([
   "clamp3",
+  "leptonAtan2",
+  "leptonHypot",
+  "leptonSmoothstep",
+  "leptonLog10",
   "leptonRandom",
   "leptonUnion",
   "leptonIntersect",
@@ -99,7 +103,7 @@ const GENERATED_GLSL_NAMES = new Set([
 
 const DEGREE_FUNCTIONS = {
   sin: "sin", cos: "cos", tan: "tan", sec: "sec", csc: "csc", cot: "cot",
-  asin: "asin", acos: "acos", atan: "atan", arcsin: "asin", arccos: "acos", arctan: "atan",
+  asin: "asin", acos: "acos", atan: "atan", atan2: "atan2", arcsin: "asin", arccos: "acos", arctan: "atan",
   arcsec: "arcsec", arccsc: "arccsc", arccot: "arccot"
 };
 const DEGREE_HELPER_NAMES = new Set(Object.values(DEGREE_FUNCTIONS).map((name) => `leptonDegrees_${name}`));
@@ -195,7 +199,7 @@ const HELP_TEXT = {
   sliderType: "Slider entries are adjustable numeric values. They can become time variables for animation, with optional bounds depending on the time mode.",
   functionType: "Function entries accept named inputs such as wave(x,y). Inside the function body, input names take priority over outer values with the same name.",
   listType: "Lists contain scalar expressions in square brackets. Read an item with values[0], operate on the whole list with values+1, or draw its elements in order. Generate a list with [c for(c=1,10)].",
-  tutorial: "Open a guided overview of Lepton GRE concepts and workflows."
+  tutorial: "Open a step-by-step introduction to Lepton."
 };
 
 let scene = structuredClone(DEFAULT_SCENE);
@@ -346,7 +350,7 @@ function renderApp() {
           <div class="brand-row">
             <a class="brand-link" href="./index.html" aria-label="Go to Lepton landing page">
               <img src="./src/assets/lepton-logo-transparent.png" alt="" />
-              <strong>Lepton GRE</strong>
+              <strong>Lepton Grapher</strong>
             </a>
             <button class="tutorial-button" data-action="tutorial" type="button" aria-pressed="${tutorialStep !== null}">${tutorialStep === null ? "What do I do?" : "Hide tutorial"}</button>
             ${renderGraphActionsMenu()}
@@ -769,7 +773,7 @@ function renderKeyboardPanel() {
         <strong>${mode === "id" ? "ID keyboard" : "Math keyboard"}</strong>
         <button class="keyboard-close" data-action="close-keyboard" type="button" aria-label="Hide keyboard">×</button>
       </div>
-      ${mode === "id" ? renderIdKeyboard() : renderMathKeyboard()}
+      <div class="keyboard-body">${mode === "id" ? renderIdKeyboard() : renderMathKeyboard()}</div>
     </section>
   `;
 }
@@ -2136,6 +2140,7 @@ function tutorialCoachmark() {
       <div class="tutorial-actions">
         <button class="toolbar-button primary" data-action="tutorial-next">${tutorialStep === TUTORIAL_STEPS.length - 1 ? "Finish" : "Next"}</button>
         <button class="toolbar-button" data-action="tutorial-skip">Skip to end</button>
+        <a class="toolbar-button" href="./reference.html?v=${APP_VERSION}" target="_blank" rel="noopener">Functions &amp; reference</a>
       </div>
     </section>
   `;
@@ -3483,6 +3488,7 @@ function bindCanvasPan() {
   pane.addEventListener(
     "wheel",
     (event) => {
+      if (event.target !== canvas) return;
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
       const visibleViewport = displayViewportForSize(viewport, rect.width, rect.height);
@@ -4954,6 +4960,20 @@ function buildFragmentShaderBody() {
     float arccot(float value) { return 1.5707963267948966 - atan(value); }
     float arcsec(float value) { return acos(1.0 / value); }
     float arccsc(float value) { return asin(1.0 / value); }
+    float leptonAtan2(float a, float b) {
+      if (b == 0.0) return a == 0.0 ? 0.0 : sign(a) * 1.5707963267948966;
+      if (a == 0.0) return b < 0.0 ? 3.141592653589793 : 0.0;
+      return atan(a, b);
+    }
+    float leptonHypot(float a, float b) {
+      float scale = max(abs(a), abs(b));
+      return scale == 0.0 ? 0.0 : scale * length(vec2(a, b) / scale);
+    }
+    float leptonLog10(float value) { return log(value) / 2.302585092994046; }
+    float leptonSmoothstep(float low, float high, float value) {
+      if (low >= high) return 0.0 / 0.0;
+      return smoothstep(low, high, value);
+    }
     ${degreeHelperSource("glsl")}
     float cbrt(float value) { return sign(value) * pow(abs(value), 1.0 / 3.0); }
     float sinh1(float value) { return (exp(value) - exp(-value)) / 2.0; }
@@ -5290,7 +5310,7 @@ function compileScalarExpression(source, localNames = new Set()) {
     .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
     .replaceAll(/\bpi\b/g, (name) => localNames.has(name) ? name : "Math.PI")
     .replaceAll(/\be\b/g, (name) => localNames.has(name) ? name : "Math.E")
-    .replaceAll(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log|pow)\b/g, (name) => localNames.has(name) ? name : `Math.${name}`)
+    .replaceAll(/\b(sin|cos|tan|asin|acos|atan|atan2|hypot|sinh|cosh|tanh|sqrt|cbrt|abs|sign|floor|ceil|round|min|max|exp|log|log2|log10|pow)\b/g, (name) => localNames.has(name) ? name : `Math.${name}`)
     .replaceAll(/\barc(sin|cos|tan)\b/g, (name, suffix) => localNames.has(name) ? name : `Math.a${suffix}`);
 
   js = rewriteBareIdentifiers(
@@ -5306,6 +5326,14 @@ function compileScalarExpression(source, localNames = new Set()) {
     "env",
     `
       const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+      const mix = (a, b, t) => (1 - t) * a + t * b;
+      const lerp = mix;
+      const step = (edge, value) => value < edge ? 0 : 1;
+      const smoothstep = (low, high, value) => {
+        if (low >= high) return NaN;
+        const t = clamp((value - low) / (high - low), 0, 1);
+        return t * t * (3 - 2 * t);
+      };
       const union = (a, b) => Math.min(a, b);
       const intersect = (a, b) => Math.max(a, b);
       const subtract = (a, b) => Math.max(-a, b);
@@ -5617,6 +5645,10 @@ function scalarExpressionToGlsl(source, env = {}, zName = null, stack = [], angl
     .replaceAll(/\bmin\b/g, "min")
     .replaceAll(/\bmax\b/g, "max")
     .replaceAll(/\bclamp\b/g, "clamp3")
+    .replaceAll(/\blog10\b/g, "leptonLog10")
+    .replaceAll(/\bhypot\b/g, "leptonHypot")
+    .replaceAll(/\bsmoothstep\b/g, "leptonSmoothstep")
+    .replaceAll(/\blerp\b/g, "mix")
     .replaceAll(/\bunion\b/g, "leptonUnion")
     .replaceAll(/\bintersect\b/g, "leptonIntersect")
     .replaceAll(/\bsubtract\b/g, "leptonSubtract")
@@ -5634,6 +5666,7 @@ function scalarExpressionToGlsl(source, env = {}, zName = null, stack = [], angl
   }
 
   expression = convertTrigForAngleMode(expression, angleMode);
+  expression = expression.replaceAll(/\batan2\b/g, "leptonAtan2");
   expression = convertPowers(expression);
   expression = normalizeGlslNumbers(expression);
   if (expression.length > 200000) {
@@ -5768,6 +5801,11 @@ function convertTrigForAngleMode(expression, angleMode) {
 
 function degreeHelperSource(target) {
   return [...new Set(Object.values(DEGREE_FUNCTIONS))].map((name) => {
+    if (name === "atan2") {
+      return target === "js"
+        ? "const leptonDegrees_atan2 = (a, b) => Math.atan2(a, b) * 57.29577951308232;"
+        : "float leptonDegrees_atan2(float a, float b) { return leptonAtan2(a, b) * 57.29577951308232; }";
+    }
     const inverse = name.startsWith("a");
     const native = target === "js" && ["sin", "cos", "tan", "asin", "acos", "atan"].includes(name) ? `Math.${name}` : name;
     const value = inverse ? `${native}(value)*57.29577951308232` : `${native}(value*0.017453292519943295)`;
@@ -7597,6 +7635,13 @@ function parseLatex(source) {
   // presentation-only; retaining them makes a multi-argument operatorname call
   // look like one grouped argument to the AST parser.
   const normalized = String(source ?? "")
+    // MathQuill auto-formats the alphabetic prefix while a digit-suffixed
+    // built-in is typed. Recognize the complete name only before a call.
+    .replace(/\\(?:operatorname\{(log|atan|arctan)\}|(log|atan|arctan))\s*(10|2)(?=\s*(?:\\left\s*)?\()/g,
+      (match, operator, command, suffix) => {
+        const name = `${operator ?? command}${suffix}`.replace(/^arctan/, "atan");
+        return LATEX_FUNCTIONS[name] ? `\\operatorname{${name}}` : match;
+      })
     .replace(/\\(?:left|right)\s*\\([{}])/g, "$1")
     .replace(/\\(?:leq|le)\b/g, "<=").replace(/\\(?:geq|ge)\b/g, ">=").replace(/\\(?:neq|ne)\b/g, "!=")
     .replace(/\\left\s*(?=[()[\]{}])/g, "")

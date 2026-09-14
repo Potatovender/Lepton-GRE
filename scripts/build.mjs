@@ -81,6 +81,8 @@ await run(process.execPath, ["--check", "src/math/expression-syntax.js"]);
 await run(process.execPath, ["--check", "src/math/builtins.js"]);
 await run(process.execPath, ["--check", "src/math/collections.js"]);
 await run(process.execPath, ["--check", "src/landing.js"]);
+await run(process.execPath, ["--check", "src/reference.js"]);
+await run(process.execPath, ["--check", "src/reference-data.js"]);
 await run(process.execPath, ["--check", "packages/renderer/src/index.js"]);
 await run(process.execPath, ["scripts/download-mathquill.mjs", "--check"]);
 await run(process.execPath, ["scripts/check-editor-symbols.mjs"]);

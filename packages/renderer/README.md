@@ -2,10 +2,10 @@
 
 The reusable GPU rendering driver for Lepton. This package owns GLSL compilation,
 program caching, uniform updates, fullscreen drawing, GPU limits, and resource
-cleanup. It has no dependency on MathQuill, the GRE interface, or browser storage.
+cleanup. It has no dependency on MathQuill, the grapher interface, or browser storage.
 Its JavaScript ES module ships with TypeScript declarations.
 
-The Lepton-language compiler and scene model still live in the GRE's
+The Lepton-language compiler and scene model still live in the grapher's
 `src/browser-preview-live.js`. They produce GLSL for this driver. This package
 does not parse Lepton text, draw coordinate labels, or manage point interaction.
 
@@ -69,7 +69,7 @@ npm pack ./packages/renderer --pack-destination /tmp
 ```
 
 Tests run with Node's built-in test runner and a mock GPU, with no installation
-required. GRE browser checks additionally exercise this exact driver on real
+required. Grapher browser checks additionally exercise this exact driver on real
 WebGL contexts. To transfer its complete history-aware folder:
 
 ```sh

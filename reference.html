@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lepton Reference</title>
+    <meta name="description" content="Lepton's functions and language: equations, colours, animation, lists, points, drawing, and settings, with syntax and examples." />
+    <link rel="canonical" href="https://potatovender.github.io/Lepton-GRE/reference.html" />
+    <link rel="icon" href="./src/assets/lepton-favicon.png?v=20260914-functions-reference" type="image/png" />
+    <link rel="shortcut icon" href="./src/assets/lepton-favicon.png?v=20260914-functions-reference" type="image/png" />
+    <link rel="apple-touch-icon" href="./src/assets/lepton-favicon.png?v=20260914-functions-reference" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260914-functions-reference" />
+    <link rel="stylesheet" href="./src/reference.css?v=20260914-functions-reference" />
+  </head>
+  <body class="reference-body">
+    <a class="skip-reference" href="#reference-content">Skip to reference</a>
+    <header class="landing-nav">
+      <a class="landing-brand" href="./index.html?v=20260914-functions-reference"><img src="./src/assets/lepton-logo-transparent.png" alt="" /><span>Lepton</span></a>
+      <a class="nav-launch" href="./app.html?v=20260914-functions-reference">Open Grapher</a>
+    </header>
+    <div class="reference-layout">
+      <nav class="reference-nav" aria-label="Reference sections">
+        <a href="#start">Start here</a><a href="#values">Values &amp; animation</a>
+        <a href="#drawing">Colour &amp; drawing</a><a href="#collections">Lists &amp; points</a>
+        <a href="#syntax">Syntax &amp; naming</a><a href="#functions">Math functions</a>
+        <a href="#settings">Settings</a><a href="#workspace">Workspace &amp; files</a>
+        <a href="#limits">Limits &amp; flags</a>
+      </nav>
+      <main id="reference-content">
+        <header class="reference-heading" id="start">
+          <h1>Lepton Reference</h1>
+          <p>Look up a function, learn a data type, or find the syntax for your next graph.</p>
+          <p>These examples use Text view. Paste a complete scene and choose <strong>Apply to graph</strong>, then switch to Standard to edit its blocks. For a walkthrough, open <strong>What do I do?</strong> in the grapher.</p>
+          <pre><code>expression wave = sin(x)+cos(y)
+colour ocean = 40+30*x~130+40*x~210
+draw(wave) {colour=ocean}</code></pre>
+          <p>Lepton evaluates a value at each pixel, then maps that value to colour. In a colour or transparency formula, <code>x</code> receives the draw result; <code>y</code> stays the vertical graph coordinate. A draw is a coloured field, not an automatic line plot. To draw a curve, restrict a narrow band around it.</p>
+        </header>
+
+        <section class="reference-section" id="values">
+          <h2>Values &amp; animation</h2>
+          <h3>Expression</h3><p>A named formula evaluated at the graph coordinates <code>x,y</code>. Use its ID without parentheses.</p>
+          <pre><code>expression radius = hypot(x,y)
+expression rings = sin(4*radius)</code></pre>
+          <h3>Function</h3><p>A reusable formula with named inputs. Inputs are local: a parameter takes precedence over an outer value with the same name. Calls must supply the declared number of inputs.</p>
+          <pre><code>function distance(a,b) = hypot(a,b)
+expression circle = distance(x,y)-3
+function offset(a,b) -&gt; point = [a+1,b-1]</code></pre>
+          <h3>Slider</h3><p>An editable value with minimum and maximum endpoints. Drag the handle or enter a value; changing a slider updates the graph.</p>
+          <pre><code>slider amount = 5 {range=0~10}</code></pre>
+          <h3>Time</h3><p>Use local Play or Play all to animate. Bounded time bounces; bounded looped time wraps; unbounded time keeps increasing. Speed is units per second and may reference values, but must resolve without coordinates. The FPS counter appears beside playback.</p>
+          <pre><code>time bounded t = 0 {range=0~10, speed=1}
+time bounded_looped phase = 0 {range=0~6.283185, speed=0.5}
+time unbounded clock = 0 {speed=1}</code></pre>
+          <p>For a seamless loop, use matching values at the endpoints, such as <code>sin(phase+x)</code> with phase running from 0 to 2*pi.</p>
+        </section>
+
+        <section class="reference-section" id="drawing">
+          <h2>Colour &amp; drawing</h2>
+          <h3>Colour (RGB / HSV)</h3><p>Three formulas separated by <code>~</code>. RGB channels clamp to 0..255. HSV hue wraps every 360 degrees, independent of angle mode; saturation and brightness clamp to 0..1. Both spellings, colour and color, work.</p>
+          <pre><code>colour warm = 255~140+40*x~80
+colourhsv spectrum = 180+90*x~0.8~1</code></pre>
+          <h3>Boundary</h3><p>Draw only where the boundary formula is greater than or equal to zero. Use <code>{when=lte}</code> for less than or equal to zero. Boundaries use graph coordinates, not the mapped draw value.</p>
+          <pre><code>boundary disc = 9-x^2-y^2
+boundary below = y {when=lte}
+boundary halfDisc = and(disc,below)</code></pre>
+          <p>Use <code>and</code>, <code>or</code>, <code>not</code>, <code>xor</code>, or <code>xand</code> to combine signed boundaries. See the math reference below for the exact formulas and zero-edge behavior.</p>
+          <h3>Transparency</h3><p>A formula clamped to 0..1: 0 is opaque, 1 is invisible. It receives the draw result as x, just like colour. It can produce gradual edges without a hard boundary.</p>
+          <pre><code>transparency fade = smoothstep(2,4,abs(x))</code></pre>
+          <h3>Draw layer</h3><p>Select an expression, slider, function call, or list. The first input is required. Add colour, boundary, and transparency with the + control, in any order. Later draw layers paint over earlier ones.</p>
+          <pre><code>draw(rings)
+draw(distance(x,y)) {colour=warm, boundary=disc, transparency=fade}
+draw(rings) {visible=False}</code></pre>
+          <p>Defaults are grayscale <code>x~x~x</code>, no restriction, and full opacity. Drawing a list creates one layer per item, starting at index 0. Colour and transparency mapping happen separately for each item.</p>
+          <h3>Curve example</h3><pre><code>expression curve = y-sin(x)
+boundary nearCurve = 0.04-abs(curve)
+colour ink = 30~80~180
+draw(curve) {colour=ink, boundary=nearCurve}</code></pre>
+        </section>
+
+        <section class="reference-section" id="collections">
+          <h2>Lists &amp; points</h2>
+          <h3>List</h3><p>Choose More data &gt; List. A list holds scalar expressions. Indexing starts at 0; <code>.length</code> gives the item count. Scalars broadcast, and two lists operate element by element with equal lengths.</p>
+          <pre><code>list values = [1,2,3]
+list squares = [c^2 for(c=1,10)]
+expression first = values[0]
+expression shifted = values+10
+expression weighted = values*[2,3,4]
+expression count = values.length</code></pre>
+          <p>Shifted evaluates to [11,12,13]; weighted to [2,6,12]. A named list passed to a function remains one list argument. Nested lists and point-valued list items are not supported yet.</p>
+          <h3>Summation &amp; product</h3><pre><code>expression series = sum(i=1~40){sin(i*x)/i}
+expression factorial = prod(i=1~5){i}
+list totals = sum(i=1~3){[i,2*i]}</code></pre>
+          <p>Visit the lower bound, add 1, and continue while the index is at most the upper bound. Fractional bounds and coordinate-dependent bounds are allowed; use floor explicitly for integers. Indices are local to the body. Empty sums return 0; empty products return 1. List results are accumulated element by element, so totals is [6,12], not 18.</p>
+          <p>In Standard, type sum or prod, enter <code>i=1</code> in the lower slot, press Up for the upper limit, then Right for the parenthesized body.</p>
+          <h3>Point</h3><p>Choose More data &gt; Point. Points can be dragged or fixed, coloured, hidden, and linked to a value at their coordinates. Labels and points are included in image exports.</p>
+          <pre><code>function sample(a,b) = a^2+b^2
+point focus = [2,3] {draggable=True, visible=True, colour=default, link=sample, show_label=True}
+expression horizontal = focus.x
+expression vertical = focus[1]
+expression moved = offset(x,y)[0]</code></pre>
+          <p><code>.x</code> and <code>[0]</code> select the first component; <code>.y</code> and <code>[1]</code> select the second. These also work on point-returning function calls. Point addition and multiplication work component by component. A point passed to another function fills two successive scalar parameters in x-then-y order.</p>
+        </section>
+
+        <section class="reference-section" id="syntax">
+          <h2>Syntax &amp; naming</h2>
+          <p>Use <code>+ - * / ^</code> for arithmetic. Powers associate right to left: <code>2^3^2</code> is 512; <code>(2^3)^2</code> is 64. <code>2sin(x)</code> and <code>3(x+1)</code> use implicit multiplication. Constants are <code>pi</code> and <code>e</code>.</p>
+          <p>Fractions accept <code>a/b</code>, <code>frac(a,b)</code>, and <code>frac{a}{b}</code>. LaTeX such as <code>\frac{a}{b}</code>, <code>\sqrt{x}</code>, and <code>\operatorname{hypot}(x,y)</code> can be pasted. Multiplication displays as a centred dot. Group a negative exponential as <code>e^(-x^2)</code>.</p>
+          <h3>Piecewise conditions</h3><pre><code>expression band = {x&lt;0:-1,x=0:0,1}
+expression masked = {disc:radius}</code></pre>
+          <p>Conditions are checked left to right. The final value is an optional fallback; without it, unmatched input is undefined. Comparisons are <code>&lt; &lt;= &gt; &gt;= = == !=</code>. A boundary ID can be a condition. Property braces after a declaration use named assignments; piecewise braces inside a formula use condition:value pairs.</p>
+          <h3>Names &amp; recursion</h3><p>IDs use letters, digits, and underscores; start with a letter or underscore. Values (expressions, sliders, functions, and lists) share a namespace. Exact duplicates there are errors. Reusing an ID in another namespace, such as a colour, gives a yellow naming warning. Built-in names and coordinates are reserved. Known global IDs display upright; coordinates and local parameters stay italic.</p>
+          <pre><code>expression repeated = repeated+1</code></pre><p>Recursive references return 0 when max recursion depth is reached. This example counts reference expansions. Recursive work can grow very quickly; see Limits below.</p>
+          <h3>Folders &amp; comments</h3><pre><code>folder Lighting = {
+  // A comment before the next item
+  expression glow = e^(-x^2-y^2) // inline comment
+}</code></pre><p>Folders can nest and their names may contain spaces. Drag rows to change order or move into a folder. Folders load collapsed; closing one does not remove its contents. Blank lines and comments are preserved in Text view.</p>
+        </section>
+
+        <section class="reference-section" id="functions">
+          <h2>Math functions</h2>
+          <p>Examples below use radians. Functions require the shown argument count. On lists they act element by element. Sum and product use the separate syntax above.</p>
+          <div class="function-search">
+            <label for="function-search">Find a function</label>
+            <input id="function-search" type="search" placeholder="Name or purpose, e.g. distance" data-function-search />
+            <button type="button" data-clear-search>Clear</button>
+            <span data-function-count role="status" aria-live="polite"></span>
+          </div>
+          <p data-no-functions hidden>No matching functions. Try a different name or purpose.</p>
+          <div data-function-catalogue><!-- FUNCTION_CATALOGUE --></div>
+          <noscript><p>Search requires JavaScript; the published page includes the complete function list above.</p></noscript>
+        </section>
+
+        <section class="reference-section" id="settings">
+          <h2>Settings</h2><p>All settings are optional. These are their defaults. Formulas are allowed for graph bounds and aspect ratio. Invalid angle-mode text falls back to radians.</p>
+          <dl class="setting-reference">
+            <dt><code>set x_min = -10</code><br /><code>set x_max = 10</code><br /><code>set y_min = -10</code><br /><code>set y_max = 10</code></dt><dd>The configured graph region. Export captures this region rather than the current pan and zoom.</dd>
+            <dt><code>set ensure_square_grid = True</code></dt><dd>Keep the chosen grid proportions, adjusting bounds to fit. Invalid bounds warn in this mode and error when it is off.</dd>
+            <dt><code>set aspect_ratio = 1:1</code></dt><dd>Target width:height. Select a preset or enter two scalar formulas.</dd>
+            <dt><code>set draw_only_inside_boundary = False</code></dt><dd>Clip rendering to the configured rectangular region. Independent of a draw layer's boundary.</dd>
+            <dt><code>set show_coordinate_grid = True</code></dt><dd>Master visibility switch for grid, axes, and their numbers.</dd>
+            <dt><code>set show_grid = True</code></dt><dd>Show the coordinate grid lines behind the graph.</dd>
+            <dt><code>set show_x_axis = True</code><br /><code>set show_y_axis = True</code></dt><dd>Show each axis. Hiding an axis also hides its numbers.</dd>
+            <dt><code>set show_x_numbers = True</code><br /><code>set show_y_numbers = True</code></dt><dd>Show coordinate labels independently of grid lines.</dd>
+            <dt><code>set max_recursion = 100</code></dt><dd>Maximum nested reference depth before returning zero.</dd>
+            <dt><code>set max_list_size = 10000</code></dt><dd>Maximum elements per list. Larger lists are undefined and blue-flagged, not truncated.</dd>
+            <dt><code>set angle_mode = radians</code></dt><dd>Use radians or degrees for circular trig inputs and inverse outputs, including atan2. Hyperbolic functions are unchanged.</dd>
+            <dt><code>set background_color = 0</code></dt><dd>Default background, or replace 0 with a colour ID for a solid background sampled at (0,0).</dd>
+            <dt><code>set unbounded_decimal_places = 3</code></dt><dd>Displayed fractional digits for unbounded time. Time accumulation keeps its internal precision.</dd>
+            <dt><code>set random_seed = 1</code></dt><dd>Scene seed for random. The dice button changes it; copying text preserves it.</dd>
+          </dl>
+        </section>
+
+        <section class="reference-section" id="workspace">
+          <h2>Workspace &amp; files</h2>
+          <p><strong>Standard</strong> edits the same scene as visual blocks. New line creates an expression; its type menu switches to another data type. Enter inserts a row immediately below the current row, inside the same folder. Search, type filters, sorting, and dependency views help navigate larger scenes.</p>
+          <p><strong>Text</strong> holds an editable draft. Apply to graph compiles it and keeps you in Text view. Reload from graph discards that draft after confirmation. Switching to Standard with unapplied edits offers Apply or Discard. Ctrl/Cmd-Z and Ctrl/Cmd-Y work inside and outside fields; time playback and slider movement do not fill undo history.</p>
+          <p><strong>Graph menu</strong> contains New, Save, Load, and Export. Save stores a named scene and compact thumbnail in this browser; Load opens the library. Export downloads a PNG of the configured graph region with visible points and labels. Save is highlighted after unsaved edits.</p>
+          <p><strong>Navigation</strong>: drag the graph to pan, scroll to zoom, and drag the divider to resize the editor. The gear opens settings; the keyboard button opens a calculator pad and variable library. On phones, the graph sits above the editor.</p>
+          <p><strong>Backups</strong>: browser saves are not cloud backups. There are up to 60 slots, subject to storage quota. Clearing site data or moving domains does not transfer them. Keep a copy of the complete Text view for important work.</p>
+        </section>
+
+        <section class="reference-section" id="limits">
+          <h2>Limits &amp; flags</h2>
+          <p><strong>Red</strong> means a syntax, reference, or settings error. <strong>Yellow</strong> is a warning, such as ambiguous naming. <strong>Blue</strong> indicates expensive or oversized work; the graph may be slow or fail to render. <strong>Green</strong> means validation passed, not a guarantee about every coordinate. Click a flag for details.</p>
+          <p>Domains still matter: division by zero, negative square roots, and invalid logarithms have no finite result. CPU calculations and GPU floating-point calculations have different precision; extreme values can overflow. Dense patterns may alias at screen resolution.</p>
+          <p>Scalar graphs need WebGL; lists and reductions need WebGL 2. Coordinate-dependent loops and large recursive scenes can exceed GPU limits or stall the page. Complexity estimates and blue warnings are not a reliable execution-time limit.</p>
+          <p>Lepton currently supports one-dimensional scalar lists and two-component points. It does not yet include spreadsheet import, statistical fitting, matrix operations, or a general-purpose loop language.</p>
+        </section>
+        <footer class="reference-footer"><a href="./app.html?v=20260914-functions-reference">Open Lepton Grapher</a><a href="https://github.com/Potatovender/Lepton-GRE/issues">Report a problem</a><a href="./THIRD_PARTY_NOTICES.md">Library credits</a></footer>
+      </main>
+    </div>
+    <script type="module" src="./src/reference.js?v=20260914-functions-reference"></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 # Release Readiness
 
-Checked on 2026-09-14 for `20260914-mod-upright-names`. This supersedes the
+Checked on 2026-09-14 for `20260914-functions-reference`. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -12,11 +12,24 @@ version/commit is in [release.json](https://potatovender.github.io/Lepton-GRE/re
 A query string alone does not publish new code.
 
 The Pages workflow now installs locked dependencies and runs verification before
-uploading an explicit 38-file public artifact. Deploy depends on that build of the
+uploading an explicit 42-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Corrections
+
+- Added atan2, hypot, log2/log10, step, smoothstep, and mix/lerp throughout parsing,
+  validation, CPU and GLSL evaluation, MathQuill input, and the keyboard. The
+  existing pow call is now included in the public function registry as well.
+- The new reference page covers supported data types, settings, editing,
+  storage, and math functions. Its 60 built-in entries are checked against the
+  registry; examples are evaluated on both CPU and GPU. The production build
+  embeds the catalogue in HTML so reading it does not depend on JavaScript.
+- Keyboard wheel events no longer bubble into graph zoom. A scrollable keyboard
+  body keeps the close control visible on desktop and phone-sized viewports.
+- Public names are Lepton and Lepton Grapher. Existing repository URLs are
+  unchanged. Homepage copy now describes the actual block/text workflow and
+  removes the earlier claims of a node graph and artifact-free sampling.
 
 - `mod(value,base)` now has matching floor-modulo behavior in CPU evaluation and
   GLSL. The function registry, arity checks, MathQuill operator list, keyboard,
@@ -97,8 +110,8 @@ screenshots, and unrelated ItGE experiments are not deployed.
 - Coordinate ticks use bounded screen-space counts per axis, preventing excessive
   work with very different x/y ranges.
 - The WebGL driver is isolated in `packages/renderer` with a typed API, tests,
-  explicit cleanup, and no GRE/MathQuill dependency. The Lepton compiler remains
-  in the GRE; this is not a second language implementation.
+  explicit cleanup, and no grapher/MathQuill dependency. The Lepton compiler remains
+  in the browser runtime; this is not a second language implementation.
 - MathQuill's existing assets were matched to version 2026.4.21 and pinned with
   hashes, origin, archive integrity, and the MPL license. No editor upgrade was
   slipped into this release.
@@ -109,9 +122,14 @@ screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Verification
 
-- **170** runtime/model/grammar checks, **17** syntax unit tests, and **13**
+- **172** runtime/model/grammar checks, **17** syntax unit tests, and **13**
   standalone GPU-driver tests passed.
 - All **9** maintained sample files passed current-syntax migration checks.
+- All 60 reference examples have independently expected numerical results checked
+  on CPU and against rendered GPU pixels. New-function checks include actual typing,
+  reload, continued edits/backspace, list use and quadrant-aware angles in degrees.
+  The reference and keyboard suite passes in Chromium and WebKit, with a Chromium
+  touch-swipe check as well as wheel scrolling at desktop and mobile sizes.
 - Collection checks include independent GPU pixels for nested reductions,
   element-wise operations, point-function composition, coordinate-dependent
   bounds, exact list limits, and 10,000-term workloads. Browser flows cover

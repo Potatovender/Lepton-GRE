@@ -1,15 +1,17 @@
-# Lepton GRE
+# Lepton
 
 [![CI](https://github.com/Potatovender/Lepton-GRE/actions/workflows/ci.yml/badge.svg)](https://github.com/Potatovender/Lepton-GRE/actions/workflows/ci.yml)
 
-Lepton GRE (Lepton Graph Rendering Interface) is a browser-based mathematical field renderer. A scene combines expressions, parameterized functions, sliders, colours, boundaries, transparency, points, and ordered draw layers, then evaluates the result as a per-pixel GLSL graph.
+Lepton makes images, animations, and graphs from equations in the browser. A scene combines expressions, functions, sliders, lists, colours, boundaries, transparency, points, and ordered draw layers. Lepton Grapher edits the scene; the Graph Rendering Engine evaluates it with GLSL.
 
 - Live site: [potatovender.github.io/Lepton-GRE](https://potatovender.github.io/Lepton-GRE/)
 - Grapher: [potatovender.github.io/Lepton-GRE/app.html](https://potatovender.github.io/Lepton-GRE/app.html)
+- Searchable reference: [functions and language](https://potatovender.github.io/Lepton-GRE/reference.html)
 - Language reference: [docs/LEPTON_LANGUAGE.md](docs/LEPTON_LANGUAGE.md)
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Development and releases: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - Extension guide and proposed web/desktop roadmap: [docs/EXTENDING_LEPTON.md](docs/EXTENDING_LEPTON.md)
+- Data-analysis gap assessment: [docs/DATA_ANALYSIS.md](docs/DATA_ANALYSIS.md)
 
 ## Features
 
@@ -21,6 +23,8 @@ Lepton GRE (Lepton Graph Rendering Interface) is a browser-based mathematical fi
 - Piecewise expressions, recursive references with a configurable depth, and dependency-focused workspace filtering.
 - Scalar lists, indexed access, element-wise arithmetic, list comprehensions,
   summation/products with editable LaTeX limits, and ordered list drawing.
+- Circular/hyperbolic trig, roots, logarithms, floor modulo, distance, interpolation,
+  signed-boundary operations, and seeded random. The reference gives exact semantics and examples.
 - Full-canvas WebGL rendering, coordinate-grid controls, pan/zoom, local saves, PNG export, and sample scenes.
 - Live diagnostics for syntax, naming, recursion size, dependencies, channels, settings, and draw components.
 - Phone layout with the graph above the editor, adapting to the visible viewport while typing.
@@ -73,8 +77,10 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | --- | --- |
 | `index.html` | Landing page, metadata, samples, and blank-graph links. |
 | `app.html` | Grapher HTML shell and production script/style entry points. |
+| `reference.html`, `src/reference.css`, `src/reference.js` | Responsive language guide and searchable function reference. |
+| `src/reference-data.js` | Every built-in's signature, purpose, and executable example; checked against the registry. The build embeds the catalogue in HTML for indexing and no-JavaScript reading. |
 | `src/browser-preview-live.js` | Production state, UI, text import/export, diagnostics, expression compilation, animation, and WebGL rendering. |
-| `packages/renderer/` | Reusable WebGL driver, typed API, isolated Node tests, and packaging instructions. No dependency on the GRE UI. |
+| `packages/renderer/` | Reusable WebGL driver, typed API, isolated Node tests, and packaging instructions. No dependency on the grapher UI. |
 | `src/math/expression-syntax.js` | Shared implicit-multiplication and power-precedence transformations. |
 | `src/math/builtins.js` | Shared built-in names, arity, display aliases, LaTeX commands, and MathQuill operator suggestions. |
 | `src/math/colour.js` | Colour channel definitions and matching CPU/GLSL HSV conversion. |
@@ -88,6 +94,7 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `scripts/check-editor-symbols.mjs` | Executable grammar, parser, model, UI-contract, and GLSL regression suite. |
 | `scripts/check-editor-browser.mjs` | Actual typing, caret/selection scrolling, and repeated editor-mount checks against the staged release. |
 | `scripts/check-collections-browser.mjs` | Collection CPU/GPU cases, real sum/product typing, list editing and round trips. |
+| `scripts/check-reference-browser.mjs` | Documented GPU examples, new-function typing, keyboard scrolling, reference search, public naming and links. |
 | `tests/` | Focused Vitest tests for the standalone expression-syntax module. |
 | `sample code/` | The single source of truth for copyable landing-page samples. `npm run migrate:samples` upgrades recognized legacy forms after grammar changes. |
 | `docs/` | Architecture, language, development, and design references. |

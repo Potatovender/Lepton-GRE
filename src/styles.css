@@ -62,6 +62,11 @@ body {
   border-radius: 9px;
 }
 
+.hero-reference { display: block; width: fit-content; margin-top: 18px; padding: 10px 14px; border: 1px solid #a9bac1; border-radius: 6px; color: #245b72; background: #fff; font-weight: 650; text-decoration: none; }
+.hero-reference:hover { background: #eef5f7; }
+.tutorial-actions { flex-wrap: wrap; }
+.tutorial-actions a { text-decoration: none; }
+
 .nav-launch {
   border: 1px solid #cfd7e4;
   border-radius: 6px;
@@ -101,7 +106,7 @@ body {
   max-width: 640px;
   margin: 0;
   color: #111827;
-  font-size: clamp(54px, 8vw, 112px);
+  font-size: 96px;
   line-height: 0.9;
   letter-spacing: 0;
 }
@@ -139,6 +144,8 @@ body {
   min-height: 560px;
   display: grid;
   align-items: center;
+  align-content: center;
+  gap: 12px;
 }
 
 .hero-visual::before,
@@ -187,20 +194,22 @@ body {
 }
 
 .formula-strip {
-  position: absolute;
-  right: 20px;
-  bottom: 18px;
+  position: relative;
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
+.formula-caption { flex-basis: 100%; margin: 0; font-size: 12px; color: #54606c; }
+
 .formula-strip span {
-  border: 1px solid rgba(255,255,255,.42);
-  border-radius: 999px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid #d5dce2;
+  border-radius: 4px;
   padding: 8px 10px;
-  background: rgba(255,255,255,.78);
+  background: #fff;
   color: #202938;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
@@ -306,6 +315,7 @@ body {
 }
 
 @media (max-width: 860px) {
+  .hero-copy h1 { font-size: 64px; }
   .landing-hero,
   .section-heading {
     grid-template-columns: 1fr;
@@ -2413,9 +2423,10 @@ textarea.compact-field,
   min-height: 0;
   overflow: hidden;
   background: #f8fafc;
-  touch-action: none;
   user-select: none;
 }
+
+.grid-canvas { touch-action: none; }
 
 .sidebar-toggle {
   position: absolute;
@@ -2666,15 +2677,30 @@ textarea.compact-field,
   width: min(420px, calc(100% - 28px));
   max-height: min(460px, calc(100vh - 92px));
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid #cfd7e4;
-  border-radius: 9px;
+  border-radius: 8px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 18px 48px rgba(24, 32, 51, 0.22);
   backdrop-filter: blur(10px);
 }
+
+.keyboard-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+}
+
+.keyboard-body > * { flex-shrink: 0; }
+.keyboard-key { overflow-wrap: anywhere; }
 
 .keyboard-header,
 .keyboard-tabs {

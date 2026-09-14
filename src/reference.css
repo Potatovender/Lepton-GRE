@@ -1,0 +1,45 @@
+.reference-body { height: auto; min-height: 100%; background: #fff; color: #242729; line-height: 1.6; }
+.reference-body a { color: #166b60; text-underline-offset: 3px; }
+.reference-body .landing-nav { border-bottom: 1px solid #e0e6e3; }
+.reference-body .landing-brand { color: #242729; }
+.reference-layout { width: min(1180px, calc(100% - 32px)); margin: 32px auto; display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 52px; }
+.reference-nav { position: sticky; top: 24px; align-self: start; display: grid; gap: 8px; font-size: 14px; }
+.reference-nav a { text-decoration: none; }
+.reference-nav a:hover { text-decoration: underline; }
+.reference-layout main { min-width: 0; max-width: 880px; }
+.reference-heading h1 { margin: 0 0 12px; font-size: 34px; line-height: 1.2; }
+.reference-heading > p:first-of-type { font-size: 18px; color: #53605a; }
+.reference-section { border-top: 1px solid #dfe6e2; margin-top: 40px; padding-top: 20px; scroll-margin-top: 20px; }
+.reference-section h2 { font-size: 24px; margin: 0 0 20px; }
+.reference-section h3 { font-size: 18px; margin-top: 28px; }
+.reference-body p { max-width: 76ch; }
+.reference-body code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; overflow-wrap: anywhere; }
+.reference-body pre { padding: 16px; background: #f3f6f4; border-left: 3px solid #8da69a; overflow-x: auto; tab-size: 2; }
+.reference-body pre code { overflow-wrap: normal; }
+.function-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
+.function-search label { grid-column: 1 / -1; font-size: 14px; font-weight: 600; }
+.function-search input { min-width: 0; padding: 10px; border: 1px solid #8f9e97; border-radius: 4px; font: inherit; }
+.function-search button { background: #edf3ef; color: #245a42; border: 1px solid #c8d7ce; border-radius: 4px; padding: 8px 14px; font: inherit; cursor: pointer; }
+.function-search [role="status"] { font-size: 13px; color: #53605a; grid-column: 1 / -1; }
+.function-group { margin-top: 28px; }
+.function-group h3 { padding-bottom: 8px; border-bottom: 2px solid #bed0c5; }
+.function-entry { display: grid; grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.5fr); column-gap: 20px; padding: 14px 0; border-bottom: 1px solid #e7ece9; scroll-margin-top: 20px; }
+.function-entry h4 { margin: 0; color: #205942; font-weight: 600; }
+.function-entry p { margin: 0; }
+.function-entry .function-example { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 14px; color: #5b645f; }
+.setting-reference { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 0 20px; }
+.setting-reference dt, .setting-reference dd { margin: 0; padding: 12px 0; border-bottom: 1px solid #e7ece9; }
+.reference-footer { display: flex; gap: 24px; flex-wrap: wrap; padding: 32px 0; border-top: 1px solid #dfe6e2; margin-top: 40px; font-size: 14px; }
+.reference-body :focus-visible { outline: 2px solid #166b60; outline-offset: 3px; }
+.skip-reference { position: absolute; top: -60px; left: 16px; background: white; padding: 8px; z-index: 2; }
+.skip-reference:focus { top: 8px; }
+@media (max-width: 760px) {
+  .reference-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 20px; }
+  .reference-nav { position: static; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+  .reference-heading h1 { font-size: 28px; }
+  .function-entry { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .function-entry .function-example { grid-column: 1; }
+  .setting-reference { display: block; }
+  .setting-reference dt { border-bottom: 0; padding-bottom: 0; }
+  .setting-reference dd { padding-top: 4px; }
+}

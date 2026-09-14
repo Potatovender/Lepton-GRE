@@ -7,6 +7,7 @@ const definitions = {
   asin: { args: 1, display: "arcsin", latex: "\\arcsin" },
   acos: { args: 1, display: "arccos", latex: "\\arccos" },
   atan: { args: 1, display: "arctan", latex: "\\arctan" },
+  atan2: { args: 2 },
   arcsin: { args: 1, latex: "\\arcsin" },
   arccos: { args: 1, latex: "\\arccos" },
   arctan: { args: 1, latex: "\\arctan" },
@@ -29,6 +30,10 @@ const definitions = {
   cbrt: { args: 1 },
   log: { args: 1, latex: "\\log" },
   ln: { args: 1, latex: "\\ln" },
+  log2: { args: 1 },
+  log10: { args: 1 },
+  hypot: { args: 2 },
+  pow: { args: 2 },
   abs: { args: 1 },
   sign: { args: 1 },
   floor: { args: 1 },
@@ -42,6 +47,10 @@ const definitions = {
   max: { args: 2, latex: "\\max" },
   mod: { args: 2 },
   clamp: { args: 3 },
+  step: { args: 2 },
+  smoothstep: { args: 3 },
+  mix: { args: 3 },
+  lerp: { args: 3 },
   union: { args: 2 },
   intersect: { args: 2 },
   subtract: { args: 2 },
@@ -60,7 +69,10 @@ export const LATEX_FUNCTIONS = Object.freeze(Object.fromEntries(
 export const STANDARD_LATEX_COMMANDS = Object.freeze(Object.fromEntries(
   Object.entries(LATEX_FUNCTIONS).map(([name, definition]) => [name, definition.latex ?? `\\operatorname{${name}}`])
 ));
-export const MATHQUILL_OPERATOR_NAMES = Object.keys(LATEX_FUNCTIONS).filter((name) => !["sqrt", "frac"].includes(name)).join(" ");
+// MathQuill's auto-operator option accepts alphabetic names only. Digit-suffixed
+// names still use operatorname on load and are recognized by the LaTeX reader.
+export const MATHQUILL_OPERATOR_NAMES = Object.keys(LATEX_FUNCTIONS)
+  .filter((name) => /^[A-Za-z]{2,}$/.test(name) && !["sqrt", "frac"].includes(name)).join(" ");
 export const BUILTIN_NAMES = new Set([
-  ...Object.keys(LATEX_FUNCTIONS), "sum", "prod", "for", "x", "y", "z", "pi", "e", "pow", "Math", "PI", "ref", "NaN"
+  ...Object.keys(LATEX_FUNCTIONS), "sum", "prod", "for", "x", "y", "z", "pi", "e", "Math", "PI", "ref", "NaN"
 ]);

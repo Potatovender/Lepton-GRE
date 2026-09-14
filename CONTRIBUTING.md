@@ -3,7 +3,7 @@
 ## Before You Change Code
 
 1. Read `docs/ARCHITECTURE.md` and `docs/DEVELOPMENT.md`.
-2. Keep one production path: GRE state/compiler in `src/browser-preview-live.js`, shared syntax in `src/math/`, and GPU lifecycle in `packages/renderer`. Do not add parallel implementations.
+2. Keep one production path: grapher state/compiler in `src/browser-preview-live.js`, shared syntax in `src/math/`, and GPU lifecycle in `packages/renderer`. Do not add parallel implementations.
 3. Preserve text-to-standard round trips. Comments, folders, ordering, draw-component ordering, and settings are user data.
 4. Do not silently change sample bounds, aspect ratios, or scene grammar.
 
@@ -27,6 +27,10 @@ readback in addition to comparing shader source.
 - Avoid unrelated formatting or asset churn.
 - Keep vendored code under `src/libs/` unchanged except during an explicit dependency update.
 - Update the language reference, tutorial/help copy, samples, and cache-busting version whenever grammar or user-visible behavior changes.
+- Every new built-in needs a `src/math/builtins.js` entry, CPU/GLSL implementations,
+  and a `src/reference-data.js` signature, description, and executable example.
+  Check real typing, not only pasted input; MathQuill auto-operator names cannot
+  contain digits. The reference and browser checks run in both CI and Pages.
 
 ## Pull Requests
 

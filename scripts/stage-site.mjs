@@ -2,10 +2,11 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { SITE_FILES } from "./site-files.mjs";
+import { renderFunctionReference } from "../src/reference-data.js";
 
 const version = (await readFile("src/browser-preview-live.js", "utf8")).match(/const APP_VERSION = "([^"]+)";/)?.[1];
 if (!version) throw new Error("Missing runtime release version.");
-for (const file of ["src/landing.js", "index.html", "app.html"]) {
+for (const file of ["src/landing.js", "index.html", "app.html", "reference.html", "src/reference.js", "src/reference-data.js"]) {
   if (!(await readFile(file, "utf8")).includes(version)) throw new Error(`${file} has a stale release version.`);
 }
 let commit = process.env.GITHUB_SHA ?? "uncommitted";
@@ -18,6 +19,9 @@ for (const file of SITE_FILES) {
   await mkdir(dirname(target), { recursive: true });
   await cp(file, target);
 }
+const reference = await readFile("dist/reference.html", "utf8");
+if (reference.split("<!-- FUNCTION_CATALOGUE -->").length !== 2) throw new Error("Reference page must contain one function catalogue slot.");
+await writeFile("dist/reference.html", reference.replace("<!-- FUNCTION_CATALOGUE -->", renderFunctionReference()));
 await writeFile("dist/.nojekyll", "");
 await writeFile("dist/release.json", JSON.stringify({ version, commit, builtAt: new Date().toISOString() }, null, 2) + "\n");
 console.log(`Staged ${SITE_FILES.length} public files in dist/ (${version}).`);

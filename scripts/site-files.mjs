@@ -1,6 +1,7 @@
 // Only this public surface is deployed. Never copy the entire working tree.
 export const SITE_FILES = [
-  "index.html", "app.html", "robots.txt", "sitemap.xml", "THIRD_PARTY_NOTICES.md",
+  "index.html", "app.html", "reference.html", "robots.txt", "sitemap.xml", "THIRD_PARTY_NOTICES.md",
+  "src/reference.js", "src/reference-data.js", "src/reference.css",
   "src/landing.js", "src/browser-preview-live.js", "src/styles.css",
   "src/math/expression-syntax.js", "src/math/builtins.js", "src/math/colour.js", "src/math/collections.js", "packages/renderer/src/index.js",
   "src/libs/mathquill/index.global.js", "src/libs/mathquill/style.css",

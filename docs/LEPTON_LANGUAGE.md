@@ -274,17 +274,36 @@ Branches are evaluated left to right. Conditions may be boolean expressions or b
 
 Unary functions:
 
-`sin`, `cos`, `tan`, `sec`, `csc`, `cot`, `asin`, `acos`, `atan`, `arcsin`, `arccos`, `arctan`, `arcsec`, `arccsc`, `arccot`, `sinh`, `cosh`, `tanh`, `sech`, `csch`, `coth`, `arcsinh`, `arccosh`, `arctanh`, `arcsech`, `arccsch`, `arccoth`, `sqrt`, `cbrt`, `log`, `ln`, `abs`, `sign`, `floor`, `ceil`, `round`, and `exp`.
+`sin`, `cos`, `tan`, `sec`, `csc`, `cot`, `asin`, `acos`, `atan`, `arcsin`, `arccos`, `arctan`, `arcsec`, `arccsc`, `arccot`, `sinh`, `cosh`, `tanh`, `sech`, `csch`, `coth`, `arcsinh`, `arccosh`, `arctanh`, `arcsech`, `arccsch`, `arccoth`, `sqrt`, `cbrt`, `log`, `ln`, `log2`, `log10`, `abs`, `sign`, `floor`, `ceil`, `round`, and `exp`.
+
+`log` and `ln` both mean natural logarithm. `log2` and `log10` explicitly choose
+base two and ten. Their input must be positive. `round` resolves half-integers
+toward positive infinity.
 
 Multi-argument functions:
 
 - `min(a,b)`, `max(a,b)`, `frac(a,b)`, `pow(a,b)`
 - `mod(value,base)` uses floor modulo, matching GLSL (for example, `mod(-1,5)` is `4`)
 - `clamp(value,low,high)`
+- `atan2(y,x)` returns the angle to (x,y) in the correct quadrant, using the current
+  angle mode. Its first argument is y. At (0,0), Lepton returns 0.
+- `hypot(a,b)` computes a scaled `sqrt(a^2+b^2)` to avoid unnecessary overflow.
+- `step(edge,value)` is 0 below edge and 1 at or above edge.
+- `smoothstep(low,high,value)` is the clamped cubic `t*t*(3-2*t)`, with
+  `t=clamp((value-low)/(high-low),0,1)`. Equal or reversed edges are undefined.
+- `mix(a,b,t)` and `lerp(a,b,t)` both equal `(1-t)*a+t*b`. They do not clamp t;
+  values outside 0..1 extrapolate.
 - `union(a,b)` = `min(a,b)`
 - `intersect(a,b)` = `max(a,b)`
 - `subtract(a,b)` = `max(-a,b)`
 - `random` and `random()` return the same deterministic coordinate-based value in `[0,1]` using the scene seed; neither form accepts arguments. The Standard editor displays bare `random` as an upright built-in operator.
+
+The [public function reference](https://potatovender.github.io/Lepton-GRE/reference.html#functions)
+lists every built-in, including signed-boundary logic. Interpolation follows
+[GLSL mix](https://registry.khronos.org/OpenGL-Refpages/gl4/html/mix.xhtml) and
+[smoothstep](https://registry.khronos.org/OpenGL-Refpages/gl4/html/smoothstep.xhtml)
+conventions; Lepton explicitly returns undefined for invalid smoothstep edges.
+The y-then-x convention follows [atan2](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/atan2).
 
 ## Naming and Diagnostics
 

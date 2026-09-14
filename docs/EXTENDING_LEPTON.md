@@ -8,6 +8,7 @@ not a claim that desktop builds or importable libraries already exist.
 | Concern | Owner | Required checks |
 | --- | --- | --- |
 | Built-in names, argument counts, display aliases, LaTeX commands, MathQuill operator suggestions | `src/math/builtins.js` | Every definition must have working CPU and GLSL forms; the runtime regression suite iterates the registry. |
+| Public function documentation and examples | `src/reference-data.js`, `reference.html` | Registry coverage and arity, CPU/GLSL example results, text/LaTeX round trips, real typing and searchable reference links. |
 | Scalar syntax and precedence | `src/math/expression-syntax.js`, live-runtime AST parsing/serialization | Text and LaTeX round trips, left/right associativity, nested calls, malformed input, CPU/GPU agreement. |
 | Data model, UI, validation, import/export | `src/browser-preview-live.js` | Ordering, folders, comments, references, history, persistence, diagnostics, both editor modes. |
 | Lists, element-wise operations, comprehensions, sums/products | `src/math/collections.js`, runtime AST/host adapter | Local scope, length matching, identities, dynamic bounds, size warnings, list draw order, CPU/GLSL pixel agreement. |
@@ -20,7 +21,8 @@ The function registry eliminates repeated name/arity/display lists. It does not
 implement functions automatically: add the CPU evaluator and GLSL implementation
 and test the same numeric cases through both. Special syntactic forms such as
 fractions and roots also need parser coverage. Do not edit vendored MathQuill to
-add a Lepton feature.
+add a Lepton feature. Keep the reference entry in the same change: its executable
+example is tested on CPU and GPU, and staging embeds it into the public HTML.
 
 ### A New Data Type
 

@@ -5,12 +5,13 @@ import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js"
 import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "../src/math/builtins.js";
 import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "../src/math/colour.js";
 import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "../src/math/collections.js";
+import { FUNCTION_REFERENCE, validateFunctionReference } from "../src/reference-data.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260914-mod-upright-names";
+const cacheVersion = "20260914-functions-reference";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -667,6 +668,46 @@ check("mod matches GLSL floor-modulo semantics on CPU and GPU source", () => {
   const glsl = sandbox.expressionToGlsl("mod(-1,5)+mod(7,5)", {});
   assert((glsl.match(/\bmod\(/g) ?? []).length === 2, glsl);
   assert(sandbox.latexSourceFromExpression("mod(x,5)").startsWith("\\operatorname{mod}"));
+});
+
+check("every documented function is registered and its example evaluates correctly", () => {
+  validateFunctionReference();
+  sandbox.__debugSetScene(sandbox.importScene(""));
+  for (const { name, example, expected } of FUNCTION_REFERENCE) {
+    const actual = sandbox.compileExpression(example)(0, 0, {});
+    assert(Math.abs(actual - expected) < 1e-10, `${name}: ${actual} != ${expected}`);
+    const latex = sandbox.latexSourceFromExpression(example);
+    const text = sandbox.astToLeptonText(sandbox.parseLatex(latex));
+    assert(Math.abs(sandbox.compileExpression(text)(0, 0, {}) - expected) < 1e-10, `${name} LaTeX round trip: ${text}`);
+  }
+});
+
+check("interpolation, distance, logarithms and atan2 retain domains, arity and list behavior", () => {
+  sandbox.__debugSetScene(sandbox.importScene("list values = [0,0.5,1]"));
+  const env = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv());
+  for (const [input, expected] of [
+    ["mix(10,20,-1)", 0], ["lerp(10,20,2)", 30], ["step(1,0.999)", 0],
+    ["smoothstep(2,4,0)", 0], ["smoothstep(2,4,5)", 1], ["smoothstep(2,4,3)", 0.5],
+    ["hypot(0,0)", 0], ["hypot(-3,-4)", 5], ["log2(pow(2,5))", 5],
+    ["atan2(0,0)", 0], ["atan2(1,0)", Math.PI / 2], ["atan2(-1,-1)", -3 * Math.PI / 4]
+  ]) {
+    const actual = sandbox.compileExpression(input)(0, 0, env);
+    assert(Math.abs(actual - expected) < 1e-10, `${input}: ${actual} != ${expected}`);
+  }
+  assert(JSON.stringify(sandbox.compileExpression("mix(10,20,values)")(0, 0, env)) === "[10,15,20]");
+  for (const input of ["smoothstep(1,1,0)", "smoothstep(2,1,1)", "log2(-1)", "log10(-1)"]) {
+    assert(Number.isNaN(sandbox.compileExpression(input)(0, 0, env)), `${input} should be undefined`);
+  }
+  for (const input of ["atan2(1)", "hypot(1,2,3)", "mix(1,2)", "log10(1,10)", "step(1)"]) {
+    assert(sandbox.validateExpression(input, {}).status === "invalid", `${input} should fail arity`);
+  }
+  for (const [latex, text] of [["\\log 2\\left(8\\right)", "log2(8)"], ["\\log 10(100)", "log10(100)"], ["\\arctan 2(1,-1)", "atan2(1,-1)"]]) {
+    assert(sandbox.astToLeptonText(sandbox.parseLatex(latex)) === text, latex);
+  }
+  sandbox.__debugSetScene(sandbox.importScene("set angle_mode = degrees\nfunction direction(a,b) = atan2(a,b)\nexpression heading = direction(1,-1)"));
+  const degreesEnv = sandbox.buildRuntimeEnv(sandbox.sceneFunctionEnv());
+  assert(Math.abs(sandbox.compileExpression("heading")(0, 0, degreesEnv) - 135) < 1e-9);
+  sandbox.__debugSetScene(sandbox.importScene(""));
 });
 
 check("all hyperbolic functions keep bracketed calls through CPU and GLSL", () => {
