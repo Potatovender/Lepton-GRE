@@ -11,7 +11,7 @@ const base = process.env.LEPTON_TEST_URL ?? server.resolvedUrls.local[0];
 const engine = process.env.LEPTON_TEST_BROWSER === "webkit" ? webkit : chromium;
 let browser;
 try {
-  browser = await engine.launch();
+  browser = await engine.launch({ executablePath: process.env.LEPTON_BROWSER_EXECUTABLE || undefined });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));

@@ -40,6 +40,7 @@ const definitions = {
   cot: { args: 1, latex: "\\cot" },
   min: { args: 2, latex: "\\min" },
   max: { args: 2, latex: "\\max" },
+  mod: { args: 2 },
   clamp: { args: 3 },
   union: { args: 2 },
   intersect: { args: 2 },

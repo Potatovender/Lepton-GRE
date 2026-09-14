@@ -10,7 +10,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260912-enter-folder-lines2";
+const cacheVersion = "20260914-mod-upright-names";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -661,6 +661,14 @@ check("all program functions normalize, compile, validate, and convert to GLSL",
   }
 });
 
+check("mod matches GLSL floor-modulo semantics on CPU and GPU source", () => {
+  assert(sandbox.validateExpression("mod(-1,5)+mod(7,5)", {}).status === "valid");
+  assert(sandbox.compileExpression("mod(-1,5)+mod(7,5)")(0, 0, {}) === 6);
+  const glsl = sandbox.expressionToGlsl("mod(-1,5)+mod(7,5)", {});
+  assert((glsl.match(/\bmod\(/g) ?? []).length === 2, glsl);
+  assert(sandbox.latexSourceFromExpression("mod(x,5)").startsWith("\\operatorname{mod}"));
+});
+
 check("all hyperbolic functions keep bracketed calls through CPU and GLSL", () => {
   const samples = {
     sinh: "0.5",
@@ -803,6 +811,40 @@ check("duplicate entry ids are red-flagged", () => {
   assert(diagnostics.functions.every((item) => item.status === "invalid"), JSON.stringify(diagnostics.functions));
   assert(diagnostics.colors.every((item) => item.status === "invalid"), JSON.stringify(diagnostics.colors));
   assert(diagnostics.restrictions.every((item) => item.status === "invalid"), JSON.stringify(diagnostics.restrictions));
+});
+
+check("matching names in distinct data classes are yellow conventions, not errors", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`expression shared = x
+colour shared = x~y~0
+boundary shared = 1
+transparency shared = 0
+point shared = [0,0]
+folder shared = {
+}`));
+  const diagnostics = sandbox.validateScene();
+  for (const collection of ["functions", "colors", "restrictions", "transparencies", "points", "folders"]) {
+    assert(diagnostics[collection][0].status === "warning", `${collection}: ${JSON.stringify(diagnostics[collection])}`);
+    assert(diagnostics[collection][0].message.includes("also used"), diagnostics[collection][0].message);
+  }
+  assert(diagnostics.hasErrors === false, diagnostics.summary);
+});
+
+check("declared references render upright while coordinates and local inputs stay mathematical", () => {
+  sandbox.__debugSetScene(sandbox.importScene(`expression amplitude = 2
+list samples = [1,2]
+point focus = [0,0]
+point p = [1,1]
+function shifted(amplitude) = amplitude+focus.x`));
+  const names = sandbox.displayIdentifierNames("functions.0.expression");
+  const latex = sandbox.latexSourceFromExpression("amplitude+samples[0]+focus.x+p.y+x", names);
+  assert(latex.includes("\\operatorname{amplitude}"), latex);
+  assert(latex.includes("\\operatorname{samples}"), latex);
+  assert(latex.includes("\\operatorname{focus}"), latex);
+  assert(latex.includes("\\operatorname{p}"), latex);
+  assert(latex.endsWith("+x"), latex);
+  assert(sandbox.latexToLeptonText(latex) === "amplitude+samples[0]+focus.x+p.y+x", sandbox.latexToLeptonText(latex));
+  const localNames = sandbox.displayIdentifierNames("functions.1.expression");
+  assert(!localNames.has("amplitude"), [...localNames].join(","));
 });
 
 check("whole-token constants render as LaTeX without splitting longer identifiers", () => {

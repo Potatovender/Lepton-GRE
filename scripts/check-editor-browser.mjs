@@ -95,7 +95,26 @@ try {
   }
 
   const page = activePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const sessionErrors = [];
+  page.on("pageerror", (error) => sessionErrors.push(error.message));
   page.on("dialog", (dialog) => dialog.accept());
+  await page.goto(`${base}app.html?scene=${encodeURIComponent("expression amplitude = 2\nexpression eq = ")}`);
+  const knownReferenceField = page.locator('.mathquill-field[data-field="functions.1.expression"]');
+  await knownReferenceField.locator(".mq-root-block").waitFor();
+  await knownReferenceField.click();
+  await page.keyboard.type("amplitude+1");
+  await settle(page);
+  const typedPresentation = await knownReferenceField.evaluate((field) => ({
+    latex: field.mathquillInstance.latex(),
+    operatorText: [...field.querySelectorAll(".mq-operator-name")].map((part) => part.textContent).join("")
+  }));
+  assert(typedPresentation.latex.includes("\\operatorname{amplitude}"), typedPresentation.latex);
+  assert(typedPresentation.operatorText.includes("amplitude"), typedPresentation.operatorText);
+  await page.locator('[data-display-mode="text"]').click();
+  assert((await page.locator("[data-scene-text]").inputValue()).includes("expression eq = amplitude+1"), "Upright value changed the source text");
+  console.log("ok - declared values become upright while preserving plain Lepton source");
+
+  await page.locator('[data-display-mode="standard"]').click();
   await page.goto(`${base}app.html`);
   for (let index = 0; index < 3; index += 1) {
     await page.locator('[data-display-mode="text"]').click();
@@ -146,7 +165,8 @@ try {
   await page.evaluate(() => {
     for (const [source, expected] of [
       ["expression eq = (2^3)^2\ncolour c = x~0~0\ndraw(eq){colour=c}", 64],
-      ["function increment(pi) = pi+1\nexpression eq = increment(2)\ncolour c = 10*x~0~0\ndraw(eq){colour=c}", 30]
+      ["function increment(pi) = pi+1\nexpression eq = increment(2)\ncolour c = 10*x~0~0\ndraw(eq){colour=c}", 30],
+      ["expression eq = mod(-1,5)\ncolour c = 10*x~0~0\ndraw(eq){colour=c}", 40]
     ]) {
       const pixels = window.__leptonDebug.renderSceneToPixels(source, 16, 16);
       const value = pixels.data[(8 * 16 + 8) * 4];
@@ -254,9 +274,13 @@ folder Colours = {
   });
   assert(preview.width === 160 && preview.height === 100 && preview.colours > 50 && preview.size < 24000, JSON.stringify(preview));
   await page.locator("[data-load-saved-graph]").first().click();
-  assert.equal(await page.locator('[data-toggle-folder]').first().getAttribute('aria-expanded'), 'false', "Loaded folder did not start closed");
-  await page.locator('[data-toggle-folder]').first().click();
-  await page.locator('.mathquill-field[data-field="colors.0.hue"] .mq-root-block').waitFor();
+  const loadedFolder = page.locator('[data-toggle-folder]').first();
+  assert.equal(await loadedFolder.getAttribute('aria-expanded'), 'false', "Loaded folder did not start closed");
+  await loadedFolder.click();
+  await page.waitForFunction((folder) => folder?.getAttribute("aria-expanded") === "true", await loadedFolder.elementHandle());
+  const loadedHueRoot = page.locator('.mathquill-field[data-field$=".hue"] .mq-root-block');
+  const loadedFieldNames = await page.locator(".mathquill-field[data-field]").evaluateAll((fields) => fields.map((field) => field.dataset.field));
+  assert.equal(await loadedHueRoot.count(), 1, JSON.stringify({ loadedFieldNames, sessionErrors }));
   await page.locator('[data-display-mode="text"]').click();
   assert.equal(await page.locator("[data-scene-text]").inputValue(), savedSource, "Save/reload/load lost data");
   console.log("ok - mixed-type saved graph reloads without losing data and retains a compact nonblank preview");
@@ -295,6 +319,7 @@ expression tail = 1`)}`);
   });
   assert.equal(enterPlacement.created, enterPlacement.source + 1, JSON.stringify(enterPlacement));
   assert.equal(enterPlacement.createdParent, enterPlacement.sourceParent, "Enter-created line escaped the current folder");
+  assert.deepEqual(sessionErrors, [], "Long editor session raised browser errors");
   console.log("ok - Enter inserts and focuses the next expression inside the current folder; loaded folders start closed");
 
   if (!process.env.LEPTON_TEST_URL) {

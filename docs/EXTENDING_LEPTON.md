@@ -135,6 +135,14 @@ code cannot simply be renamed to WGSL.
    kernels, analysis tools, and controlled plugin APIs. Prioritize from real
    workloads, measuring both CPU and GPU time.
 
+Treat the core-contract extraction as the next architectural milestone before a
+second Lepton product is built. A sprite or animation authoring layer should own
+its higher-level objects, then lower them into a versioned Lepton scene IR through
+the public compiler API. It should not copy the parser or teach each website a
+different interpretation of Lepton source. The initial API should cover parsing,
+normalization/migration, diagnostics, dependency/type analysis, serialization,
+and compilation into a renderer-neutral plan plus GLSL output.
+
 Keep these packages in the current repository initially. Independent repositories
 would make atomic grammar/compiler/editor changes harder before the contracts
 stabilize. A separate engine release becomes useful once there are at least two

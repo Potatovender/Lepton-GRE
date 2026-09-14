@@ -1,6 +1,6 @@
 # Release Readiness
 
-Checked on 2026-09-12 for `20260912-enter-folder-lines2`. This supersedes the
+Checked on 2026-09-14 for `20260914-mod-upright-names`. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -18,6 +18,16 @@ screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Corrections
 
+- `mod(value,base)` now has matching floor-modulo behavior in CPU evaluation and
+  GLSL. The function registry, arity checks, MathQuill operator list, keyboard,
+  and language reference all derive from the same definition.
+- Declared references display upright in Standard math fields without changing
+  copied Lepton source. Exact names reused across distinct data classes receive
+  yellow convention warnings; true same-namespace ambiguity remains red.
+- One-letter IDs remain upright without being passed to MathQuill's two-letter
+  auto-operator registry, preventing a short ID from aborting later editor mounts.
+- Saving renders the current scene directly into the compact preview, avoiding a
+  stale or blank thumbnail when the visible canvas has not finished repainting.
 - Pressing Enter after editing a Standard-mode data row creates a blank
   expression immediately after that row, inherits its folder membership, focuses
   the new editor, and leaves all existing mixed data in place. Graphs opened from
@@ -99,7 +109,7 @@ screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Verification
 
-- **167** runtime/model/grammar checks, **17** syntax unit tests, and **13**
+- **170** runtime/model/grammar checks, **17** syntax unit tests, and **13**
   standalone GPU-driver tests passed.
 - All **9** maintained sample files passed current-syntax migration checks.
 - Collection checks include independent GPU pixels for nested reductions,
@@ -133,8 +143,8 @@ screenshots, and unrelated ItGE experiments are not deployed.
   functions, roots, clamps, and piecewise conditions, within 8-bit image
   quantization tolerance. Separate checks covered nested degree-mode references.
   The same independent calculations also passed with WebGL 1 forced.
-- Water save/load produced a decodable, nonuniform 160 x 100 WebP preview of about
-  3.6 KB. Export produced a nonblank 1000 x 1000 PNG matching settings.
+- Save/load produced decodable, nonuniform 160 x 100 JPEG previews below the
+  24 KB storage ceiling. Export produced a nonblank PNG matching settings.
 - Water animation advanced time without recompiling the unchanged shader.
 - Phone tests: 390 x 844 gives 422 px to each pane. With a keyboard-sized visible
   viewport of 390 x 500, both panes become 250 px and the focused last field stays

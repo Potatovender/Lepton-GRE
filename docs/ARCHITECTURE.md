@@ -72,6 +72,11 @@ again by both bubbling mouse events and per-field handlers.
 
 Parameterized function locals shadow outer values. Expressions and sliders resolve by ID. Point selectors support `point.x`, `point.y`, `point[0]`, and `point[1]`. Recursive expansion returns the configured base value `0` at maximum depth.
 
+MathQuill receives the same built-in registry plus the IDs visible in the current
+scene. Referenced global IDs are serialized as upright operators for display,
+while coordinates and function-local parameters remain mathematical variables.
+The LaTeX importer removes that presentation wrapper back to the same plain ID.
+
 ## Rendering
 
 ### Collection Plans
@@ -115,6 +120,10 @@ The CPU renderer is a compatibility fallback and intentionally samples at the co
 ## Diagnostics
 
 `validateScene` returns per-collection diagnostics and a scene summary. Red prevents affected output, yellow reports a recoverable concern, and blue reports potentially expensive recursion. A broken layer should not suppress unrelated valid layers.
+
+Exact names reused across distinct data classes receive a yellow convention
+warning. Duplicate names in one compiler namespace remain red because resolving
+such a reference would be ambiguous.
 
 Aggregation priority is red, yellow, blue, then green, including folder contents.
 An iterative dependency/syntax check runs before expanded-node cost warnings, so

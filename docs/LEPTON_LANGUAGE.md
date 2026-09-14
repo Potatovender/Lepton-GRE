@@ -279,6 +279,7 @@ Unary functions:
 Multi-argument functions:
 
 - `min(a,b)`, `max(a,b)`, `frac(a,b)`, `pow(a,b)`
+- `mod(value,base)` uses floor modulo, matching GLSL (for example, `mod(-1,5)` is `4`)
 - `clamp(value,low,high)`
 - `union(a,b)` = `min(a,b)`
 - `intersect(a,b)` = `max(a,b)`
@@ -288,11 +289,16 @@ Multi-argument functions:
 ## Naming and Diagnostics
 
 - IDs must be unique across user values of the same reference space.
+- Reusing one exact name in different data classes is allowed but receives a yellow naming-convention warning. Same-namespace duplicates remain errors because their references are ambiguous.
 - Exact built-in or coordinate names are errors.
 - Expressions and sliders receive warnings for confusing reserved substrings; parameterized functions do not.
 - Function-local parameters may shadow outer entries with a warning and use the local value.
 - Recursive references stop at `max_recursion` and return `0` at the base case.
 - Large recursion estimates are blue warnings because the generated graph may be slow or may fail shader limits; they are not naming or syntax errors.
+
+In Standard math fields, recognized entry IDs are displayed upright like function
+names. Coordinates and function-local inputs retain ordinary mathematical italic
+styling. This is presentation only; Text mode and copied source keep plain IDs.
 
 ## Legacy Import
 

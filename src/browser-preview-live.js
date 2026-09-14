@@ -1,8 +1,8 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260912-enter-folder-lines2";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260912-enter-folder-lines2";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260912-enter-folder-lines2";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260912-enter-folder-lines2";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260912-enter-folder-lines2";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260914-mod-upright-names";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260914-mod-upright-names";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260914-mod-upright-names";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260914-mod-upright-names";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260914-mod-upright-names";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -49,7 +49,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260912-enter-folder-lines2";
+const APP_VERSION = "20260914-mod-upright-names";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -338,6 +338,7 @@ function renderApp() {
   const scrollKey = panelScrollKey();
   const previousCanvas = root.querySelector(".grid-canvas");
   if (previousCanvas) disposeRenderer(previousCanvas, { loseContext: true });
+  disposeMountedMathFields();
   root.innerHTML = `
     <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px; --sidebar-min-width: ${SIDEBAR_MIN_WIDTH}px">
       <section class="expression-panel ${displayMode === "text" ? "expression-panel-text" : ""}" aria-label="Expression editor">
@@ -384,6 +385,20 @@ function renderApp() {
   scheduleSceneRender(diagnostics);
   queueMathLayoutReflow();
   requestAnimationFrame(() => forceMathFieldsReflow());
+}
+
+function disposeMountedMathFields() {
+  root.querySelectorAll?.(".mathquill-field[data-field]").forEach((field) => {
+    const mathField = field.mathquillInstance ?? field.__mathField;
+    try {
+      mathField?.blur?.();
+      mathField?.revert?.();
+    } catch {
+      // A stale editor must not prevent the replacement panel from mounting.
+    }
+    delete field.mathquillInstance;
+    delete field.__mathField;
+  });
 }
 
 function compileStatusText() {
@@ -1897,7 +1912,7 @@ function sliderRowContent(entry, index) {
 
 function mathEditor(field, value, label, small = false, placeholder = "") {
   const source = normalizeExpressionDisplayText(value);
-  const latex = latexSourceFromExpression(source);
+  const latex = latexSourceFromExpression(source, displayIdentifierNames(field));
   const placeholderAttr = placeholder ? ` data-placeholder="${escapeHtml(placeholder)}"` : "";
   return `
     <div class="mathquill-editor ${small ? "mathquill-editor-small" : ""}">
@@ -2620,10 +2635,16 @@ function bindEvents() {
   root.querySelectorAll(".mathquill-field[data-field]").forEach((el) => {
     const fieldName = el.dataset.field;
     const initialValue = el.dataset.value ?? "";
+    const declaredOperatorNames = [...displayIdentifierNames(fieldName)]
+      // MathQuill rejects one-letter autoOperatorNames. Those identifiers are
+      // still rendered upright by astToLatex; only multi-letter names use its
+      // live auto-substitution while typing.
+      .filter((name) => /^[A-Za-z]{2,}$/.test(name))
+      .join(" ");
 
     const mathField = MQ.MathField(el, {
       autoCommands: "sqrt sum prod",
-      autoOperatorNames: `${MATHQUILL_OPERATOR_NAMES} for`,
+      autoOperatorNames: `${MATHQUILL_OPERATOR_NAMES} for ${declaredOperatorNames}`.trim(),
       handlers: {
         edit: () => {
           if (el.dataset.initializing === "true" || !el.contains(document.activeElement)) return;
@@ -3538,7 +3559,7 @@ function updatePointDragFields(index) {
     const field = root.querySelector(`.mathquill-field[data-field="${fieldName}"]`);
     if (!field) continue;
     const source = point[coordinate];
-    const latex = latexSourceFromExpression(source);
+    const latex = latexSourceFromExpression(source, displayIdentifierNames(fieldName));
     field.dataset.value = latex;
     const mathField = field.mathquillInstance ?? field.__mathField;
     if (!mathField) continue;
@@ -3652,7 +3673,7 @@ function updateField(field) {
     scene[collection][Number(rawIndex)][property] = value;
   }
   if (field.classList?.contains("mathquill-field")) {
-    field.dataset.value = latexSourceFromExpression(value);
+    field.dataset.value = latexSourceFromExpression(value, displayIdentifierNames(field.dataset.field));
   }
 }
 
@@ -3721,7 +3742,7 @@ function refreshMountedFieldsAfterRename() {
     if (collection === "settings") return;
     const value = sceneFieldValue(field.dataset.field);
     if (value == null) return;
-    const latex = latexSourceFromExpression(String(value ?? ""));
+    const latex = latexSourceFromExpression(String(value ?? ""), displayIdentifierNames(field.dataset.field));
     field.dataset.value = latex;
     const mathField = field.mathquillInstance ?? field.__mathField;
     if (!mathField) return;
@@ -3829,7 +3850,7 @@ function setSliderExpression(index, value, syncField = false) {
   if (!syncField) return;
   const valueField = root.querySelector(`[data-field="functions.${index}.expression"]`);
   if (valueField) {
-    valueField.dataset.value = latexSourceFromExpression(entry.expression);
+    valueField.dataset.value = latexSourceFromExpression(entry.expression, displayIdentifierNames(valueField.dataset.field));
     const mathField = valueField.mathquillInstance;
     if (mathField) mathField.latex(valueField.dataset.value);
   }
@@ -4167,6 +4188,24 @@ function sceneFunctionEnv(includeDefault = false) {
     entries.push([DEFAULT_DRAW_FUNCTION.id, DEFAULT_DRAW_FUNCTION]);
   }
   return Object.fromEntries([...entries, ...dataEntries(scene.lists).map((entry) => [entry.id, { ...entry, kind: "list" }])]);
+}
+
+function displayIdentifierNames(fieldName = "") {
+  const names = new Set([
+    ...dataEntries(scene.functions).map((entry) => normalizeFunctionEntry(entry).id),
+    ...dataEntries(scene.lists).map((entry) => entry.id),
+    ...dataEntries(scene.restrictions).map((entry) => entry.id),
+    ...dataEntries(scene.points).map((entry) => entry.id)
+  ].map((name) => String(name ?? "").trim()).filter(Boolean));
+  const match = String(fieldName ?? "").match(/^functions\.(\d+)\.expression$/);
+  if (match) {
+    const entry = normalizeFunctionEntry(scene.functions[Number(match[1])]);
+    if (entry.kind === "function") entry.params.forEach((param) => names.delete(param));
+  }
+  names.delete("x");
+  names.delete("y");
+  names.delete("z");
+  return names;
 }
 
 function boundaryExpressionEnv(includeDefault = false) {
@@ -5281,6 +5320,7 @@ function compileScalarExpression(source, localNames = new Set()) {
         return value - Math.floor(value);
       };
       const frac = (a, b) => b === 0 ? NaN : a / b;
+      const mod = (value, base) => base === 0 ? NaN : value - base * Math.floor(value / base);
       const ln = (value) => value > 0 ? Math.log(value) : NaN;
       const sec = (value) => 1 / Math.cos(value);
       const csc = (value) => 1 / Math.sin(value);
@@ -5815,6 +5855,7 @@ function validateScene() {
     points: duplicateEntryIds(scene.points ?? [])
   };
   const valueKindCollisions = duplicateFunctionKinds(scene.functions);
+  const objectNameClasses = collectObjectNameClasses();
   const diagnostics = {
     functions: [],
     colors: [],
@@ -5836,7 +5877,7 @@ function validateScene() {
     let shape;
     try { shape = collectionPlan(entry.expression, env).kind === "list" ? null : { status: "invalid", message: "A list declaration needs a list expression" }; }
     catch (error) { shape = { status: error.code === "LIST_SIZE" ? "info" : "invalid", message: error.message }; }
-    return combineDiagnostics([validateEntryId(entry.id, "List", env, false), duplicateIdDiagnostic(entry.id, "List", duplicateIds.lists), shape, validateExpression(entry.expression, env, [entry.id])]);
+    return combineDiagnostics([validateEntryId(entry.id, "List", env, false), duplicateIdDiagnostic(entry.id, "List", duplicateIds.lists), crossClassNameDiagnostic(entry.id, "list", objectNameClasses), shape, validateExpression(entry.expression, env, [entry.id])]);
   });
   if (scene.settings.backgroundColor !== "0" && !dataEntries(scene.colors).some((entry) => entry.id === scene.settings.backgroundColor)) {
     diagnostics.settings.push({ status: "invalid", message: `Missing background colour: ${scene.settings.backgroundColor}` });
@@ -5850,13 +5891,14 @@ function validateScene() {
     if (isCommentEntry(rawEntry)) return { status: "valid", message: "Comment" };
     const entry = normalizeFunctionEntry(rawEntry);
     const label = entry.kind === "slider" ? "Slider" : entry.kind === "function" ? "Function" : "Expression";
+    const objectClass = entry.kind === "slider" ? "slider" : entry.kind === "function" ? "function" : "expression";
     const idResult = validateEntryId(entry.id, label, env, entry.kind === "slider" || entry.kind === "variable");
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, label, duplicateIds.functions);
     const kindCollision = valueKindCollisions.has(entry.id.trim()) ? { status: "invalid", message: `Name "${entry.id}" cannot be shared by an expression, slider, and function` } : null;
     if (entry.kind === "slider") {
       return combineDiagnostics([
-        duplicateDiagnostic, kindCollision,
+        duplicateDiagnostic, kindCollision, crossClassNameDiagnostic(entry.id, objectClass, objectNameClasses),
         idResult,
         sliderCoordinateDiagnostic(entry),
         timeVariableDiagnostic(entry, timeVariableCount),
@@ -5871,14 +5913,14 @@ function validateScene() {
       const params = new Set(entry.params);
       const outputDiagnostic = validateFunctionOutput(entry, env);
       return combineDiagnostics([
-        duplicateDiagnostic, kindCollision,
+        duplicateDiagnostic, kindCollision, crossClassNameDiagnostic(entry.id, objectClass, objectNameClasses),
         idResult,
         validateFunctionParams(entry, env),
         outputDiagnostic,
         entry.outputType === "point" ? null : validateExpression(entry.expression, env, [entry.id], params)
       ]);
     }
-    return combineDiagnostics([duplicateDiagnostic, kindCollision, idResult, validateExpression(entry.expression, env, [entry.id])]);
+    return combineDiagnostics([duplicateDiagnostic, kindCollision, crossClassNameDiagnostic(entry.id, objectClass, objectNameClasses), idResult, validateExpression(entry.expression, env, [entry.id])]);
   });
   diagnostics.colors = scene.colors.map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
@@ -5887,6 +5929,7 @@ function validateScene() {
     const channels = Object.fromEntries(colourChannelKeys(entry).map((key) => [key, validateScalarExpression(entry[key], env)]));
     const combined = combineDiagnostics([
       duplicateDiagnostic,
+      crossClassNameDiagnostic(entry.id, "colour", objectNameClasses),
       idResult,
       ...Object.values(channels)
     ]);
@@ -5897,12 +5940,13 @@ function validateScene() {
     const idResult = validateEntryId(entry.id, "Boundary", env, false);
     if (idResult.status === "invalid") return idResult;
     const duplicateDiagnostic = duplicateIdDiagnostic(entry.id, "Boundary", duplicateIds.restrictions);
-    return combineDiagnostics([duplicateDiagnostic, idResult, validateScalarExpression(entry.expression, boundaryEnv, [entry.id])]);
+    return combineDiagnostics([duplicateDiagnostic, crossClassNameDiagnostic(entry.id, "boundary", objectNameClasses), idResult, validateScalarExpression(entry.expression, boundaryEnv, [entry.id])]);
   });
   diagnostics.transparencies = (scene.transparencies ?? []).map((entry) => {
     if (isCommentEntry(entry)) return { status: "valid", message: "Comment" };
     return combineDiagnostics([
       duplicateIdDiagnostic(entry.id, "Transparency", duplicateIds.transparencies),
+      crossClassNameDiagnostic(entry.id, "transparency", objectNameClasses),
       validateEntryId(entry.id, "Transparency", env, false),
       validateScalarExpression(entry.expression, env)
     ]);
@@ -5939,6 +5983,7 @@ function validateScene() {
   });
   diagnostics.folders = (scene.folders ?? []).map((entry) => combineDiagnostics([
     duplicateIdDiagnostic(entry.id ?? "", "Folder", duplicateIds.folders),
+    crossClassNameDiagnostic(entry.id ?? "", "folder", objectNameClasses),
     validateFolderName(entry.id ?? "")
   ]));
   diagnostics.points = (scene.points ?? []).map((entry) => {
@@ -5946,6 +5991,7 @@ function validateScene() {
     const color = resolveColorEntry(entry.colorId ?? "default");
     return combineDiagnostics([
       duplicateIdDiagnostic(entry.id ?? "", "Point", duplicateIds.points),
+      crossClassNameDiagnostic(entry.id ?? "", "point", objectNameClasses),
       validateEntryId(entry.id ?? "", "Point", env, false),
       validateScalarExpression(entry.x, env),
       validateScalarExpression(entry.y, env),
@@ -6125,6 +6171,39 @@ function duplicateEntryIds(entries) {
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return new Set([...counts].filter(([, count]) => count > 1).map(([id]) => id));
+}
+
+function collectObjectNameClasses() {
+  const names = new Map();
+  const add = (id, objectClass) => {
+    const name = String(id ?? "").trim();
+    if (!name) return;
+    const classes = names.get(name) ?? new Set();
+    classes.add(objectClass);
+    names.set(name, classes);
+  };
+  for (const rawEntry of dataEntries(scene.functions)) {
+    const entry = normalizeFunctionEntry(rawEntry);
+    add(entry.id, entry.kind === "slider" ? "slider" : entry.kind === "function" ? "function" : "expression");
+  }
+  for (const entry of dataEntries(scene.lists)) add(entry.id, "list");
+  for (const entry of dataEntries(scene.colors)) add(entry.id, "colour");
+  for (const entry of dataEntries(scene.restrictions)) add(entry.id, "boundary");
+  for (const entry of dataEntries(scene.transparencies)) add(entry.id, "transparency");
+  for (const entry of dataEntries(scene.points)) add(entry.id, "point");
+  for (const entry of dataEntries(scene.folders)) add(entry.id, "folder");
+  return names;
+}
+
+function crossClassNameDiagnostic(id, objectClass, names) {
+  const name = String(id ?? "").trim();
+  const otherClasses = [...(names.get(name) ?? [])].filter((candidate) => candidate !== objectClass).sort();
+  if (!otherClasses.length) return null;
+  const others = otherClasses.length === 1
+    ? otherClasses[0]
+    : `${otherClasses.slice(0, -1).join(", ")} and ${otherClasses.at(-1)}`;
+  const label = objectClass.charAt(0).toUpperCase() + objectClass.slice(1);
+  return { status: "warning", message: `${label} name "${name}" is also used by another data class (${others}); this is allowed but can be confusing` };
 }
 
 function duplicateFunctionKinds(entries) {
@@ -6606,7 +6685,7 @@ function refreshMathFieldDisplay(field) {
 
 function renderMathFieldDisplay(field) {
   const source = field.dataset.source ?? "";
-  const html = renderEditableLatex(source);
+  const html = renderEditableLatex(source, displayIdentifierNames(field.dataset.field));
   if (field.innerHTML === html) return;
   field.innerHTML = html;
   field.dataset.source = source;
@@ -6676,14 +6755,14 @@ function hasIncompletePower(source) {
   return !grouped.exponent.trim();
 }
 
-function renderEditableLatex(source) {
+function renderEditableLatex(source, operatorNames = displayIdentifierNames()) {
   if (!source) return "";
   try {
     const trimmed = String(source).trim();
     const ast = (trimmed.startsWith("\\") || /\\(?:operatorname|frac|sqrt|left)\b/.test(trimmed))
       ? parseLatex(trimmed)
       : parseLeptonText(trimmed);
-    return astToEditableHtml(ast);
+    return astToEditableHtml(ast, operatorNames);
   } catch (e) {
     return escapeHtml(source);
   }
@@ -7074,7 +7153,10 @@ function tokenizeLatex(source) {
       i++;
       let opMatch = source.slice(i).match(/^operatorname\s*\{([A-Za-z]\w*)\}/);
       if (opMatch) {
-        tokens.push({ type: "command", value: opMatch[1] });
+        // Presentation does not determine semantics: an upright name may be a
+        // value reference or a call. The ordinary identifier parser decides by
+        // looking for a following argument list.
+        tokens.push({ type: "identifier", value: opMatch[1] });
         i += opMatch[0].length;
         continue;
       }
@@ -7275,6 +7357,20 @@ function createParser(tokens, isLatexMode) {
         if (name === "frac" && args.length === 2) {
           return { type: "fraction", num: args[0], den: args[1] };
         }
+        return { type: "call", name, args };
+      }
+
+      if (isLatexMode && nextToken?.type === "operator" && nextToken.value === "{") {
+        consume("operator", "{");
+        const args = [];
+        if (peek()?.value !== "}") {
+          while (true) {
+            args.push(parseInfixExpression(0));
+            if (peek()?.value === ",") next();
+            else break;
+          }
+        }
+        consume("operator", "}");
         return { type: "call", name, args };
       }
 
@@ -7519,8 +7615,8 @@ function powerBaseNeedsGrouping(base) {
   return base.type === "binary" || base.type === "unary" || base.type === "power" || base.type === "aggregate";
 }
 
-function postfixTarget(node, latex = false) {
-  const text = latex ? astToLatex(node) : astToLeptonText(node);
+function postfixTarget(node, latex = false, operatorNames = null) {
+  const text = latex ? astToLatex(node, operatorNames) : astToLeptonText(node);
   return ["binary", "unary", "power", "aggregate"].includes(node.type) ? (latex ? `\\left(${text}\\right)` : `(${text})`) : text;
 }
 
@@ -7535,36 +7631,39 @@ function numberText(value) {
   return sign + (position <= 0 ? `0.${"0".repeat(-position)}${digits}` : position >= digits.length ? digits + "0".repeat(position - digits.length) : `${digits.slice(0, position)}.${digits.slice(position)}`);
 }
 
-function astToLatex(node) {
-  if (node.type === "piecewise") return `\\left\\{${node.branches.map(({ condition, value }) => `${astToLatex(condition)}:${astToLatex(value)}`).concat(node.fallback ? [astToLatex(node.fallback)] : []).join(",")}\\right\\}`;
-  if (node.type === "list") return `\\left[${node.items.map(astToLatex).join(",")}\\right]`;
-  if (node.type === "index") return `${postfixTarget(node.target, true)}\\left[${astToLatex(node.index)}\\right]`;
-  if (node.type === "member") return `${postfixTarget(node.target, true)}.${node.property}`;
-  if (node.type === "comprehension") return `\\left[${astToLatex(node.body)}\\ \\operatorname{for}\\left(${node.binding}=${astToLatex(node.lower)},${astToLatex(node.upper)}\\right)\\right]`;
-  if (node.type === "aggregate") return `\\${node.name}_{${node.binding}=${astToLatex(node.lower)}}^{${astToLatex(node.upper)}}\\left(${astToLatex(node.body)}\\right)`;
+function astToLatex(node, operatorNames = null) {
+  const render = (child, names = operatorNames) => astToLatex(child, names);
+  const withoutBinding = (binding) => operatorNames ? new Set([...operatorNames].filter((name) => name !== binding)) : operatorNames;
+  if (node.type === "piecewise") return `\\left\\{${node.branches.map(({ condition, value }) => `${render(condition)}:${render(value)}`).concat(node.fallback ? [render(node.fallback)] : []).join(",")}\\right\\}`;
+  if (node.type === "list") return `\\left[${node.items.map((item) => render(item)).join(",")}\\right]`;
+  if (node.type === "index") return `${postfixTarget(node.target, true, operatorNames)}\\left[${render(node.index)}\\right]`;
+  if (node.type === "member") return `${postfixTarget(node.target, true, operatorNames)}.${node.property}`;
+  if (node.type === "comprehension") return `\\left[${render(node.body, withoutBinding(node.binding))}\\ \\operatorname{for}\\left(${node.binding}=${render(node.lower)},${render(node.upper)}\\right)\\right]`;
+  if (node.type === "aggregate") return `\\${node.name}_{${node.binding}=${render(node.lower)}}^{${render(node.upper)}}\\left(${render(node.body, withoutBinding(node.binding))}\\right)`;
   if (node.type === "number") {
     return numberText(node.value);
   }
   if (node.type === "identifier") {
     if (node.name === "pi") return "\\pi";
     if (node.name === "theta") return "\\theta";
+    if (operatorNames?.has(node.name)) return `\\operatorname{${node.name}}`;
     return node.name;
   }
   if (node.type === "fraction") {
-    return `\\frac{${astToLatex(node.num)}}{${astToLatex(node.den)}}`;
+    return `\\frac{${render(node.num)}}{${render(node.den)}}`;
   }
   if (node.type === "unary") {
-    const value = astToLatex(node.value);
+    const value = render(node.value);
     return `${node.op}${node.value.type === "binary" ? `\\left(${value}\\right)` : value}`;
   }
   if (node.type === "power") {
-    const base = astToLatex(node.base);
-    return `${powerBaseNeedsGrouping(node.base) ? `\\left(${base}\\right)` : base}^{${astToLatex(node.exponent)}}`;
+    const base = render(node.base);
+    return `${powerBaseNeedsGrouping(node.base) ? `\\left(${base}\\right)` : base}^{${render(node.exponent)}}`;
   }
   if (node.type === "binary") {
     const op = node.op;
-    let left = astToLatex(node.left);
-    let right = astToLatex(node.right);
+    let left = render(node.left);
+    let right = render(node.right);
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
       left = `\\left(${left}\\right)`;
     }
@@ -7575,7 +7674,7 @@ function astToLatex(node) {
   }
   if (node.type === "call") {
     const name = node.name;
-    const args = node.args.map(astToLatex);
+    const args = node.args.map((arg) => render(arg));
     if (name === "random" && args.length === 0) {
       return "\\operatorname{random}";
     }
@@ -7690,29 +7789,31 @@ function astToMathString(node) {
   return "";
 }
 
-function astToEditableHtml(node) {
+function astToEditableHtml(node, operatorNames = null) {
+  const render = (child, names = operatorNames) => astToEditableHtml(child, names);
   if (["piecewise", "list", "index", "member", "comprehension", "aggregate"].includes(node.type)) return escapeHtml(astToLeptonText(node));
   if (node.type === "number") {
     return numberText(node.value);
   }
   if (node.type === "identifier") {
+    if (operatorNames?.has(node.name)) return `<span class="mq-operator">${escapeHtml(node.name)}</span>`;
     return node.name;
   }
   if (node.type === "fraction") {
     return atomEditableHtml("frac", [astToLeptonText(node.num), astToLeptonText(node.den)]);
   }
   if (node.type === "unary") {
-    const value = astToEditableHtml(node.value);
+    const value = render(node.value);
     return `${node.op}${node.value.type === "binary" ? `(${value})` : value}`;
   }
   if (node.type === "power") {
-    const base = astToEditableHtml(node.base);
+    const base = render(node.base);
     const groupedBase = powerBaseNeedsGrouping(node.base) ? `(${base})` : base;
-    return `<span class="mq-power" data-command="power"><span class="mq-base">${groupedBase}</span><span class="mq-exponent">${astToEditableHtml(node.exponent)}</span></span>`;
+    return `<span class="mq-power" data-command="power"><span class="mq-base">${groupedBase}</span><span class="mq-exponent">${render(node.exponent)}</span></span>`;
   }
   if (node.type === "binary") {
-    let left = astToEditableHtml(node.left);
-    let right = astToEditableHtml(node.right);
+    let left = render(node.left);
+    let right = render(node.right);
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(node.op)) left = `(${left})`;
     if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(node.op)) right = `(${right})`;
     return `${left}${node.op}${right}`;
@@ -7747,11 +7848,11 @@ function latexToLeptonText(value) {
   }
 }
 
-function latexSourceFromExpression(source) {
+function latexSourceFromExpression(source, operatorNames = displayIdentifierNames()) {
   if (!source) return "";
   try {
     const ast = parseLeptonText(source);
-    return astToLatex(ast);
+    return astToLatex(ast, operatorNames);
   } catch (e) {
     return String(source);
   }
@@ -9245,11 +9346,15 @@ function saveCurrentGraph(name, { forceNew = false } = {}) {
     throw error;
   }
   const now = new Date().toISOString();
+  const source = exportScene();
+  const renderedThumbnail = renderSavedSceneThumbnail(source);
   const graph = {
     id: existing?.id ?? createSavedGraphId(),
     name,
-    scene: exportScene(),
-    thumbnail: captureGraphThumbnail(),
+    scene: source,
+    thumbnail: savedGraphThumbnailState(renderedThumbnail) === "compact"
+      ? renderedThumbnail
+      : captureGraphThumbnail(),
     thumbnailVersion: SAVED_GRAPH_THUMBNAIL_VERSION,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
