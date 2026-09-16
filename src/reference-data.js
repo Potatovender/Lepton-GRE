@@ -1,4 +1,4 @@
-import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20260914-functions-reference";
+import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20260916-click-status";
 
 // Documentation is checked against the callable registry during every build.
 // Each example is also evaluated by the CPU and GPU regression suites.

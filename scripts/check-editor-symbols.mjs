@@ -11,7 +11,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260914-functions-reference";
+const cacheVersion = "20260916-click-status";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -1504,11 +1504,20 @@ expression outside = y`);
   assert(nested.join(",") === "first,outside", nested.join(","));
 });
 
-check("status indicators expose diagnostic reasons as hover text", () => {
+check("status indicators expose current diagnostic reasons through accessible buttons", () => {
   sandbox.__debugSetScene(sandbox.importScene("expression eq = x"));
   const html = sandbox.expressionRow("warning", "Equation may be slow", "", "functions", 0, { typeLabel: "value · expression" });
   assert(html.includes('title="Equation may be slow"'), html);
   assert(html.includes('aria-label="Equation may be slow"'), html);
+  assert(html.includes('data-status-message="Equation may be slow"'), html);
+  assert(html.includes('aria-expanded="false"'), html);
+  assert(sandbox.statusIndicator("valid", "Expression is valid").includes('data-status-message="status: valid"'));
+  const light = createMockElement("button");
+  sandbox.updateStatusIndicator(light, { status: "invalid", message: "Expression ends with an operator" });
+  assert(light.dataset.statusMessage === "Expression ends with an operator");
+  assert(light["aria-label"] === light.dataset.statusMessage);
+  sandbox.updateStatusIndicator(light, { status: "valid", message: "Expression is valid" });
+  assert(light.dataset.statusMessage === "status: valid");
 });
 
 check("piecewise expressions support boolean and boundary conditions", () => {

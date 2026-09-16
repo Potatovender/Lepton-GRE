@@ -121,6 +121,14 @@ The CPU renderer is a compatibility fallback and intentionally samples at the co
 
 `validateScene` returns per-collection diagnostics and a scene summary. Red prevents affected output, yellow reports a recoverable concern, and blue reports potentially expensive recursion. A broken layer should not suppress unrelated valid layers.
 
+Rows, colour channels, and grid settings share `statusIndicator` buttons. Clicking
+or pressing Enter/Space pins the current diagnostic in the viewport-clamped help
+layer; a second activation, Escape, or outside click dismisses it. Scrolling
+repositions an open diagnostic without dismissing it during focus scrolling.
+Hover remains available. `updateStatusIndicator` synchronizes the message and
+accessible label with live validation, including individual colour channels.
+Status clicks must not start the surrounding row grip's drag operation.
+
 Exact names reused across distinct data classes receive a yellow convention
 warning. Duplicate names in one compiler namespace remain red because resolving
 such a reference would be ambiguous.

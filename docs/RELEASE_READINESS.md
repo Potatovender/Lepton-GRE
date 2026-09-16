@@ -1,6 +1,7 @@
 # Release Readiness
 
-Checked on 2026-09-14 for `20260914-functions-reference`. This supersedes the
+Updated on 2026-09-16 for `20260916-click-status`, following the 2026-09-14
+baseline audit. This supersedes the
 initial desktop-only audit. It is a bounded validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -17,6 +18,13 @@ same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
 
 ## Corrections
+
+- All row, colour-channel, and grid-settings flags open their current diagnostic
+  immediately on click or Enter/Space. Messages remain visible until dismissed,
+  fit the viewport, and update with validation. Clicks do not reorder data or
+  start the surrounding drag grip. Dedicated browser regression checks cover
+  red/yellow/blue/green flags, live channel edits, hover, keyboard dismissal,
+  dragging, and mobile positioning.
 
 - Added atan2, hypot, log2/log10, step, smoothstep, and mix/lerp throughout parsing,
   validation, CPU and GLSL evaluation, MathQuill input, and the keyboard. The

@@ -93,6 +93,7 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `scripts/site-files.mjs`, `scripts/stage-site.mjs` | Explicit public-file list and release metadata generation. |
 | `scripts/check-editor-symbols.mjs` | Executable grammar, parser, model, UI-contract, and GLSL regression suite. |
 | `scripts/check-editor-browser.mjs` | Actual typing, caret/selection scrolling, and repeated editor-mount checks against the staged release. |
+| `scripts/check-status-browser.mjs` | Click, keyboard, live-update, drag-handle, and mobile checks for diagnostic flags. |
 | `scripts/check-collections-browser.mjs` | Collection CPU/GPU cases, real sum/product typing, list editing and round trips. |
 | `scripts/check-reference-browser.mjs` | Documented GPU examples, new-function typing, keyboard scrolling, reference search, public naming and links. |
 | `tests/` | Focused Vitest tests for the standalone expression-syntax module. |

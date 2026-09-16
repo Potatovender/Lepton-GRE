@@ -1,4 +1,4 @@
-const APP_VERSION = "20260914-functions-reference";
+const APP_VERSION = "20260916-click-status";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

@@ -568,6 +568,25 @@ select {
   box-shadow: 0 0 0 3px #edf0f4;
 }
 
+button.entry-status {
+  position: relative;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+button.entry-status::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+
+button.entry-status:focus-visible {
+  outline: 2px solid #273244;
+  outline-offset: 5px;
+}
+
 .entry-row-grip {
   width: 28px;
   min-height: 54px;
@@ -1156,6 +1175,8 @@ select {
   position: fixed;
   z-index: 1000;
   max-width: min(320px, calc(100vw - 20px));
+  max-height: calc(100dvh - 20px);
+  overflow-y: auto;
   padding: 8px 10px;
   border: 1px solid #cfd5df;
   border-radius: 6px;
@@ -1174,6 +1195,10 @@ select {
 
 .help-tooltip-layer.is-visible {
   opacity: 1;
+}
+
+.help-tooltip-layer.is-pinned {
+  pointer-events: auto;
 }
 
 .loading-note {

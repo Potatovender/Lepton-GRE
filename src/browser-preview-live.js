@@ -1,8 +1,8 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260914-functions-reference";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260914-functions-reference";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260914-functions-reference";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260914-functions-reference";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260914-functions-reference";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260916-click-status";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260916-click-status";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260916-click-status";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260916-click-status";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260916-click-status";
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -49,7 +49,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260914-functions-reference";
+const APP_VERSION = "20260916-click-status";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -302,6 +302,7 @@ let keyboardTab = "pad";
 let activeKeyboardTarget = null;
 let helpTooltipTimer = null;
 let activeHelpTarget = null;
+let pinnedHelpTarget = null;
 let pointerSelectionField = null;
 let lastPointerClientX = null;
 let boundaryPulseUntil = 0;
@@ -1423,11 +1424,10 @@ function drawListCount(draw) {
 }
 
 function colorChannelRow(index, property, label, value, diagnostic = { status: "valid", message: `${label} is valid` }) {
-  const statusLabel = diagnostic.status === "valid" ? `status: valid` : diagnostic.message;
   return `<label class="channel-row" data-color-channel="${index}.${property}">
     <span class="channel-label">${label}</span>
     ${mathEditor(`colors.${index}.${property}`, value, label, true, `${property} expression`)}
-    <button type="button" class="channel-status entry-status ${diagnostic.status}" data-status-message="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></button>
+    ${statusIndicator(diagnostic.status, diagnostic.message, "channel-status")}
   </label>`;
 }
 
@@ -1456,7 +1456,7 @@ function renderSettingsPanel(diagnostics) {
     <div class="settings-grid">
       <section class="settings-section">
         <h3 class="settings-section-title">
-          <span class="entry-status ${gridStatus.status}" title="${escapeHtml(gridStatus.message)}" aria-label="${escapeHtml(gridStatus.message)}"></span>
+          ${statusIndicator(gridStatus.status, gridStatus.message)}
           Grid rendering
         </h3>
         ${settingsMathField("xMin", "x minimum", "settingXMin")}
@@ -1925,6 +1925,11 @@ function mathEditor(field, value, label, small = false, placeholder = "") {
   `;
 }
 
+function statusIndicator(status, message, className = "") {
+  const label = status === "valid" ? "status: valid" : message || `status: ${status}`;
+  return `<button type="button" class="entry-status ${status} ${className}" data-status-message="${escapeHtml(label)}" title="" aria-label="${escapeHtml(label)}" aria-expanded="false" aria-controls="lepton-help-tooltip"></button>`;
+}
+
 function expressionRow(status, message, content, kind = null, index = null, options = {}) {
   const entryAttrs = kind ? `data-entry-kind="${kind}" data-entry-index="${index}"` : "";
   const statusLabel = status === "valid" ? "status: valid" : message || `status: ${status}`;
@@ -1941,10 +1946,10 @@ function expressionRow(status, message, content, kind = null, index = null, opti
       ${kind ? `
         <div class="entry-row-grip" draggable="true" data-entry-drag-handle="${kind}.${index}" title="Drag to reorder" aria-label="Drag to reorder">
           <span class="entry-grip-dot"></span>
-          <span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>
+          ${statusIndicator(status, message)}
           <span class="entry-grip-dot"></span>
         </div>
-      ` : `<span class="entry-status ${status}" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}"></span>`}
+      ` : statusIndicator(status, message)}
       <div class="entry-content">
         ${typeLabel || headingId ? `<div class="entry-heading">${options.headingActionHtml ?? ""}${typeLabel}${headingId}${options.headingSuffixHtml ?? ""}</div>` : ""}
         ${content}${inlineComment}
@@ -2187,18 +2192,6 @@ function bindEvents() {
     if (event.target?.closest?.("[data-field]")) activateKeyboardTarget(event.target);
   };
   bindSavedGraphThumbnailRecovery();
-  root.querySelectorAll("[data-status-message]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const wasActive = activeHelpTarget === button;
-      hideHelpTooltip();
-      if (wasActive) return;
-      button.dataset.help = button.dataset.statusMessage;
-      activeHelpTarget = button;
-      showHelpTooltip(button);
-    });
-  });
 
   root.querySelector('[data-action="open-save-dialog"]')?.addEventListener("click", () => {
     setGraphActionFeedback("open-save-dialog");
@@ -2945,7 +2938,9 @@ function bindEvents() {
   });
 
   root.querySelectorAll("[data-entry-drag-handle]").forEach((handle) => {
-    handle.addEventListener("pointerdown", (event) => startEntryPointerDrag(handle, event));
+    handle.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest("[data-status-message]")) startEntryPointerDrag(handle, event);
+    });
     handle.addEventListener("dragstart", (event) => {
       if (!canReorderDataEntries()) {
         event.preventDefault();
@@ -3139,6 +3134,22 @@ function bindHelpTooltips() {
     eventTarget.addEventListener("mouseleave", () => hideHelpTooltip(target));
     eventTarget.addEventListener("focusout", () => hideHelpTooltip(target));
   });
+  root.querySelectorAll("[data-status-message]").forEach((button) => {
+    button.addEventListener("mouseenter", () => scheduleHelpTooltip(button));
+    button.addEventListener("focusin", () => scheduleHelpTooltip(button));
+    button.addEventListener("mouseleave", () => hideHelpTooltip(button));
+    button.addEventListener("focusout", () => hideHelpTooltip(button));
+    button.addEventListener("dragstart", (event) => event.preventDefault());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const wasPinned = pinnedHelpTarget === button;
+      hideHelpTooltip();
+      if (wasPinned) return;
+      activeHelpTarget = pinnedHelpTarget = button;
+      showHelpTooltip(button);
+    });
+  });
 }
 
 function confirmTextRefresh() {
@@ -3146,6 +3157,8 @@ function confirmTextRefresh() {
 }
 
 function scheduleHelpTooltip(target) {
+  if (pinnedHelpTarget) return;
+  if (activeHelpTarget !== target) hideHelpTooltip();
   clearHelpTooltipTimer();
   activeHelpTarget = target;
   helpTooltipTimer = setTimeout(() => showHelpTooltip(target), 140);
@@ -3161,6 +3174,8 @@ function helpTooltipElement() {
   let tooltip = document.querySelector(".help-tooltip-layer");
   if (tooltip || !document.body) return tooltip;
   tooltip = document.createElement("div");
+  tooltip.id = "lepton-help-tooltip";
+  tooltip.setAttribute("role", "tooltip");
   tooltip.className = "help-tooltip-layer";
   tooltip.hidden = true;
   document.body.appendChild(tooltip);
@@ -3169,13 +3184,18 @@ function helpTooltipElement() {
 
 function showHelpTooltip(target) {
   if (activeHelpTarget !== target) return;
-  const text = target.dataset.help ?? "";
+  const text = target.dataset.statusMessage ?? target.dataset.help ?? "";
   if (!text.trim()) return;
   const tooltip = helpTooltipElement();
   if (!tooltip) return;
   tooltip.textContent = text;
   tooltip.hidden = false;
   tooltip.classList.add("is-visible");
+  tooltip.classList.toggle("is-pinned", pinnedHelpTarget === target);
+  if (target.hasAttribute("data-status-message")) {
+    target.setAttribute("aria-expanded", "true");
+    target.setAttribute("aria-describedby", tooltip.id);
+  }
   tooltip.style.left = "0px";
   tooltip.style.top = "0px";
 
@@ -3194,12 +3214,18 @@ function showHelpTooltip(target) {
 }
 
 function hideHelpTooltip(target = null) {
+  if (target && pinnedHelpTarget) return;
   if (target && activeHelpTarget !== target) return;
   clearHelpTooltipTimer();
+  if (activeHelpTarget?.hasAttribute("data-status-message")) {
+    activeHelpTarget.setAttribute("aria-expanded", "false");
+    activeHelpTarget.removeAttribute("aria-describedby");
+  }
   activeHelpTarget = null;
+  pinnedHelpTarget = null;
   const tooltip = document.querySelector(".help-tooltip-layer");
   if (!tooltip) return;
-  tooltip.classList.remove("is-visible");
+  tooltip.classList.remove("is-visible", "is-pinned");
   tooltip.hidden = true;
 }
 
@@ -6465,17 +6491,20 @@ function assertCompleteExpression(source) {
   if (parenDepth || braceDepth) throw new Error("Expression has unmatched opening bracket");
 }
 
+function updateStatusIndicator(light, diagnostic) {
+  for (const state of ["valid", "invalid", "info", "warning"]) light.classList.toggle(state, diagnostic.status === state);
+  const label = diagnostic.status === "valid" ? "status: valid" : diagnostic.message || `status: ${diagnostic.status}`;
+  light.dataset.statusMessage = label;
+  light.setAttribute("aria-label", label);
+  if (activeHelpTarget === light && document.querySelector(".help-tooltip-layer")?.hidden === false) showHelpTooltip(light);
+}
+
 function updateStatusLights(diagnostics) {
   if (activeTab === "settings") {
     const gridStatus = diagnostics.settings?.[0];
     const status = root.querySelector(".settings-section-title .entry-status");
     if (status && gridStatus) {
-      status.classList.toggle("valid", gridStatus.status === "valid");
-      status.classList.toggle("invalid", gridStatus.status === "invalid");
-      status.classList.toggle("info", gridStatus.status === "info");
-      status.classList.toggle("warning", gridStatus.status === "warning");
-      status.setAttribute("title", gridStatus.message);
-      status.setAttribute("aria-label", gridStatus.message);
+      updateStatusIndicator(status, gridStatus);
     }
   }
   root.querySelectorAll(".expression-row[data-entry-kind][data-entry-index]").forEach((row) => {
@@ -6484,12 +6513,7 @@ function updateStatusLights(diagnostics) {
     const index = Number(row.dataset.entryIndex);
     const item = diagnostics[kind]?.[index];
     if (!status || !item) return;
-    status.classList.toggle("valid", item.status === "valid");
-    status.classList.toggle("invalid", item.status === "invalid");
-    status.classList.toggle("info", item.status === "info");
-    status.classList.toggle("warning", item.status === "warning");
-    status.setAttribute("title", item.message);
-    status.setAttribute("aria-label", item.message);
+    updateStatusIndicator(status, item);
     row.setAttribute("title", item.message);
     const typeIcon = row.querySelector(".entry-type-static");
     if (typeIcon) {
@@ -6500,10 +6524,7 @@ function updateStatusLights(diagnostics) {
       for (const [channel, channelDiagnostic] of Object.entries(item.channels)) {
         const light = row.querySelector(`[data-color-channel="${index}.${channel}"] .channel-status`);
         if (!light) continue;
-        for (const state of ["valid", "invalid", "info", "warning"]) light.classList.toggle(state, channelDiagnostic.status === state);
-        const label = channelDiagnostic.status === "valid" ? "status: valid" : channelDiagnostic.message;
-        light.setAttribute("title", label);
-        light.setAttribute("aria-label", label);
+        updateStatusIndicator(light, channelDiagnostic);
       }
     }
   });
@@ -9827,6 +9848,7 @@ window.visualViewport?.addEventListener("scroll", syncMobileViewport);
 document.addEventListener("focusin", () => requestAnimationFrame(keepMobileEditorVisible));
 syncMobileViewport();
 window.addEventListener("resize", () => {
+  hideHelpTooltip();
   syncMobileViewport();
   reflowMathLayout(root);
   requestAnimationFrame(() => reflowMathLayout(root));
@@ -9838,6 +9860,17 @@ window.addEventListener("beforeunload", (event) => {
   event.returnValue = "";
 });
 document.addEventListener("keydown", handleGlobalHistoryKeydown);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hideHelpTooltip();
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!activeHelpTarget?.contains(event.target) && !event.target.closest?.(".help-tooltip-layer")) hideHelpTooltip();
+}, true);
+document.addEventListener("scroll", (event) => {
+  if (event.target.closest?.(".help-tooltip-layer")) return;
+  if (pinnedHelpTarget) showHelpTooltip(pinnedHelpTarget);
+  else hideHelpTooltip();
+}, true);
 document.addEventListener("selectionchange", () => requestAnimationFrame(handleDocumentSelectionScroll));
 document.addEventListener("pointermove", handleDocumentPointerScroll);
 document.addEventListener("pointerup", stopSelectionPointerScroll);
