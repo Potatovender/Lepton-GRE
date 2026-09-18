@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { SITE_FILES } from "./site-files.mjs";
 
 const requiredFiles = [
@@ -84,6 +85,13 @@ await run(process.execPath, ["--check", "src/landing.js"]);
 await run(process.execPath, ["--check", "src/reference.js"]);
 await run(process.execPath, ["--check", "src/reference-data.js"]);
 await run(process.execPath, ["--check", "packages/renderer/src/index.js"]);
+for (const file of SITE_FILES.filter((name) => /^src\/(compiler|animation|video)\//.test(name))) await run(process.execPath, ["--check", file]);
+await run(process.execPath, ["scripts/generate-worker-compiler.mjs"]);
+const videoVendor = JSON.parse(await readFile("src/libs/mediabunny/vendor.json", "utf8"));
+for (const [file, hash] of [[videoVendor.localFile, videoVendor.sha256], ["LICENSE", videoVendor.licenseSha256]]) {
+  const actual = createHash("sha256").update(await readFile(`src/libs/mediabunny/${file}`)).digest("hex");
+  if (actual !== hash) throw new Error(`Vendored Mediabunny ${file} does not match its pinned checksum`);
+}
 await run(process.execPath, ["scripts/download-mathquill.mjs", "--check"]);
 await run(process.execPath, ["scripts/check-editor-symbols.mjs"]);
 await run(process.execPath, ["scripts/migrate-samples.mjs"]);

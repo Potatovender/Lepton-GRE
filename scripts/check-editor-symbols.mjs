@@ -6,12 +6,13 @@ import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUI
 import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "../src/math/colour.js";
 import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "../src/math/collections.js";
 import { FUNCTION_REFERENCE, validateFunctionReference } from "../src/reference-data.js";
+import { createAstCache } from "../src/math/ast-cache.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260916-click-status";
+const cacheVersion = "20260917-responsive-video";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -56,6 +57,7 @@ function createMockElement(tagName) {
 }
 const sandbox = {
   console,
+  createAstCache,
   structuredClone: globalThis.structuredClone,
   localStorage: {
     getItem: (key) => storage.get(key) ?? null,
@@ -91,6 +93,8 @@ const sandbox = {
   BUILTIN_NAMES,
   colourChannelKeys, hsvToRgb, HSV_GLSL, buildCollectionPlan, emitCollectionPlan, mapScopedNames
 };
+
+export { sandbox };
 
 vm.createContext(sandbox);
 vm.runInContext(

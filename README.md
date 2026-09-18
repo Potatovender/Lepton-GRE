@@ -26,6 +26,8 @@ Lepton makes images, animations, and graphs from equations in the browser. A sce
 - Circular/hyperbolic trig, roots, logarithms, floor modulo, distance, interpolation,
   signed-boundary operations, and seeded random. The reference gives exact semantics and examples.
 - Full-canvas WebGL rendering, coordinate-grid controls, pan/zoom, local saves, PNG export, and sample scenes.
+- Every-edit background graph updates with a persistent preview and bounded compiler/program caches.
+- Local MP4/WebM video export for time-variable graphs, with starting values, duration, resolution, quality, measured estimates, and cancellation.
 - Live diagnostics for syntax, naming, recursion size, dependencies, channels, settings, and draw components.
 - Phone layout with the graph above the editor, adapting to the visible viewport while typing.
 - A separately packaged, dependency-free [GPU renderer](packages/renderer/README.md) with TypeScript declarations.
@@ -50,7 +52,8 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The dependency-free production check can also run without installing packages:
+After installing development dependencies, the production check can also run
+directly without the npm command:
 
 ```sh
 node scripts/build.mjs
@@ -80,23 +83,29 @@ Only the first argument to `draw` is required. Missing colour, boundary, and tra
 | `reference.html`, `src/reference.css`, `src/reference.js` | Responsive language guide and searchable function reference. |
 | `src/reference-data.js` | Every built-in's signature, purpose, and executable example; checked against the registry. The build embeds the catalogue in HTML for indexing and no-JavaScript reading. |
 | `src/browser-preview-live.js` | Production state, UI, text import/export, diagnostics, expression compilation, animation, and WebGL rendering. |
+| `src/compiler/` | Isolated scene runtime, semantic cache keys, background snapshot rendering and latest-edit scheduling. `scene-runtime.js` is generated from the existing compiler, not a second hand-maintained parser. |
+| `scripts/generate-worker-compiler.mjs` | Generates the worker compiler from TypeScript symbol dependencies. After compiler edits run with `--write`; builds reject stale generated code. |
+| `src/animation/` | Shared deterministic clocks for preview and export, with bouncing, looping, signed speeds and fixed-step dependent rates. |
+| `src/video/` | Export dialog, worker orchestration, WebCodecs encoding, bounded local output and estimates. See its README for the reusable API. |
 | `packages/renderer/` | Reusable WebGL driver, typed API, isolated Node tests, and packaging instructions. No dependency on the grapher UI. |
 | `src/math/expression-syntax.js` | Shared implicit-multiplication and power-precedence transformations. |
 | `src/math/builtins.js` | Shared built-in names, arity, display aliases, LaTeX commands, and MathQuill operator suggestions. |
 | `src/math/colour.js` | Colour channel definitions and matching CPU/GLSL HSV conversion. |
 | `src/math/collections.js` | Typed collection plans, scoped bindings, broadcasting, reductions, and lazy GLSL element evaluation. |
+| `src/math/ast-cache.js` | Bounded read-only syntax cache, separate from scene-dependent evaluation. |
 | `src/landing.js` | Landing-page sample source and launch URL generation. |
 | `src/styles.css` | Landing and grapher styles. |
 | `src/libs/mathquill/` | Vendored equation editor assets. |
+| `src/libs/mediabunny/` | Pinned local MP4/WebM muxer bundle, license and integrity metadata. |
 | `src/assets/` | Logo, favicon, hero, and sample images. |
-| `scripts/build.mjs` | Dependency-free verification followed by staging the public build in `dist/`. |
+| `scripts/build.mjs` | Syntax, compiler-generation and regression checks followed by staging the public build in `dist/`. |
 | `scripts/site-files.mjs`, `scripts/stage-site.mjs` | Explicit public-file list and release metadata generation. |
 | `scripts/check-editor-symbols.mjs` | Executable grammar, parser, model, UI-contract, and GLSL regression suite. |
 | `scripts/check-editor-browser.mjs` | Actual typing, caret/selection scrolling, and repeated editor-mount checks against the staged release. |
 | `scripts/check-status-browser.mjs` | Click, keyboard, live-update, drag-handle, and mobile checks for diagnostic flags. |
 | `scripts/check-collections-browser.mjs` | Collection CPU/GPU cases, real sum/product typing, list editing and round trips. |
 | `scripts/check-reference-browser.mjs` | Documented GPU examples, new-function typing, keyboard scrolling, reference search, public naming and links. |
-| `tests/` | Focused Vitest tests for the standalone expression-syntax module. |
+| `tests/` | Focused syntax, animation-clock, background-preview and video-export regressions. |
 | `sample code/` | The single source of truth for copyable landing-page samples. `npm run migrate:samples` upgrades recognized legacy forms after grammar changes. |
 | `docs/` | Architecture, language, development, and design references. |
 | `THIRD_PARTY_NOTICES.md` | Library attribution, exact MathQuill source/version, and license references. |
@@ -109,6 +118,17 @@ See the [release-readiness audit](docs/RELEASE_READINESS.md) for current validat
 tested workflows and remaining device-specific checks.
 
 Lepton requires a modern browser with ES modules, Canvas, and WebGL. WebGL is the primary renderer; a CPU renderer remains as a compatibility fallback. PNG export uses the same GLSL scene and configured viewport as the live graph.
+
+Responsive background rendering uses module workers and OffscreenCanvas. Older
+browsers fall back to the synchronous renderer and cannot offer the same typing
+isolation. GPU resources remain shared with the page even with workers.
+
+Video export requires WebCodecs on HTTPS or localhost. The export panel probes
+the requested codec and dimensions, preferring MP4 and offering WebM when available.
+Videos are silent and rendered at exact timeline positions, independently of live
+preview FPS. Downloads have a conservative 64 MB memory budget; reduce duration,
+resolution or quality when prompted. Points and labels are included; the grid is
+optional. Encoding support varies by browser, device and codec.
 
 Collection/reduction rendering requires WebGL 2. Very large lists or nested sums can
 still exceed GPU resources; blue complexity warnings are not an execution budget.

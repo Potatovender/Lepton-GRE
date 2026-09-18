@@ -36,6 +36,7 @@ folder Problems = {
   const sceneBefore = await page.evaluate(() => JSON.stringify(window.__leptonDebug.scene()));
   const tooltip = page.locator("#lepton-help-tooltip");
   const flags = page.locator('.expression-row > .entry-row-grip > [data-status-message]');
+  await flags.and(page.locator('.invalid')).first().waitFor();
   assert.equal(await flags.count(), 13, "Missing row flags (closed folder contents should stay hidden)");
   for (const state of ["invalid", "warning", "info", "valid"]) {
     assert(await flags.and(page.locator(`.${state}`)).count() > 0, `No ${state} fixture`);
@@ -102,6 +103,7 @@ folder Problems = {
   await page.goto(`${base}app.html?scene=${encodeURIComponent("set aspect_ratio = nope\nexpression eq = 1")}`);
   await page.locator('[data-action="toggle-settings-panel"]').first().click();
   const settingsFlag = page.locator('.settings-section-title [data-status-message]');
+  await settingsFlag.and(page.locator('.invalid')).waitFor();
   await settingsFlag.click();
   assert(await tooltip.isVisible(), "Settings flag did not open");
   assert.match(await tooltip.textContent(), /ratio/i);

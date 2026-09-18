@@ -1,4 +1,4 @@
-import { renderFunctionReference } from "./reference-data.js?v=20260916-click-status";
+import { renderFunctionReference } from "./reference-data.js?v=20260917-responsive-video";
 
 const catalogue = document.querySelector("[data-function-catalogue]");
 // The release build includes the complete catalogue in HTML for offline reading

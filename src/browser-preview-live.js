@@ -1,8 +1,14 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260916-click-status";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260916-click-status";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260916-click-status";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260916-click-status";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260916-click-status";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260917-responsive-video";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260917-responsive-video";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260917-responsive-video";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260917-responsive-video";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260917-responsive-video";
+import { PreviewClient } from "./compiler/preview-client.js?v=20260917-responsive-video";
+import { openVideoPanel } from "./video/panel.js?v=20260917-responsive-video";
+import { createAstCache } from "./math/ast-cache.js?v=20260917-responsive-video";
+import { exportPhoto } from "./compiler/photo-client.js?v=20260917-responsive-video";
+
+const cachedSyntax = createAstCache();
 
 const DEFAULT_SCENE = {
   functions: [],
@@ -49,7 +55,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260916-click-status";
+const APP_VERSION = "20260917-responsive-video";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -278,7 +284,7 @@ const TUTORIAL_STEPS = [
     mode: "standard",
     tab: "draws",
     title: "Step 11: Save and export",
-    body: "The Graph menu creates, saves, loads, and exports graphs. Saved graphs stay in this browser with a compact preview. Lepton warns before discarding unsaved graph or text changes."
+    body: "The Graph menu creates, saves, and loads graphs in this browser. Export photo saves the settings bounds as a PNG. With a time variable, Export video opens timeline and picture settings: set each starting value, choose a duration, then estimate or export. Slow rendering changes export time, not the finished video's speed."
   }
 ];
 const listControls = {
@@ -330,6 +336,14 @@ let textApplyNotice = "";
 let newGraphConfirmOpen = false;
 let renderJobToken = 0;
 let renderPerformance = { state: "idle", compileMs: 0, sourceLength: 0, cost: "Not compiled" };
+const workerPreviewEnabled = typeof Worker === "function" && typeof OffscreenCanvas === "function" && typeof PreviewClient === "function";
+let previewClient = null;
+let verifiedSceneKey = "";
+let workerSliderValues = new Map();
+let viewportNeedsSettings = false;
+let workerSettingsViewport = null;
+let workerPointValues = new Map();
+let workerDrawCounts = [];
 
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
@@ -342,7 +356,7 @@ function renderApp() {
   const diagnostics = validateScene();
   const scrollKey = panelScrollKey();
   const previousCanvas = root.querySelector(".grid-canvas");
-  if (previousCanvas) disposeRenderer(previousCanvas, { loseContext: true });
+  if (previousCanvas && !workerPreviewEnabled) disposeRenderer(previousCanvas, { loseContext: true });
   disposeMountedMathFields();
   root.innerHTML = `
     <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px; --sidebar-min-width: ${SIDEBAR_MIN_WIDTH}px">
@@ -382,6 +396,7 @@ function renderApp() {
       ${renderNewGraphConfirmation()}
     </main>
   `;
+  if (previousCanvas && workerPreviewEnabled) root.querySelector(".grid-canvas").replaceWith(previousCanvas);
   if (root.dataset) root.dataset.panelKey = scrollKey;
 
   bindEvents();
@@ -407,7 +422,7 @@ function disposeMountedMathFields() {
 }
 
 function compileStatusText() {
-  if (renderPerformance.state === "loading") return `<span class="compile-spinner" aria-hidden="true"></span> Compiling graph...`;
+  if (renderPerformance.state === "loading") return `<span class="compile-spinner" aria-hidden="true"></span> Updating graph...`;
   if (renderPerformance.state === "error") return `Shader failed · ${escapeHtml(renderPerformance.cost)}`;
   if (renderPerformance.state === "ready") return `${Math.round(renderPerformance.compileMs)} ms compile · ${escapeHtml(renderPerformance.cost)}`;
   return "Waiting to compile";
@@ -424,12 +439,14 @@ function updateCompileStatus(next) {
   renderPerformance = { ...renderPerformance, ...next };
   const status = root.querySelector?.("[data-compile-status]");
   if (!status) return;
-  status.className = `compile-status ${renderPerformance.state}`;
-  status.innerHTML = compileStatusText();
+  const className = `compile-status ${renderPerformance.state}`, content = compileStatusText();
+  if (status.className !== className) status.className = className;
+  if (status.innerHTML !== content) status.innerHTML = content;
 }
 
 function scheduleSceneRender(diagnostics) {
   const token = ++renderJobToken;
+  if (workerPreviewEnabled) { renderScene(diagnostics); return; }
   updateCompileStatus({ state: "loading", compileMs: 0, sourceLength: 0, cost: "Estimating shader" });
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (token !== renderJobToken) return;
@@ -461,7 +478,8 @@ function renderGraphActionsMenu() {
         <button class="toolbar-button" data-action="new-graph" type="button" role="menuitem">New</button>
         <button class="toolbar-button ${hasUnsavedChanges ? "primary" : ""}" data-action="open-save-dialog" type="button" role="menuitem">Save</button>
         <button class="toolbar-button" data-action="open-library" type="button" role="menuitem">Load</button>
-        <button class="toolbar-button" data-action="export-graph" type="button" role="menuitem">${graphActionFeedback === "export-graph" ? "Exporting..." : "Export"}</button>
+        <button class="toolbar-button" data-action="export-graph" type="button" role="menuitem">${graphActionFeedback === "export-graph" ? "Exporting..." : "Export photo"}</button>
+        ${timeVariableEntries().length ? '<button class="toolbar-button" data-action="export-video" type="button" role="menuitem">Export video</button>' : ""}
       </div>
     </div>
   `;
@@ -967,7 +985,7 @@ function setGraphActionFeedback(action) {
     const active = button.dataset.action === action;
     button.classList.toggle("is-action-feedback", active);
     if (button.dataset.action === "export-graph") {
-      button.textContent = active ? "Exporting..." : "Export";
+      button.textContent = active ? "Exporting..." : "Export photo";
     }
   });
 }
@@ -1387,7 +1405,7 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
     `;
   }
   if (kind === "points") {
-    const linked = pointLinkedValue(entry);
+    const linked = workerPreviewEnabled ? workerPointValues.get(entry.id) ?? { value: NaN } : pointLinkedValue(entry);
     return `<div class="point-fields">
       <div class="point-toolbar"><button class="draw-visibility" data-toggle-point="${index}" aria-pressed="${entry.hidden ? "true" : "false"}">${entry.hidden ? "Show" : "Hide"}</button></div>
       <label><span>x</span>${mathEditor(`points.${index}.x`, entry.x, "Point x", true, "x")}</label>
@@ -1412,6 +1430,7 @@ function drawArgumentControls(drawIndex, draw) {
 }
 
 function drawListCount(draw) {
+  if (workerPreviewEnabled) return `<output class="draw-list-count">${escapeHtml(workerDrawCounts[scene.draws.indexOf(draw)] ?? "")}</output>`;
   const source = drawTargetText(draw), env = sceneFunctionEnv(true);
   if (!usesCollections(source, env)) return "";
   try {
@@ -1871,9 +1890,10 @@ function functionSignatureContent(entry, index) {
 }
 
 function sliderRowContent(entry, index) {
-  const min = evaluateScalarSetting(entry.sliderMin);
-  const max = evaluateScalarSetting(entry.sliderMax);
-  const value = evaluateScalarSetting(entry.expression);
+  const cached = workerPreviewEnabled ? workerSliderValues.get(entry.id) : null;
+  const min = workerPreviewEnabled ? cached?.min ?? Number(entry.sliderMin) : evaluateScalarSetting(entry.sliderMin);
+  const max = workerPreviewEnabled ? cached?.max ?? Number(entry.sliderMax) : evaluateScalarSetting(entry.sliderMax);
+  const value = workerPreviewEnabled ? cached?.value ?? Number(entry.expression) : evaluateScalarSetting(entry.expression);
   const rangeUsable = Number.isFinite(min) && Number.isFinite(max) && max > min;
   const clamped = rangeUsable && Number.isFinite(value) ? clampNumber(value, min, max) : min;
   const isPlaying = entry.time && playingTimeIds.has(entry.id);
@@ -2185,6 +2205,15 @@ function referenceMenuOptions(entries, selected, field) {
 }
 
 function bindEvents() {
+  root.querySelector('[data-action="export-video"]')?.addEventListener("click", async () => {
+    syncFields();
+    if (textDraftDirty) {
+      const choice = await chooseVideoDraft();
+      if (choice === "apply") applyTextDraft(false);
+      else if (choice !== "current") return;
+    }
+    openVideoPanel({ scene: structuredClone(scene), name: safeDownloadName(defaultSavedGraphName()) });
+  });
   bindSidebarResize();
   bindHelpTooltips();
   root.onfocusin = (event) => activateKeyboardTarget(event.target);
@@ -3656,7 +3685,8 @@ function updateField(field) {
   if (collection === "settings") {
     updateSettingValue(rawIndex, value);
     if (["xMin", "xMax", "yMin", "yMax", "ensureSquareGrid", "aspectRatio", "aspectRatioLeft", "aspectRatioRight", "drawOnlyInsideBoundary"].includes(rawIndex)) {
-      viewport = sceneViewport();
+      if (workerPreviewEnabled) viewportNeedsSettings = true;
+      else viewport = sceneViewport();
       if (isValidViewport(viewport)) saveViewport();
       triggerBoundaryOverlay();
     }
@@ -3884,7 +3914,11 @@ function setSliderExpression(index, value, syncField = false) {
   if (valueField) {
     valueField.dataset.value = latexSourceFromExpression(entry.expression, displayIdentifierNames(valueField.dataset.field));
     const mathField = valueField.mathquillInstance;
-    if (mathField) mathField.latex(valueField.dataset.value);
+    if (mathField && !valueField.contains(document.activeElement)) {
+      valueField.dataset.initializing = "true";
+      mathField.latex(valueField.dataset.value);
+      delete valueField.dataset.initializing;
+    }
   }
   syncSliderRangeControl(index, entry);
 }
@@ -3893,9 +3927,10 @@ function syncSliderRangeControl(index, rawEntry = scene.functions[index]) {
   const rangeField = root.querySelector(`[data-slider-value="${index}"]`);
   if (!rangeField) return;
   const entry = normalizeFunctionEntry(rawEntry);
-  const min = evaluateScalarSetting(entry.sliderMin);
-  const max = evaluateScalarSetting(entry.sliderMax);
-  const value = evaluateScalarSetting(entry.expression);
+  const cached = workerPreviewEnabled ? workerSliderValues.get(entry.id) : null;
+  const min = workerPreviewEnabled ? cached?.min ?? Number(entry.sliderMin) : evaluateScalarSetting(entry.sliderMin);
+  const max = workerPreviewEnabled ? cached?.max ?? Number(entry.sliderMax) : evaluateScalarSetting(entry.sliderMax);
+  const value = workerPreviewEnabled ? Number(entry.expression) : evaluateScalarSetting(entry.expression);
   const rangeUsable = Number.isFinite(min) && Number.isFinite(max) && max > min;
   rangeField.disabled = !rangeUsable;
   rangeField.min = String(rangeUsable ? min : 0);
@@ -3903,10 +3938,10 @@ function syncSliderRangeControl(index, rawEntry = scene.functions[index]) {
   rangeField.value = String(rangeUsable && Number.isFinite(value) ? clampNumber(value, min, max) : 0);
 }
 
-function refreshAfterSliderChange() {
+function refreshAfterSliderChange(transient = false) {
   const diagnostics = latestDiagnostics ?? validateScene();
   updateStatusLights(diagnostics);
-  renderScene(diagnostics);
+  renderScene(diagnostics, transient);
 }
 
 function timeVariableEntries() {
@@ -3996,9 +4031,9 @@ function stepTimeAnimation(timestamp) {
   const deltaSeconds = animationLastTimestamp ? Math.min(0.1, (timestamp - animationLastTimestamp) / 1000) : 0;
   animationLastTimestamp = timestamp;
   if (deltaSeconds > 0) {
-    advanceTimeVariables(deltaSeconds);
-    refreshAfterSliderChange();
-    recordAnimationFrame(timestamp);
+    if (!workerPreviewEnabled) advanceTimeVariables(deltaSeconds);
+    refreshAfterSliderChange(true);
+    if (!workerPreviewEnabled) recordAnimationFrame(timestamp);
   }
   animationFrameId = requestAnimationFrame(stepTimeAnimation);
 }
@@ -4579,7 +4614,87 @@ function deleteEntry(kind, index) {
   }
 }
 
-function renderScene(diagnostics = validateScene()) {
+function chooseVideoDraft() {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "video-export-dialog";
+    dialog.setAttribute("aria-label", "Unapplied text edits");
+    dialog.innerHTML = '<h2>Unapplied text edits</h2><p>Choose which graph to export. Exporting the current graph keeps your text draft unchanged.</p><footer><button data-choice="cancel">Cancel</button><button data-choice="current">Export current graph</button><button class="primary" data-choice="apply">Apply and export</button></footer>';
+    const finish = (choice) => { dialog.close(); dialog.remove(); resolve(choice); };
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); finish("cancel"); });
+    dialog.querySelectorAll("[data-choice]").forEach((button) => button.addEventListener("click", () => finish(button.dataset.choice)));
+    document.body.append(dialog); dialog.showModal();
+  });
+}
+
+function requestWorkerPreview(transient = false) {
+  const canvas = root.querySelector(".grid-canvas");
+  if (!canvas) return;
+  if (!previewClient) previewClient = new PreviewClient({
+    onStatus: (status) => { if (!status.transient) updateCompileStatus({ state: "loading" }); },
+    onDiagnostics: (result) => {
+      latestDiagnostics = result.diagnostics;
+      verifiedSceneKey = result.sceneKey;
+      updateStatusLights(result.diagnostics);
+    },
+    onFrame: (frame) => {
+      const target = root.querySelector(".grid-canvas");
+      if (!target) { frame.bitmap.close(); return; }
+      if (target.width !== frame.bitmap.width) target.width = frame.bitmap.width;
+      if (target.height !== frame.bitmap.height) target.height = frame.bitmap.height;
+      target.getContext("2d").drawImage(frame.bitmap, 0, 0);
+      frame.bitmap.close();
+      latestDiagnostics = frame.diagnostics;
+      verifiedSceneKey = frame.sceneKey;
+      workerSliderValues = new Map(frame.sliders.map((item) => [item.id, item]));
+      workerPointValues = new Map(frame.pointValues.map((item) => [item.id, item]));
+      workerDrawCounts = frame.drawCounts;
+      root.querySelectorAll('[data-entry-kind="draws"] .draw-list-count').forEach((output) => { output.textContent = workerDrawCounts[Number(output.closest("[data-entry-index]").dataset.entryIndex)] ?? ""; });
+      root.querySelectorAll('[data-entry-kind="points"] .point-linked-value').forEach((output) => {
+        const entry = scene.points[Number(output.closest("[data-entry-index]").dataset.entryIndex)];
+        output.textContent = entry?.linkedFunctionId ? `${entry.linkedFunctionId} = ${formatPointDisplayNumber(workerPointValues.get(entry.id)?.value)}` : "No linked value";
+      });
+      scene.functions.forEach((entry, index) => { if (entry.kind === "slider") syncSliderRangeControl(index, entry); });
+      workerSettingsViewport = frame.clip;
+      if (viewportNeedsSettings) {
+        viewport = isValidViewport(frame.clip) ? frame.clip : { xMin: -10, xMax: 10, yMin: -10, yMax: 10 };
+        viewportNeedsSettings = false;
+        saveViewport();
+      }
+      updateBoundaryOverlay(target, frame.viewport);
+      if (frame.clockState && playingTimeIds.size) {
+        for (const [id, value] of frame.clockState.values) {
+          if (!playingTimeIds.has(id)) continue;
+          const index = scene.functions.findIndex((entry) => entry.id === id);
+          if (index >= 0) setSliderExpression(index, value, displayMode === "standard");
+        }
+        for (const [id, direction] of frame.clockState.directions) timeVariableDirections.set(id, direction);
+      }
+      updateStatusLights(frame.diagnostics);
+      window.__leptonWorkerFrame = { revision: frame.revision, buildCount: frame.buildCount, viewport: frame.viewport,
+        drawMs: frame.drawMs, batchCount: frame.batchCount, maxBatchMs: frame.maxBatchMs };
+      window.__leptonRenderHit = (window.__leptonRenderHit ?? 0) + 1;
+      window.__leptonRuntimeError = null;
+      window.__leptonLastShaderCompileMs = frame.compileMs;
+      updateCompileStatus({ state: "ready", compileMs: frame.compileMs, sourceLength: frame.sourceLength, cost: shaderCostEstimate(frame.sourceLength) });
+      if (playingTimeIds.size) recordAnimationFrame(performance.now());
+    },
+    onError: (error) => {
+      if (error.diagnostics) { latestDiagnostics = error.diagnostics; updateStatusLights(error.diagnostics); }
+      window.__leptonRuntimeError = error.message;
+      updateCompileStatus({ state: "error", cost: `${error.message}. Showing the last completed graph.` });
+    }
+  });
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  previewClient.request({ scene: structuredClone(scene), sceneKey: JSON.stringify(scene), transient,
+    animation: { selected: [...playingTimeIds], directions: Object.fromEntries(timeVariableDirections) },
+    width: Math.max(1, Math.floor(rect.width * dpr)), height: Math.max(1, Math.floor(rect.height * dpr)),
+    overlayScale: dpr, baseViewport: viewportNeedsSettings ? undefined : { ...viewport } });
+}
+
+function renderScene(diagnostics = validateScene(), transient = false) {
+  if (workerPreviewEnabled) { requestWorkerPreview(transient); return; }
   try {
     window.__leptonRenderHit = (window.__leptonRenderHit ?? 0) + 1;
     const canvas = root.querySelector(".grid-canvas");
@@ -4835,7 +4950,7 @@ function timeUniformGlslMap() {
 
 function webGlShaderCacheKey() {
   const functions = dataEntries(scene.functions).map(normalizeFunctionEntry).map((entry) =>
-    entry.kind === "slider" && entry.time ? { ...entry, expression: "__time_uniform__" } : entry
+    entry.kind === "slider" && entry.time && String(entry.expression).trim() && Number.isFinite(Number(entry.expression)) ? { ...entry, expression: "__time_uniform__" } : entry
   );
   return JSON.stringify({
     forceGradient: Boolean(window.__leptonForceGradient),
@@ -4932,7 +5047,9 @@ function buildFragmentShaderBody() {
         const colourVector = `vec3(${channels.join(", ")})`;
         return {
           collection,
-          expr: collection ? null : expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, localMap),
+          expr: collection ? null : fn.kind === "slider" && fn.time
+            ? dynamicMap[fn.id]
+            : expressionToGlsl(fn.expression, env, null, [], scene.settings.angleMode, localMap),
           rgb: color.model === "hsv" ? `leptonHsvToRgb(${colourVector})` : `clamp(${colourVector} / 255.0, 0.0, 1.0)`,
           bound: expressionToGlsl(restriction.expression, boundaryEnv, null, [], scene.settings.angleMode, dynamicMap),
           transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode, dynamicMap),
@@ -5172,7 +5289,7 @@ function updateBoundaryOverlay(canvas = root.querySelector(".grid-canvas"), visi
 
   const rect = canvas.getBoundingClientRect();
   visibleViewport ??= displayViewportForSize(viewport, rect.width, rect.height);
-  let boundary = sceneViewport();
+  let boundary = workerPreviewEnabled ? workerSettingsViewport : sceneViewport();
   if (!isValidViewport(boundary)) {
     boundary = {
       xMin: Number(DEFAULT_SCENE.settings.xMin),
@@ -5905,6 +6022,16 @@ function rewriteBareIdentifiers(expression, replace, extraReserved, overrideName
 }
 
 function validateScene() {
+  if (workerPreviewEnabled) {
+    if (latestDiagnostics && verifiedSceneKey === JSON.stringify(scene)) return latestDiagnostics;
+    const pending = { status: "pending", message: "Checking this graph..." };
+    return { ...Object.fromEntries(DATA_ENTRY_KINDS.map((kind) => [kind, (scene[kind] ?? []).map(() => pending)])),
+      settings: [pending], hasErrors: false, summary: "Checking graph..." };
+  }
+  return validateSceneSync();
+}
+
+function validateSceneSync() {
   const env = sceneFunctionEnv();
   const drawEnv = sceneFunctionEnv(true);
   const boundaryEnv = boundaryExpressionEnv();
@@ -6216,14 +6343,14 @@ function viewportDiagnostic() {
 }
 
 function isValidViewport(candidate) {
-  return (
+  return Boolean(candidate && (
     Number.isFinite(candidate.xMin) &&
     Number.isFinite(candidate.xMax) &&
     Number.isFinite(candidate.yMin) &&
     Number.isFinite(candidate.yMax) &&
     candidate.xMin < candidate.xMax &&
     candidate.yMin < candidate.yMax
-  );
+  ));
 }
 
 function duplicateEntryIds(entries) {
@@ -6492,7 +6619,7 @@ function assertCompleteExpression(source) {
 }
 
 function updateStatusIndicator(light, diagnostic) {
-  for (const state of ["valid", "invalid", "info", "warning"]) light.classList.toggle(state, diagnostic.status === state);
+  for (const state of ["valid", "invalid", "info", "warning", "pending"]) light.classList.toggle(state, diagnostic.status === state);
   const label = diagnostic.status === "valid" ? "status: valid" : diagnostic.message || `status: ${diagnostic.status}`;
   light.dataset.statusMessage = label;
   light.setAttribute("aria-label", label);
@@ -6500,7 +6627,7 @@ function updateStatusIndicator(light, diagnostic) {
 }
 
 function updateStatusLights(diagnostics) {
-  if (activeTab === "settings") {
+  if (settingsPanelOpen || activeTab === "settings") {
     const gridStatus = diagnostics.settings?.[0];
     const status = root.querySelector(".settings-section-title .entry-status");
     if (status && gridStatus) {
@@ -6526,15 +6653,18 @@ function updateStatusLights(diagnostics) {
         if (!light) continue;
         updateStatusIndicator(light, channelDiagnostic);
       }
+    } else if (kind === "colors" && item.status === "pending") {
+      row.querySelectorAll(".channel-status").forEach((light) => updateStatusIndicator(light, item));
     }
   });
 
-  const overlay = root.querySelector(".render-overlay");
-  if (overlay) {
-    overlay.textContent = diagnostics.hasErrors
-      ? `Some layers skipped: ${diagnostics.summary}`
-      : `${scene.settings.angleMode} · depth ${scene.settings.maxRecursion} · ${diagnostics.summary}`;
+  let overlay = root.querySelector(".render-overlay");
+  if (diagnostics.hasErrors && !overlay && root.querySelector(".renderer-pane")) {
+    overlay = document.createElement("div");
+    overlay.className = "render-overlay render-overlay-error";
+    root.querySelector(".renderer-pane").append(overlay);
   }
+  if (overlay) { overlay.hidden = !diagnostics.hasErrors; overlay.textContent = diagnostics.hasErrors ? `Some layers skipped: ${diagnostics.summary}` : ""; }
 }
 
 function combineDiagnostics(items) {
@@ -7652,6 +7782,10 @@ function createParser(tokens, isLatexMode) {
 }
 
 function parseLatex(source) {
+  return cachedSyntax(`latex:${String(source ?? "")}`, () => parseLatexUncached(source));
+}
+
+function parseLatexUncached(source) {
   // MathQuill adds \left/\right around scalable grouping delimiters. They are
   // presentation-only; retaining them makes a multi-argument operatorname call
   // look like one grouped argument to the AST parser.
@@ -7672,8 +7806,7 @@ function parseLatex(source) {
 }
 
 function parseLeptonText(source) {
-  const tokens = tokenizeLeptonText(source);
-  return createParser(tokens, false);
+  return cachedSyntax(`text:${String(source ?? "")}`, () => createParser(tokenizeLeptonText(source), false));
 }
 
 function powerBaseNeedsGrouping(base) {
@@ -9438,6 +9571,10 @@ function savedGraphForId(id) {
 
 function exportCurrentGraphImage() {
   syncFields();
+  if (workerPreviewEnabled) {
+    exportPhoto(structuredClone(scene), safeDownloadName(defaultSavedGraphName())).catch((error) => updateCompileStatus({ state: "error", cost: error.message }));
+    return;
+  }
   const diagnostics = validateScene();
   const exportViewport = exportViewportForImage();
   const size = exportCanvasSizeForViewport(exportViewport);
@@ -9715,7 +9852,7 @@ window.__leptonDebug = {
       viewport = previousViewport;
       throw new Error("The generated scene has an invalid viewport.");
     }
-    const diagnostics = validateScene();
+    const diagnostics = validateSceneSync();
     if (diagnostics.hasErrors) {
       scene = previousScene;
       viewport = previousViewport;
@@ -9767,7 +9904,7 @@ function renderSceneToPixels(source, width, height) {
     scene = importScene(sourceText);
     viewport = sceneViewport();
     if (!isValidViewport(viewport)) throw new Error("The generated scene has an invalid viewport.");
-    const diagnostics = validateScene();
+    const diagnostics = validateSceneSync();
     if (diagnostics.hasErrors) throw new Error(`The generated scene is invalid: ${diagnostics.summary}`);
     captureCanvas = reusablePixelCaptureCanvas ?? document.createElement("canvas");
     reusablePixelCaptureCanvas = captureCanvas;

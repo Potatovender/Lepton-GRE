@@ -1,0 +1,13 @@
+{
+  "name": "mediabunny",
+  "version": "1.58.0",
+  "license": "MPL-2.0",
+  "source": "https://github.com/Vanilagy/mediabunny",
+  "package": "https://registry.npmjs.org/mediabunny/-/mediabunny-1.58.0.tgz",
+  "upstreamFile": "dist/bundles/mediabunny.mjs",
+  "localFile": "mediabunny.mjs",
+  "sha256": "a89679cffc81d4045545ac8979ca8c717f8ab77b42690ec6bbee015ffb5bb13b",
+  "licenseSha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+  "modified": false,
+  "notes": "Unmodified browser ES bundle. Imported locally by the video export worker; no runtime CDN or npm resolution is required."
+}

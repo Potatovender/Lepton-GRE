@@ -31,10 +31,10 @@ test("same shader updates uniforms without compiling or blocking frames", () => 
   assert.deepEqual(calls.uniforms.at(-1), ["u_time_0", 2]);
   assert.deepEqual([canvas.width, canvas.height], [100, 50]);
 });
-test("structural changes replace and dispose previous GPU resources", () => {
+test("structural changes cache previous programs until disposal", () => {
   const {canvas, options, calls} = fixture();
   renderFrame(canvas, options); renderFrame(canvas, {...options, shaderKey: "other"});
-  assert.equal(calls.programsDeleted, 1); assert.equal(calls.buffersDeleted, 1);
+  assert.equal(calls.programsDeleted, 0); assert.equal(calls.buffersDeleted, 0);
   disposeRenderer(canvas); assert.equal(calls.programsDeleted, 2); assert.equal(calls.buffersDeleted, 2);
 });
 test("readback may explicitly synchronize; normal drawing does not", () => {

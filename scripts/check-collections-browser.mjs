@@ -156,6 +156,7 @@ draw(values)`);
   await page.locator('[data-action="refresh-text"]').click();
   const savedSource = await page.locator('[data-scene-text]').inputValue();
   await page.locator('[data-display-mode="standard"]').click();
+  await page.waitForFunction(() => document.querySelector('.draw-list-count')?.textContent === '4 draw values');
   assert.equal(await page.locator('.draw-list-count').textContent(), '4 draw values');
   await page.locator('.graph-actions-trigger').hover();
   await page.locator('[data-action="open-save-dialog"]').click();

@@ -126,6 +126,7 @@ try {
   for (const sample of samples) {
     await page.goto(sample.url);
     await page.waitForFunction(() => window.__leptonDebug?.scene().draws.length > 0);
+    await page.locator('.compile-status.ready').waitFor({ timeout: 60_000 });
     const scene = await page.evaluate(() => window.__leptonDebug.scene());
     assert(scene.functions.length > 0, `${sample.id}: sample was blank`);
     const image = await page.evaluate(async () => {

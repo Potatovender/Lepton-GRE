@@ -14,15 +14,18 @@ URL / saved graph / text input
      canonical in-memory scene + dataOrder
         |             |              |
         v             v              v
- visual rows     exportScene     validateScene
+ visual rows     exportScene     latest-edit worker queue
         |                            |
         +---------- edits -----------+
                                      |
                                      v
-                           expressionToGlsl
+                      validateScene + expressionToGlsl
                                      |
                                      v
-                        cached WebGL program + uniforms
+                      cached worker WebGL program + uniforms
+                                     |
+                                     v
+                    completed bitmap to persistent UI canvas
 ```
 
 The canonical scene stores collections for values, colours, boundaries, transparency, draws, points, and folders. `dataOrder` owns root/nested ordering independently of the storage collections. Comments are entries or inline metadata so text and Standard views can round-trip without losing placement.
@@ -48,6 +51,62 @@ quick choices and the full More data list without changing the storage model.
 - **Styles:** `src/styles.css` owns all responsive layout and component states.
 
 Do not introduce another scene model or parser alongside the live runtime. A future modularization should move cohesive helpers out of the runtime while preserving one canonical call path and executable regression suite.
+
+### Worker Compiler Bridge
+
+The existing compiler remains the source of truth during this migration.
+`scripts/generate-worker-compiler.mjs` follows its TypeScript symbol graph and
+emits `src/compiler/scene-runtime.js`. Generation does not rewrite or remove the
+editor compiler. Builds compare the generated source byte-for-byte, and parity
+tests compare diagnostics, shaders, viewports and CPU values on the sample corpus.
+Edit the original helpers, regenerate with `--write`, and run parity checks;
+never independently edit the generated module. This bridge can be removed when a
+separately reviewed extraction makes the core module the canonical source.
+
+### Scheduling and Caches
+
+Every edit requests validation and rendering immediately. `PreviewClient` owns
+one active job and one newest replacement, drops obsolete edit results and closes
+their bitmaps. Superseded CPU preparation is cancelled. Once native shader
+preparation starts, the in-flight job finishes so its program can be cached;
+newer edits coalesce instead of repeatedly cancelling driver compilations.
+A compiler that cannot yield is terminated after a newer edit has
+waited two seconds. Completed animation frames for the current edit generation
+may be displayed even when newer timeline positions are queued, avoiding starvation.
+The last completed canvas stays visible while work is pending. Worker replies only
+update pixels, flags and status; they do not rebuild the active math field.
+
+Each snapshot renderer retains at most three shader sources. The GPU driver retains
+four linked programs per context and one pending compilation. Its async path polls
+`KHR_parallel_shader_compile` when available. Without that extension the driver may
+block its worker, not the editor thread. Linked-program keys identify the emitted
+GLSL, so equivalent numeric/display spelling does not trigger native recompilation.
+The app submits full-resolution pixels in adaptive scissor batches, waiting on
+WebGL 2 fences and yielding tasks between batches; only completed images reach the
+editor. WebGL 1 can yield submissions but cannot fence their GPU completion.
+This gives the compositor opportunities to run, not a hard GPU-latency guarantee.
+The syntax cache retains at most 256 entries
+and 512,000 source characters; ASTs are read-only. No numeric results are cached across
+coordinates, time values, random seeds or scopes. Verified clock-only changes reuse
+structural diagnostics and programs, but viewport checks still run on each frame.
+
+### Video Export
+
+The export worker receives an immutable applied-scene snapshot. It renders the settings
+bounds at fixed output dimensions, composites points/labels and optionally the grid,
+then encodes exact frame positions `n / fps` with WebCodecs. A shortened final frame
+preserves fractional duration. The local Mediabunny bundle muxes MP4 or WebM.
+Two-frame encoder batches, bounded encoded/output buffers and cancellation cleanup
+prevent frame accumulation. Estimates sample the actual render/encode/finalize path;
+they are ranges, not promised completion times.
+
+Preview and export share `src/animation/scene-clock.js`. Constant-rate clocks use
+closed-form signed movement; dependent rates/ranges use simultaneous 1/120-second
+steps, bounded checkpoints and yielding seeks. Display rounding never feeds back into
+an uninterrupted clock. Non-time edits preserve clock continuity; changing clock
+values, bounds, rates or dependencies rebases it, clamping or wrapping bounded
+values when necessary. Exporting uses independently chosen starts. No audio or external assets are
+recorded. See `src/video/README.md` for budgets and the reusable encoder API.
 
 See [Extending Lepton](EXTENDING_LEPTON.md) for current integration points and the
 proposed module/profile/desktop roadmap.
@@ -112,10 +171,13 @@ The WebGL cache key contains graph structure but replaces current time values wi
 - ordinary animation frames update uniforms and issue a draw;
 - expression, layer, colour, boundary, transparency, or angle-mode edits rebuild the shader;
 - viewport, seed, background, and time-value changes do not recompile the program;
-- obsolete programs and buffers are deleted on replacement;
-- `gl.finish()` is reserved for image export, where synchronous completion is required.
+- linked programs are retained in a bounded LRU and released on eviction or disposal;
+- normal preview and worker exports use asynchronous GPU completion, never `gl.finish()`.
 
-The CPU renderer is a compatibility fallback and intentionally samples at the configured point density. It should not be used as the performance reference for normal WebGL scenes.
+The legacy synchronous path remains for browsers without workers or OffscreenCanvas;
+its CPU fallback samples at the configured point density. A browser that supports
+workers but cannot create a worker WebGL context reports that failure explicitly.
+The CPU fallback should not be used as the performance reference for WebGL scenes.
 
 ## Diagnostics
 

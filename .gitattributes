@@ -1,0 +1,2 @@
+# Keep the pinned upstream bundle byte-for-byte, including its comment indentation.
+src/libs/mediabunny/mediabunny.mjs -whitespace

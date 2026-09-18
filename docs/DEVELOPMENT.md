@@ -18,7 +18,7 @@ Useful scripts:
 | `npm run dev` | Start Vite for local development. |
 | `npm run preview` | Serve the staged `dist/` build locally after building. |
 | `npm run build` | Run dependency-free checks and stage the explicit public file list in `dist/`. |
-| `npm run test` | Run focused Vitest syntax tests and isolated renderer tests. |
+| `npm run test` | Run syntax, renderer, worker, animation, and video unit tests. |
 | `npm run test:renderer` | Test GPU resource lifecycle, cache reuse, dimensions, and failures without a browser. |
 | `npm run test:browser` | Run real keyboard/selection and MathQuill remount checks against `dist/` (build first; install Chromium with `npx playwright install chromium`). |
 | `npm run test:collections` | Check list/reduction CPU-to-GPU parity, editable limits, list creation, persistence, and mobile layout in a real browser. |
@@ -67,7 +67,7 @@ Animated time values are uniforms. The renderer caches the WebGL program and ful
 
 When investigating low FPS:
 
-1. Check whether `window.__leptonShaderBuildCount` rises while only time changes. It should remain stable.
+1. Check whether `window.__leptonWorkerFrame.buildCount` rises while only time changes. It should remain stable (`window.__leptonShaderBuildCount` is the legacy synchronous path).
 2. Profile JavaScript separately from GPU draw time.
 3. Check expanded expression size, repeated draw layers, recursion depth, procedural octave count, and transcendental calls.
 4. Confirm the app is using WebGL rather than the CPU fallback.
@@ -138,3 +138,36 @@ CI uses Node 24 and dependency caching through `package-lock.json`. Do not commi
 secrets, local IDE files, generated caches, browser storage, or audit screenshots.
 Vendored MathQuill files and their MPL license are intentionally tracked.
 Independent experiments must not be swept into a release with `git add .`.
+
+## Background Rendering and Export
+
+After changing compiler helpers in `src/browser-preview-live.js`, run
+`node scripts/generate-worker-compiler.mjs --write`. The build refuses a stale
+worker compiler; `node scripts/check-compiler-parity.mjs` compares both contexts
+over all bundled samples and additional language fixtures. Do not manually edit
+`src/compiler/scene-runtime.js`.
+
+`npm run test:runtime` covers clocks, dependency-aware timeline evaluation,
+preview queuing/cancellation, syntax caches and video resource limits. Renderer
+tests separately cover asynchronous shader preparation and GPU resource cleanup.
+Node 24's module-mocking flag is used only by isolated renderer-worker tests.
+
+Browser checks should include editing while a large graph is compiling, changing
+time bounds during playback, cancelling an export, decoding an exported video's
+first/final frames, and opening the video panel at phone widths. Measure completed
+graph frames, not only animation-frame callbacks. Stale frames must never replace
+a newer edit, while slow animation frames must still be displayed within the same
+edit generation. Do not use arbitrary fixed sleeps to await validation: wait for
+the corresponding flag, readout, or completed revision.
+
+The browser suite includes native preview-worker pixels, real cloud-scene keyboard
+editing, full-frame versus cooperative-render pixel parity, actual MP4/WebM
+encoding and decoding, and the app's export dialog. The
+cloud test reports input-handler and presentation latency separately. Its optional
+`LEPTON_LATENCY_BUDGET_MS` enforces a target on designated hardware; CI does not
+compare GPU timing across unrelated runner hardware. Keep functional assertions
+(latest edit presented, focus retained, no lost text) enabled everywhere.
+
+Mediabunny is vendored locally with its license and hashes. Its unmodified bundle
+does not require a runtime network dependency. The public allowlist must include
+all compiler/animation/video worker imports and the muxer assets.

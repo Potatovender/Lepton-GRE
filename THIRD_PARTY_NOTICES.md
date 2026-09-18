@@ -16,6 +16,17 @@ Copyright and license headers are retained in the distribution. Lepton's editor
 integration and CSS overrides are maintained separately. Lepton is not a Desmos
 product and does not imply endorsement by Desmos or the MathQuill contributors.
 
+## Mediabunny
+
+Silent MP4/WebM export uses the unmodified browser ES bundle from **Mediabunny
+1.58.0**, licensed under **MPL-2.0**. It is served locally with Lepton; no CDN,
+account, or upload is involved.
+
+- [Upstream source](https://github.com/Vanilagy/mediabunny)
+- [Exact distribution](https://registry.npmjs.org/mediabunny/-/mediabunny-1.58.0.tgz)
+- [Included license](src/libs/mediabunny/LICENSE)
+- [Version and integrity hashes](src/libs/mediabunny/vendor.json)
+
 ## Development Tools
 
 These tools are installed through `package-lock.json` and are not shipped in the
