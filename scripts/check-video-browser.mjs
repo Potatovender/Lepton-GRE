@@ -444,6 +444,10 @@ try {
     await load();
     const panel = await openPanel();
     await configure(panel, { duration: "20" });
+    // This checks graph isolation, not low-bitrate encoder quantization. Keep the
+    // existing strict colour tolerance across hardware and software encoders.
+    await panel.locator('[name="quality"]').selectOption("high");
+    await settleFields(panel);
     const downloadPromise = page.waitForEvent("download", { timeout: jobTimeout });
     downloadPromise.catch(() => {});
     await panel.locator("[data-export]").click();
