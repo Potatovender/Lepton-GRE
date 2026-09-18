@@ -151,8 +151,17 @@ async function decode(base64, withReference = false, sampleTimes = [0, 0.4]) {
     const samples = [];
     const sink = new mb.VideoSampleSink(track);
     for (const time of sampleTimes) {
-      const sample = await sink.getSample(time);
+      const packet = packets.reduce((nearest, candidate) => Math.abs(candidate.timestamp - time) < Math.abs(nearest.timestamp - time) ? candidate : nearest);
+      if (Math.abs(packet.timestamp - time) > 0.0011) throw new Error(`No encoded frame at the expected ${time}s`);
+      // Seek inside the frame: decimal frame boundaries can fall just before a
+      // quantized container timestamp and otherwise select the preceding frame.
+      const sample = await sink.getSample(packet.timestamp + packet.duration / 2);
       if (!sample) throw new Error(`No video sample at ${time}`);
+      const timestamp = sample.timestamp;
+      if (Math.abs(timestamp - packet.timestamp) > 0.0011) {
+        sample.close();
+        throw new Error(`Decoded ${timestamp}s instead of requested frame ${packet.timestamp}s`);
+      }
       sample.draw(ctx, 0, 0); sample.close();
       const image = ctx.getImageData(0, 0, width, height).data;
       const pixel = (x, y) => [...image.slice((y * width + x) * 4, (y * width + x) * 4 + 4)];
@@ -162,7 +171,7 @@ async function decode(base64, withReference = false, sampleTimes = [0, 0.4]) {
         if (r > 200 && g > 200 && b > 200) labelLight++;
         if (r < 90 && g < 90 && b < 110) labelDark++;
       }
-      const report = { time, background: pixel(240, 120), point: pixel(120, 80), labelLight, labelDark };
+      const report = { time, timestamp, background: pixel(240, 120), point: pixel(120, 80), labelLight, labelDark };
       if (withReference) {
         const { SnapshotRenderer } = await import("./src/compiler/snapshot-renderer.js");
         const renderer = new SnapshotRenderer();
@@ -481,6 +490,8 @@ try {
     const decoded = await decode((await readFile(path)).toString("base64"), false, [0, 19.4]);
     assert.equal(decoded.width, 320); assert.equal(decoded.height, 160);
     assert.equal(decoded.packets.length, 600);
+    decoded.packets.forEach((packet, index) => assert(Math.abs(packet.timestamp - index / 30) < 0.0011,
+      `Frame ${index} has an incorrect timestamp: ${packet.timestamp}`));
     for (const sample of decoded.samples) {
       const expected = sample.time === 0 ? [166, 152, 90] : [102, 56, 255];
       expected.forEach((value, channel) => assert(Math.abs(sample.background[channel] - value) <= 12,
