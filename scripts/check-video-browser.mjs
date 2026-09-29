@@ -417,6 +417,52 @@ try {
     assert.deepEqual(await state(), before, "Video export changed clock starts, scene order, folders, or saved graph state");
   });
 
+  await check("export errors appear in red below the controls, including on small screens and after minimizing", async () => {
+    for (const viewport of [{ width: 1400, height: 900 }, { width: 390, height: 500 }]) {
+      await page.setViewportSize(viewport);
+      await load();
+      const panel = await openPanel();
+      await configure(panel);
+      await panel.locator('[data-time-id="bounce"]').fill("2");
+      await settleFields(panel);
+      await panel.locator("[data-export]").click();
+      const error = panel.locator('[data-message][role="alert"]');
+      await error.waitFor();
+      await waitUntil(() => error.evaluate((element) => {
+        const rect = element.getBoundingClientRect(), parent = element.closest("dialog").getBoundingClientRect();
+        return rect.top >= parent.top && rect.bottom <= parent.bottom && rect.bottom <= innerHeight;
+      }), "Footer error is clipped or not scrolled into view");
+      assert(await error.evaluate((element) => element.previousElementSibling.classList.contains("video-export-progress")));
+      assert.equal(await error.getAttribute("aria-live"), "assertive");
+      assert.equal(await error.evaluate((element) => getComputedStyle(element).color), "rgb(180, 35, 24)");
+      await page.screenshot({ path: `${output}/error-${viewport.width}.png` });
+      await panel.locator("[data-minimize]").click();
+      const restore = page.locator(".video-export-restore");
+      assert.equal(await restore.textContent(), "Video export failed");
+      assert(await restore.evaluate((element) => element.classList.contains("video-export-error")));
+      // Exercise a long asynchronous encoder failure arriving while minimized.
+      const worker = page.workers().find((entry) => entry.url().includes("/src/video/scene-worker.js"));
+      await worker.evaluate(() => self.postMessage({ type: "error", message:
+        "The video encoder returned inconsistent frame timing. No video was saved. Try the other Format (MP4 or WebM), or retry in an updated browser." }));
+      await waitUntil(async () => /No video was saved/.test(await error.textContent()), "Minimized encoder failure was lost");
+      await restore.click();
+      assert(await error.evaluate((element) => {
+        const rect = element.getBoundingClientRect(), parent = element.closest("dialog").getBoundingClientRect();
+        return rect.top >= parent.top && rect.bottom <= parent.bottom && rect.bottom <= innerHeight;
+      }), "Restoring export hides the full recovery message");
+      await page.screenshot({ path: `${output}/timing-error-${viewport.width}.png` });
+      // The next valid export must clear both the inline error and the minimized indicator.
+      await panel.locator('[data-time-id="bounce"]').fill("0.8");
+      await settleFields(panel);
+      await downloadVideo(panel, `error-retry-${viewport.width}`);
+      assert.equal(await panel.locator('[data-message]').getAttribute("role"), "status");
+      assert.equal(await panel.locator('.video-export-error').count(), 0);
+      assert.equal(await restore.evaluate((element) => element.classList.contains("video-export-error")), false);
+      await panel.locator("[data-close]").click();
+    }
+    await page.setViewportSize({ width: 1400, height: 900 });
+  });
+
   await check("custom fractional FPS and WebM export retain the requested timing", async () => {
     await load();
     const before = await state();

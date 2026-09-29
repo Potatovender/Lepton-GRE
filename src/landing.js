@@ -1,4 +1,4 @@
-const APP_VERSION = "20260917-responsive-video";
+const APP_VERSION = "20260929-video-timestamps";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

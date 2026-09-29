@@ -1,6 +1,6 @@
-import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20260917-responsive-video";
-import { createSceneClock } from "../animation/scene-clock.js?v=20260917-responsive-video";
-import { createVideoExporter } from "./exporter.js";
+import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20260929-video-timestamps";
+import { createSceneClock } from "../animation/scene-clock.js?v=20260929-video-timestamps";
+import { createVideoExporter } from "./exporter.js?v=20260929-video-timestamps";
 import * as mediabunny from "../libs/mediabunny/mediabunny.mjs";
 
 const exporter = createVideoExporter(mediabunny);

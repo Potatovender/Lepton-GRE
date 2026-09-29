@@ -15,6 +15,7 @@ function fakePlatform(settings = {}) {
       this.displayWidth = image.width ?? image.displayWidth;
       this.displayHeight = image.height ?? image.displayHeight;
       Object.assign(this, init);
+      if (settings.frameTimestamp && init.timestamp !== undefined) this.timestamp = settings.frameTimestamp(init.timestamp);
       stats.activeFrames++;
       stats.peakFrames = Math.max(stats.peakFrames, stats.activeFrames);
     }
@@ -36,11 +37,15 @@ function fakePlatform(settings = {}) {
       await sleep();
       if (this.state === "closed") throw new Error("Closed encoder");
       if (settings.encoderError) { this.callbacks.error(new Error("GPU encoder lost")); return; }
-      for (const frame of this.queue.splice(0)) {
+      const batch = this.queue.splice(0);
+      if (settings.reverseOutput) batch.reverse();
+      for (const frame of batch) {
         if (settings.dropFrame && frame.timestamp > 0) continue;
-        this.callbacks.output({ timestamp: frame.timestamp, duration: null, type: frame.keyFrame ? "key" : "delta",
+        const chunk = { timestamp: settings.chunkTimestamp?.(frame.timestamp) ?? frame.timestamp, duration: null, type: frame.keyFrame ? "key" : "delta",
           byteLength: 4, copyTo(target) { target.set([4, 3, 2, 1]); } },
-        { decoderConfig: { codec: this.config.codec, codedWidth: base.width, codedHeight: base.height } });
+          metadata = { decoderConfig: { codec: this.config.codec, codedWidth: base.width, codedHeight: base.height } };
+        this.callbacks.output(chunk, metadata);
+        if (settings.duplicateOutput) this.callbacks.output(chunk, metadata);
       }
     }
     close() { if (this.state !== "closed") { this.state = "closed"; stats.encoderClosed++; } }
@@ -188,6 +193,47 @@ test("returned VideoFrames transfer ownership and close on dimension errors", as
   await assert.rejects(exporter.exportVideo({ options: base, renderFrame: () => new Frame({ width: 100, height: 64 }) }), { code: "FRAME_DIMENSIONS" });
   assert.equal(stats.activeFrames, 0);
   assert.equal(stats.cancelled, 1);
+});
+
+test("WebKit's one-microsecond VideoFrame rounding preserves the requested timeline and partial final frame", async () => {
+  for (const format of ["mp4", "webm"]) {
+    for (const fps of [24, 30, 60, 29.97, 12.5]) {
+      // Reproduce the observed truncation at 4.033333 seconds, plus both rounding directions.
+      const mutate = (timestamp) => timestamp === 0 ? 0 : timestamp === 4033333 ? 4033332 : timestamp + (timestamp % 2 ? -1 : 1);
+      const { exporter, stats, Frame } = fakePlatform({ frameTimestamp: mutate, reverseOutput: true });
+      const options = normalizeVideoOptions({ ...base, fps, format, duration: 4.235 });
+      const result = await exporter.exportVideo({ options,
+        renderFrame: () => new Frame({ width: 96, height: 64 }, { timestamp: 987654321 }) });
+      assert.equal(result.frameCount, options.frameCount);
+      assert.equal(stats.activeFrames, 0);
+      assert.equal(stats.cancelled, 0);
+      assert.equal(stats.packets.length, options.frameCount);
+      const packets = stats.packets.toSorted((a, b) => a.timestamp - b.timestamp);
+      for (let i = 0; i < packets.length; i++) {
+        const timing = frameTiming(options, i);
+        const start = format === "webm" ? Math.round(timing.timestampUs / 1000) / 1000 : timing.timestampUs / 1e6;
+        const end = format === "webm" ? Math.round((timing.timestampUs + timing.durationUs) / 1000) / 1000
+          : (timing.timestampUs + timing.durationUs) / 1e6;
+        assert.equal(packets[i].timestamp, start);
+        assert(Math.abs(packets[i].duration - (end - start)) < 1e-12);
+      }
+      assert(Math.abs(packets.at(-1).timestamp + packets.at(-1).duration - 4.235) < 1e-12);
+    }
+  }
+});
+
+test("unknown, duplicated, or invalid frame timestamps still abort without returning a partial video", async () => {
+  for (const settings of [
+    { duplicateOutput: true }, { chunkTimestamp: (timestamp) => timestamp + 1 },
+    { frameTimestamp: () => 0 }, { frameTimestamp: () => NaN },
+    { frameTimestamp: (timestamp) => timestamp + 2 }, { frameTimestamp: () => -1 },
+  ]) {
+    const { exporter, stats } = fakePlatform(settings);
+    await assert.rejects(exporter.exportVideo({ options: base, renderFrame: () => ({ width: 96, height: 64 }) }),
+      (error) => error.code === "INVALID_TIMESTAMP" && /No video was saved/.test(error.message) && /MP4 or WebM/.test(error.message));
+    assert.equal(stats.activeFrames, 0);
+    assert.equal(stats.cancelled, 1);
+  }
 });
 
 test("cancellation stops a hanging encoder and aborts, rather than commits, a partial file", async () => {

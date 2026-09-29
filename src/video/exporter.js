@@ -5,6 +5,7 @@ import { createOutputStorage } from "./output.js";
 
 function abortError() { return new DOMException("Video export was cancelled.", "AbortError"); }
 function closeFrame(value, Frame) { if (value instanceof Frame) value.close(); }
+const timingRecovery = "No video was saved. Try the other Format (MP4 or WebM), or retry in an updated browser.";
 
 /**
  * Inject a locally bundled Mediabunny module (tested against 1.58.0). No DOM, CDN, graph state,
@@ -63,7 +64,7 @@ export function createVideoExporter(mediabunny, platform = {}) {
       await guard(encoder.flush());
       await guard(pendingPackets);
       if (pendingTimings.size) {
-        throw new VideoExportError("MISSING_FRAMES", "The video encoder dropped frames; no incomplete video will be returned.");
+        throw new VideoExportError("MISSING_FRAMES", `The video encoder dropped frames. ${timingRecovery}`);
       }
       progress("rendering");
       await guard(yieldToHost());
@@ -89,7 +90,7 @@ export function createVideoExporter(mediabunny, platform = {}) {
           if (failure) return;
           try {
             const timing = pendingTimings.get(chunk.timestamp);
-            if (!timing) throw new VideoExportError("INVALID_TIMESTAMP", "The encoder returned an unexpected or duplicate frame timestamp.");
+            if (!timing) throw new VideoExportError("INVALID_TIMESTAMP", `The video encoder returned inconsistent frame timing. ${timingRecovery}`);
             pendingTimings.delete(chunk.timestamp);
             if (queuedBytes + chunk.byteLength > VIDEO_LIMITS.encodedQueueBytes) {
               throw new VideoExportError("ENCODED_QUEUE_LIMIT", "An encoded frame exceeded the queue budget. Lower the resolution or bitrate.");
@@ -121,6 +122,7 @@ export function createVideoExporter(mediabunny, platform = {}) {
       encodingStarted = now();
       progress("rendering");
       let lastKeyTime = -Infinity;
+      let lastFrameTimestamp = -Infinity;
       for (let index = 0; index < options.frameCount; index++) {
         if (failure) throw failure;
         const timing = frameTiming(options, index);
@@ -137,7 +139,15 @@ export function createVideoExporter(mediabunny, platform = {}) {
             throw new VideoExportError("FRAME_DIMENSIONS", `renderFrame returned ${width} x ${height}; expected ${options.width} x ${options.height}.`);
           }
           frame = new Frame(image, { timestamp: timing.timestampUs, duration: timing.durationUs, alpha: "discard" });
-          pendingTimings.set(timing.timestampUs, timing);
+          // WebKit can truncate a CanvasImageSource timestamp by 1 us (bug 321880).
+          // Join output to the actual input frame, but mux the original exact timeline.
+          const actualTimestamp = frame.timestamp;
+          if (!Number.isSafeInteger(actualTimestamp) || Math.abs(actualTimestamp - timing.timestampUs) > 1
+            || actualTimestamp < 0 || actualTimestamp <= lastFrameTimestamp) {
+            throw new VideoExportError("INVALID_TIMESTAMP", `The browser assigned invalid frame timing. ${timingRecovery}`);
+          }
+          pendingTimings.set(actualTimestamp, timing);
+          lastFrameTimestamp = actualTimestamp;
           const keyFrame = timing.timeSeconds - lastKeyTime >= options.keyFrameInterval;
           if (keyFrame) lastKeyTime = timing.timeSeconds;
           encoder.encode(frame, { keyFrame });
@@ -153,7 +163,7 @@ export function createVideoExporter(mediabunny, platform = {}) {
       encoder.close();
       progress("finalizing");
       await guard(output.finalize());
-      if (completed !== options.frameCount) throw new VideoExportError("MISSING_FRAMES", "The export has missing frames.");
+      if (completed !== options.frameCount) throw new VideoExportError("MISSING_FRAMES", `The export has missing frames. ${timingRecovery}`);
       const data = await guard(storage.complete());
       progress("complete");
       return Object.freeze({ data, mimeType, extension: options.format, codec: support.codec,

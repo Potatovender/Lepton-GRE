@@ -92,6 +92,19 @@ to avoid independent timestamp/duration rounding changing the file's end time.
 WebM stores the final hold in Segment duration, not individual SimpleBlock
 duration. The browser tests verify actual player duration and final-frame pixels.
 
+The packet lookup uses the **constructed `VideoFrame.timestamp`**, not just its
+requested timestamp. WebKit can round a CanvasImageSource timestamp down by one
+microsecond ([WebKit bug 321880](https://bugs.webkit.org/show_bug.cgi?id=321880)).
+We allow at most one microsecond of construction rounding, require unique,
+increasing input timestamps, and still require output to match an actual frame
+exactly. Muxed timestamps and durations come from the original frame schedule,
+so this workaround does not change playback speed or accumulate timing drift.
+Unknown/duplicate output and dropped frames still abort the job without saving
+an incomplete video. These are browser/encoder failures, not normal graph errors;
+the footer suggests trying the other format or an updated browser. All export
+errors appear below the controls in red, with an accessible alert. Minimized
+exports also show a red failure indicator.
+
 Progress phases: `preparing`, `rendering`, `finalizing`, `complete`, `cancelled`,
 `failed`. `completedFrames` counts packets accepted by the muxer, not just render
 submissions. ETA covers remaining rendering/encoding; finalization reports an
@@ -120,3 +133,10 @@ MP4/WebM exports, including a worker/OffscreenCanvas export. It never opens or
 changes a saved graph. The dependency is pinned to the unmodified Mediabunny
 1.58.0 ES bundle; `src/libs/mediabunny/vendor.json` records source and hashes, and
 the upstream MPL-2.0 license is included alongside the bundle.
+
+Timing regressions include exports longer than ten seconds at 24/30/60 and
+fractional FPS, decoding beginning/middle/end pixels, and checking every packet
+and the final container duration. Unit tests simulate construction rounding,
+reordered output, duplicate/unknown timestamps, and missing frames separately.
+`scripts/check-video-browser.mjs` covers the app panel, small-screen error
+visibility, retry, cancellation, and snapshot isolation from live edits.

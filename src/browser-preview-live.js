@@ -1,12 +1,12 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260917-responsive-video";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260917-responsive-video";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260917-responsive-video";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260917-responsive-video";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260917-responsive-video";
-import { PreviewClient } from "./compiler/preview-client.js?v=20260917-responsive-video";
-import { openVideoPanel } from "./video/panel.js?v=20260917-responsive-video";
-import { createAstCache } from "./math/ast-cache.js?v=20260917-responsive-video";
-import { exportPhoto } from "./compiler/photo-client.js?v=20260917-responsive-video";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260929-video-timestamps";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260929-video-timestamps";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260929-video-timestamps";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260929-video-timestamps";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260929-video-timestamps";
+import { PreviewClient } from "./compiler/preview-client.js?v=20260929-video-timestamps";
+import { openVideoPanel } from "./video/panel.js?v=20260929-video-timestamps";
+import { createAstCache } from "./math/ast-cache.js?v=20260929-video-timestamps";
+import { exportPhoto } from "./compiler/photo-client.js?v=20260929-video-timestamps";
 
 const cachedSyntax = createAstCache();
 
@@ -55,7 +55,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260917-responsive-video";
+const APP_VERSION = "20260929-video-timestamps";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 

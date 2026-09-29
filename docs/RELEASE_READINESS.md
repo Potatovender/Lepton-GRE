@@ -1,8 +1,8 @@
 # Release Readiness
 
-Updated on 2026-09-16 for `20260916-click-status`, following the 2026-09-14
-baseline audit. This supersedes the
-initial desktop-only audit. It is a bounded validation record, not a guarantee
+Updated on 2026-09-29 for `20260929-video-timestamps`. The focused video-export
+checks below supplement the 2026-09-16 baseline audit. This is a bounded
+validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
 ## Deployment
@@ -13,9 +13,33 @@ version/commit is in [release.json](https://potatovender.github.io/Lepton-GRE/re
 A query string alone does not publish new code.
 
 The Pages workflow now installs locked dependencies and runs verification before
-uploading an explicit 42-file public artifact. Deploy depends on that build of the
+uploading an explicit 62-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
+
+## Video Export Follow-up (2026-09-29)
+
+- Reproduced Safari 18.6's one-microsecond `VideoFrame` timestamp truncation:
+  requested 4,033,333 us became 4,033,332 us. The previous packet lookup rejected
+  otherwise valid MP4/WebM exports at common frame rates. Matching actual input
+  frame timestamps fixes the join; output retains the original requested timeline.
+  This is not a graph complexity, playback-FPS, or intentional export-limit error.
+- Native Safari main-thread and module-worker exports pass at 24, 30, 60, 29.97,
+  and 12.5 FPS in MP4 and WebM. The worker runs verify all packet counts, first/
+  middle/last decoded pixels, and a 10.035-second duration with a partial last frame.
+  Native Chrome passes the same format/rate matrix. Local reproduction reports
+  are in ignored `output/playwright/video-timestamp/`.
+- The exporter still rejects unknown/duplicate output, dropped frames, and input
+  timestamp mutations larger than one microsecond. It does not return a partial
+  video. Error messages suggest the other format or an updated browser.
+- Export errors appear at the bottom of the dialog in red with `role="alert"`,
+  scroll into view on small screens, and remain accessible after minimizing.
+  A retry clears the error state. The app integration suite covers cancellation,
+  retries, snapshot isolation, editor drafts, photo export, and desktop/mobile UI.
+- Current local checks: build/model regressions, 17 syntax tests, 52 renderer
+  tests, 168 runtime/clock/preview/video tests, and TypeScript checks pass. The
+  exporter tests include simulated construction rounding and real native codecs.
+  This does not expand the supported-device claims of the baseline audit.
 
 ## Corrections
 
@@ -128,7 +152,7 @@ screenshots, and unrelated ItGE experiments are not deployed.
   configuration import. Playwright 1.62.1 is pinned for browser regressions;
   neither test package is deployed. npm audit reports zero known vulnerabilities.
 
-## Verification
+## Baseline Verification (2026-09-16)
 
 - **172** runtime/model/grammar checks, **17** syntax unit tests, and **13**
   standalone GPU-driver tests passed.

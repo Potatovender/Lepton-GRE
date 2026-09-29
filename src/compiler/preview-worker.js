@@ -1,7 +1,7 @@
-import { SnapshotRenderer } from "./snapshot-renderer.js?v=20260917-responsive-video";
-import { createSceneClock } from "../animation/scene-clock.js?v=20260917-responsive-video";
-import { createSceneRuntime, DEFAULT_SCENE } from "./scene-runtime.js?v=20260917-responsive-video";
-import { AnimationClockError } from "../animation/clock.js?v=20260917-responsive-video";
+import { SnapshotRenderer } from "./snapshot-renderer.js?v=20260929-video-timestamps";
+import { createSceneClock } from "../animation/scene-clock.js?v=20260929-video-timestamps";
+import { createSceneRuntime, DEFAULT_SCENE } from "./scene-runtime.js?v=20260929-video-timestamps";
+import { AnimationClockError } from "../animation/clock.js?v=20260929-video-timestamps";
 
 const renderer = new SnapshotRenderer();
 let active = null;

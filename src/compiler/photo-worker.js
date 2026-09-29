@@ -1,4 +1,4 @@
-import { SnapshotRenderer } from "./snapshot-renderer.js?v=20260917-responsive-video";
+import { SnapshotRenderer } from "./snapshot-renderer.js?v=20260929-video-timestamps";
 
 self.onmessage = async ({ data }) => {
   const renderer = new SnapshotRenderer();

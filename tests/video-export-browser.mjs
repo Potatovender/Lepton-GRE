@@ -120,6 +120,49 @@ try {
     assert(result.estimate > 0);
     console.log(`ok - native ${result.format}/${result.codec}: ${result.bytes} bytes, ${result.frames} decoded packets, ${result.duration}s, pixel fidelity, streaming, cancellation, estimate`);
   }
+  // The Safari timestamp truncation first occurred after four seconds in our repro;
+  // short exports and six-frame estimates never exercised that boundary.
+  const longExports = await page.evaluate(async () => {
+    const mb = await import("/mediabunny.mjs");
+    const { createVideoExporter, frameTiming, normalizeVideoOptions } = await import("/src/video/index.js");
+    const exporter = createVideoExporter(mb), reports = [];
+    const canvas = new OffscreenCanvas(96, 64), ctx = canvas.getContext("2d");
+    for (const format of ["mp4", "webm"]) for (const fps of [24, 30, 60, 29.97, 12.5]) {
+      const options = normalizeVideoOptions({ width: 96, height: 64, duration: 10.035, fps, bitrate: 300_000, format });
+      if (!(await exporter.checkSupport(options)).supported) continue;
+      const result = await exporter.exportVideo({ options, renderFrame(time) {
+        ctx.fillStyle = time < 5 ? "rgb(230,20,30)" : "rgb(20,210,40)";
+        ctx.fillRect(0, 0, 96, 64); return canvas;
+      } });
+      const input = new mb.Input({ formats: mb.ALL_FORMATS, source: new mb.BufferSource(await result.data.arrayBuffer()) });
+      try {
+        const track = await input.getPrimaryVideoTrack(), packets = [];
+        for await (const packet of new mb.EncodedPacketSink(track).packets()) packets.push(packet);
+        const ordered = packets.toSorted((a, b) => a.timestamp - b.timestamp);
+        const maxError = Math.max(...ordered.map((packet, index) => Math.abs(packet.timestamp - frameTiming(options, index).timestampUs / 1e6)));
+        const pixels = [], sink = new mb.VideoSampleSink(track);
+        for (const time of [0, 5.1, 10.034]) {
+          const sample = await sink.getSample(time);
+          if (!sample) throw new Error(`No ${format}/${fps} sample at ${time}`);
+          sample.draw(ctx, 0, 0); sample.close();
+          pixels.push([...ctx.getImageData(48, 32, 1, 1).data]);
+        }
+        reports.push({ format, fps, expected: options.frameCount, frames: result.frameCount, packets: packets.length,
+          duration: await input.getDurationFromMetadata(), maxError, pixels });
+      } finally { input.dispose(); }
+    }
+    return reports;
+  });
+  assert(longExports.length > 0, "No encoder supports the long export regression");
+  for (const result of longExports) {
+    assert.equal(result.frames, result.expected);
+    assert.equal(result.packets, result.expected);
+    assert(result.maxError < 0.0011, JSON.stringify(result));
+    assert(Math.abs(result.duration - 10.035) < 0.0011, JSON.stringify(result));
+    assert(result.pixels[0][0] > 200 && result.pixels[0][1] < 60);
+    assert(result.pixels.slice(1).every((p) => p[1] > 175 && p[0] < 60), "Later frames have wrong pixels");
+    console.log(`ok - native ${result.format} ${result.fps} FPS: all ${result.frames} frames, 10.035s, decoded beginning/middle/end`);
+  }
   const workerResult = await page.evaluate(async () => {
     const origin = location.origin;
     const code = `import * as mb from '${origin}/mediabunny.mjs';

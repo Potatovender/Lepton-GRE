@@ -14,7 +14,6 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
   dialog.setAttribute("aria-labelledby", "video-export-title");
   dialog.innerHTML = `<form method="dialog">
     <header><h2 id="video-export-title">Export video</h2><div><button type="button" data-minimize aria-label="Minimize video export" title="Continue editing">&minus;</button> <button type="button" data-close aria-label="Close video export">&times;</button></div></header>
-    <p data-message role="status">Preparing graph...</p>
     <fieldset disabled>
       <legend>Timeline</legend>
       <div data-time-starts></div>
@@ -38,6 +37,7 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
       <footer><button type="button" data-estimate-button>Estimate</button><button type="button" class="primary" data-export>Export video</button></footer>
     </fieldset>
     <div class="video-export-progress" hidden><progress max="1" value="0"></progress><p data-progress role="status"></p><button type="button" data-cancel>Cancel</button></div>
+    <p data-message role="status" aria-live="polite" aria-atomic="true">Preparing graph...</p>
   </form>`;
   document.body.append(dialog);
   const restore = document.createElement("button");
@@ -53,6 +53,7 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
     if (menuPopover) menuPopover.style.visibility = "hidden";
     restore.hidden = true;
     dialog.showModal();
+    dialog.querySelector("[data-message].video-export-error")?.scrollIntoView({ block: "nearest" });
   };
   const dismiss = (focusTarget) => {
     dialog.close();
@@ -65,10 +66,24 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
   restore.onclick = show;
   const form = dialog.querySelector("form"), fieldset = dialog.querySelector("fieldset");
   const message = dialog.querySelector("[data-message]");
+  const setMessage = (text, error = false) => {
+    message.hidden = !text;
+    message.classList.toggle("video-export-error", error);
+    message.setAttribute("role", error ? "alert" : "status");
+    message.setAttribute("aria-live", error ? "assertive" : "polite");
+    message.textContent = text;
+    restore.classList.toggle("video-export-error", error);
+    if (error) {
+      restore.textContent = "Video export failed";
+      requestAnimationFrame(() => {
+        if (dialog.open && message.classList.contains("video-export-error")) message.scrollIntoView({ block: "nearest" });
+      });
+    }
+  };
   let worker;
-  try { worker = new Worker(new URL("./scene-worker.js?v=20260917-responsive-video", import.meta.url), { type: "module" }); }
+  try { worker = new Worker(new URL("./scene-worker.js?v=20260929-video-timestamps", import.meta.url), { type: "module" }); }
   catch (error) {
-    message.textContent = `Video export is unavailable: ${error.message}`;
+    setMessage(`Video export is unavailable: ${error.message}`, true);
     restore.remove();
     dialog.querySelector("[data-minimize]").remove();
     const close = () => { dismiss(editorFocusTarget()); dialog.remove(); onClose?.(); };
@@ -122,12 +137,12 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
       const support = await probeVideoSupport(config);
       if (closed || busy || revision !== checkRevision) return;
       supported = support.supported;
-      message.textContent = support.supported ? "" : support.reason;
+      setMessage(support.supported ? "" : support.reason, !support.supported);
       setBusy(false);
     } catch (error) {
       if (revision === undefined || revision === checkRevision) {
         ++checkRevision; probeKey = null; supported = false;
-        message.textContent = error.message; setBusy(false);
+        setMessage(error.message, true); setBusy(false);
       }
     }
   };
@@ -136,11 +151,11 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
     try {
       const config = options();
       const starts = Object.fromEntries([...dialog.querySelectorAll("[data-time-id]")].map((input) => [input.dataset.timeId, input.value]));
-      message.textContent = ""; setBusy(true);
+      setMessage(""); restore.textContent = "Video export"; setBusy(true);
       dialog.querySelector("progress").value = 0;
       dialog.querySelector("[data-progress]").textContent = "Preparing frames...";
       worker.postMessage({ type, options: config, starts, grid: form.elements.namedItem("grid").checked });
-    } catch (error) { message.textContent = error.message; setBusy(false); }
+    } catch (error) { setMessage(error.message, true); setBusy(false); }
   };
   worker.onmessage = async ({ data }) => {
     if (closed) return;
@@ -165,16 +180,16 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
       const url = URL.createObjectURL(data.result.data);
       const link = document.createElement("a"); link.href = url; link.download = `${name}.${data.result.extension}`;
       document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      message.textContent = `Exported ${data.result.frameCount} frames (${mb(data.result.bytes)}).`; setBusy(false);
+      setMessage(`Exported ${data.result.frameCount} frames (${mb(data.result.bytes)}).`); setBusy(false);
       restore.textContent = "Video exported";
     } else {
-      clearTimeout(cancelTimer); message.textContent = data.type === "cancelled" ? "Export cancelled." : data.message; restore.textContent = "Video export"; setBusy(false);
+      clearTimeout(cancelTimer); restore.textContent = "Video export"; setBusy(false);
+      setMessage(data.type === "cancelled" ? "Export cancelled." : data.message, data.type !== "cancelled");
     }
   };
   worker.onerror = (event) => {
     clearTimeout(cancelTimer); worker.terminate(); supported = false; setBusy(false); fieldset.disabled = true;
-    message.textContent = `${event.message || "Video worker could not start"}. Close and reopen this panel to try again.`;
-    restore.textContent = "Video export failed";
+    setMessage(`${event.message || "Video worker could not start"}. Close and reopen this panel to try again.`, true);
   };
   dialog.querySelector("[data-close]").onclick = close;
   dialog.querySelector("[data-minimize]").onclick = () => { restore.hidden = false; dismiss(restore); };
@@ -182,7 +197,7 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
   dialog.querySelector("[data-cancel]").onclick = () => {
     worker.postMessage({ type: "cancel" });
     dialog.querySelector("[data-progress]").textContent = "Cancelling...";
-    cancelTimer = setTimeout(() => { worker.terminate(); busy = false; message.textContent = "Export cancelled. Close and reopen this panel to export again."; fieldset.disabled = true; dialog.querySelector(".video-export-progress").hidden = true; }, 1500);
+    cancelTimer = setTimeout(() => { worker.terminate(); busy = false; setMessage("Export cancelled. Close and reopen this panel to export again."); restore.textContent = "Video export"; fieldset.disabled = true; dialog.querySelector(".video-export-progress").hidden = true; }, 1500);
   };
   dialog.querySelector("[data-export]").onclick = () => start("export");
   dialog.querySelector("[data-estimate-button]").onclick = () => start("estimate");

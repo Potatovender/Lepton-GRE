@@ -2884,6 +2884,9 @@ textarea.compact-field,
 .video-export-dialog .video-grid-option { flex-direction: row; align-items: center; }
 .video-export-dialog progress { width: 100%; }
 .video-export-dialog [hidden] { display: none; }
+.video-export-dialog [data-message] { margin: 14px 0 0; padding: 10px 0 0; }
+.video-export-dialog [data-message].video-export-error { color: #b42318; border-top: 1px solid #f0b5b0; font-weight: 600; }
 .video-export-restore { position: fixed; right: 16px; bottom: 48px; z-index: 1000; padding: 8px 12px; background: #fff; color: #172033; border: 1px solid #94a3b8; border-radius: 4px; box-shadow: 0 2px 8px #0002; }
 .video-export-restore[hidden] { display: none; }
+.video-export-restore.video-export-error { color: #b42318; border-color: #b42318; }
 .status-dot.pending, .status-light.pending, .entry-status.pending, .channel-status.pending { background: #94a3b8; }
