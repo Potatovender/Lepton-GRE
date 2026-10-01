@@ -96,6 +96,17 @@ expression circle = distance(x,y)-4
 
 Function parameters are local and shadow outer values with the same name. Calls must provide exactly the declared number of arguments.
 
+Functions may return piecewise values and call other piecewise functions:
+
+```text
+function positive(a) = {a>0:a}
+function windowed(a) = {a<2:positive(a)}
+draw(windowed(x))
+```
+
+This draws only where `0 < x < 2`. An unmatched condition without a fallback
+is undefined, including when the function is called from another expression.
+
 Empty argument slots are errors: `distance(2,,3)` does not mean `distance(2,3)`.
 Use `sqrt(value)` in Lepton text or `\sqrt{value}` when pasting LaTeX. Built-in
 function names require inputs; bare `sin` is not a scalar value. `random` is the

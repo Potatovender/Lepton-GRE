@@ -1,4 +1,4 @@
-import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261001-recursion-diagnostics";
+import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261001-piecewise-calls";
 
 self.onmessage = async ({ data }) => {
   const renderer = new SnapshotRenderer();

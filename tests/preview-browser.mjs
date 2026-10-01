@@ -27,7 +27,29 @@ try {
     const readCanvas = new OffscreenCanvas(96, 64), ctx = readCanvas.getContext("2d");
     const pixel = (canvas) => { ctx.clearRect(0, 0, 96, 64); ctx.drawImage(canvas, 0, 0); return [...ctx.getImageData(48, 32, 1, 1).data]; };
     const equal = (a, b) => a.every((value, index) => value === b[index]);
-    const result = { frames: [], errors: [], repairedMatchesFresh: false };
+    const result = { frames: [], errors: [], repairedMatchesFresh: false, piecewise: [] };
+    const conditional = new SnapshotRenderer();
+    try {
+      for (const expression of ["inner(x)", "outer(x)", "outer(x)+0", "withFallback(x)", "gate", "{x<2:{x>0:1}}", "[outer(x)][0]"]) {
+        const scene = structuredClone(base);
+        scene.settings.backgroundColor = "dark";
+        scene.functions = [
+          { id: "inner", kind: "function", params: ["aa"], expression: "{aa>0:1}" },
+          { id: "outer", kind: "function", params: ["aa"], expression: "{aa<2:inner(aa)}" },
+          { id: "withFallback", kind: "function", params: ["aa"], expression: "{aa>0:1,0}" },
+          { id: "gate", kind: "variable", expression: "{x>0:1}" },
+          { id: "eq", kind: "variable", expression }
+        ];
+        scene.colors = [{ id: "ink", red: "255*x", green: "0", blue: "0" },
+          { id: "dark", red: "0", green: "0", blue: "0" }];
+        conditional.setScene(scene);
+        const rendered = await conditional.render({ ...size, bounds: { xMin: -2, xMax: 3, yMin: -1, yMax: 1 } });
+        ctx.clearRect(0, 0, 96, 64); ctx.drawImage(rendered.canvas, 0, 0);
+        result.piecewise.push({ expression, errors: rendered.diagnostics.hasErrors,
+          issues: rendered.diagnostics.renderIssues ?? [],
+          pixels: [19, 57, 86].map(x => [...ctx.getImageData(x, 32, 1, 1).data].slice(0, 3)) });
+      }
+    } finally { conditional.dispose(); }
     const renderer = new SnapshotRenderer();
     try {
       renderer.setScene(structuredClone(base));
@@ -76,6 +98,13 @@ try {
     return result;
   }, base);
   assert(reports.initialPixel[0] < 3 && reports.initialPixel[1] > 30, "Initial GPU pixels incorrect");
+  for (const conditional of reports.piecewise) {
+    const upperClipped = /outer|x<2/.test(conditional.expression);
+    assert.equal(conditional.errors, false, conditional.expression);
+    assert.deepEqual(conditional.issues, [], conditional.expression);
+    assert.deepEqual(conditional.pixels, [[0, 0, 0], [255, 0, 0], upperClipped ? [0, 0, 0] : [255, 0, 0]], conditional.expression);
+  }
+  console.log("ok - piecewise function calls, nesting, arithmetic, fallback, variables and lists render correct GPU pixels");
   assert(reports.nextPixel[0] > 250, "Uniform update did not render new time value");
   assert.equal(reports.buildCount, 1); assert.equal(reports.sourceCacheSize, 1); assert(reports.cancelled);
   assert.deepEqual(reports.errors, []);

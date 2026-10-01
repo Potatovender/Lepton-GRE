@@ -1,7 +1,7 @@
-import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261001-recursion-diagnostics";
-import { createSceneClock } from "../animation/scene-clock.js?v=20261001-recursion-diagnostics";
-import { createSceneRuntime, DEFAULT_SCENE } from "./scene-runtime.js?v=20261001-recursion-diagnostics";
-import { AnimationClockError } from "../animation/clock.js?v=20261001-recursion-diagnostics";
+import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261001-piecewise-calls";
+import { createSceneClock } from "../animation/scene-clock.js?v=20261001-piecewise-calls";
+import { createSceneRuntime, DEFAULT_SCENE } from "./scene-runtime.js?v=20261001-piecewise-calls";
+import { AnimationClockError } from "../animation/clock.js?v=20261001-piecewise-calls";
 
 const renderer = new SnapshotRenderer();
 let active = null;

@@ -1,13 +1,13 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261001-recursion-diagnostics";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261001-recursion-diagnostics";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261001-recursion-diagnostics";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261001-recursion-diagnostics";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261001-recursion-diagnostics";
-import { PreviewClient } from "./compiler/preview-client.js?v=20261001-recursion-diagnostics";
-import { openVideoPanel } from "./video/panel.js?v=20261001-recursion-diagnostics";
-import { createAstCache } from "./math/ast-cache.js?v=20261001-recursion-diagnostics";
-import { exportPhoto } from "./compiler/photo-client.js?v=20261001-recursion-diagnostics";
-import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261001-recursion-diagnostics";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261001-piecewise-calls";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261001-piecewise-calls";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261001-piecewise-calls";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261001-piecewise-calls";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261001-piecewise-calls";
+import { PreviewClient } from "./compiler/preview-client.js?v=20261001-piecewise-calls";
+import { openVideoPanel } from "./video/panel.js?v=20261001-piecewise-calls";
+import { createAstCache } from "./math/ast-cache.js?v=20261001-piecewise-calls";
+import { exportPhoto } from "./compiler/photo-client.js?v=20261001-piecewise-calls";
+import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261001-piecewise-calls";
 
 const cachedSyntax = createAstCache();
 
@@ -56,7 +56,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20261001-recursion-diagnostics";
+const APP_VERSION = "20261001-piecewise-calls";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -5840,7 +5840,8 @@ function scalarExpressionToGlsl(source, env = {}, zName = null, stack = [], angl
     error.code = "SHADER_SIZE";
     throw error;
   }
-  if (!/^[\dA-Za-z_+\-*/().,\s~<>=!]+$/.test(expression)) {
+  // Inlined piecewise functions/variables contain compiler-generated ternaries.
+  if (!/^[\dA-Za-z_+\-*/().,\s~<>=!?:]+$/.test(expression)) {
     throw new Error(`Unsupported GLSL expression: ${source}`);
   }
   return expression;

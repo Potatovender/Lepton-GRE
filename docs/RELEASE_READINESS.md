@@ -1,7 +1,7 @@
 # Release Readiness
 
-Updated on 2026-10-01 for `20261001-recursion-diagnostics`. The focused recursion and video-export
-checks below supplement the 2026-09-16 baseline audit. This is a bounded
+Updated on 2026-10-01 for `20261001-piecewise-calls`. The focused compiler, recursion,
+and video-export checks below supplement the 2026-09-16 baseline audit. This is a bounded
 validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
 
@@ -16,6 +16,28 @@ The Pages workflow now installs locked dependencies and runs verification before
 uploading an explicit 63-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
+
+## Piecewise Function Composition (2026-10-01)
+
+- Fixed generated-output validation rejecting the `?` and `:` emitted when a
+  piecewise function or variable is expanded into another expression. This was
+  an application compiler rejection before WebGL compilation; CPU evaluation
+  and direct nested piecewise blocks already worked.
+- Both editor and generated worker compilers accept these generated ternaries.
+  Variable-name flagging and statement-delimiter rejection are unchanged.
+- Ten runtime regressions cover direct and nested calls, arithmetic, functions
+  receiving conditional results, explicit fallbacks, variables, inline nesting,
+  collection indexing, and retained rejection of statement delimiters.
+- The native browser suite checks actual pixels for seven forms of piecewise
+  composition, including the regions where an unmatched condition is undefined.
+- Local build, syntax/renderer/runtime tests and TypeScript checks passed. Editor,
+  status, collection, reference/gallery, snapshot, cooperative-renderer and both
+  video browser checks passed. Reference/gallery required ANGLE Metal on this Mac;
+  the default software renderer timed out waiting for a gallery preview.
+- The preview-latency stress check remains a local limitation: the software
+  renderer hit a GPU fence timeout. Metal rendered the fixture without a runtime
+  error, but the editing phase did not observe background compilation and failed
+  that assertion. This is not recorded as a clean full browser-suite run.
 
 ## Recursion and Folder Follow-up (2026-10-01)
 

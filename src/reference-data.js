@@ -1,4 +1,4 @@
-import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20261001-recursion-diagnostics";
+import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20261001-piecewise-calls";
 
 // Documentation is checked against the callable registry during every build.
 // Each example is also evaluated by the CPU and GPU regression suites.

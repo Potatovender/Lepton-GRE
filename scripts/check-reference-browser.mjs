@@ -126,7 +126,16 @@ try {
   for (const sample of samples) {
     await page.goto(sample.url);
     await page.waitForFunction(() => window.__leptonDebug?.scene().draws.length > 0);
-    await page.locator('.compile-status.ready').waitFor({ timeout: 60_000 });
+    try {
+      await page.locator('.compile-status.ready').waitFor({ timeout: 60_000 });
+    } catch (error) {
+      const state = await page.evaluate(() => ({
+        status: document.querySelector('.compile-status')?.textContent,
+        runtimeError: window.__leptonRuntimeError,
+        overlay: document.querySelector('.render-overlay')?.textContent
+      }));
+      throw new Error(`${sample.id}: sample did not become ready: ${JSON.stringify(state)}`, { cause: error });
+    }
     const scene = await page.evaluate(() => window.__leptonDebug.scene());
     assert(scene.functions.length > 0, `${sample.id}: sample was blank`);
     const image = await page.evaluate(async () => {
