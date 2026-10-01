@@ -7,12 +7,13 @@ import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "../src/math/colour.js";
 import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "../src/math/collections.js";
 import { FUNCTION_REFERENCE, validateFunctionReference } from "../src/reference-data.js";
 import { createAstCache } from "../src/math/ast-cache.js";
+import { FramePerformanceMonitor } from "../src/animation/frame-performance.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20260929-video-timestamps";
+const cacheVersion = "20261001-recursion-diagnostics";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -58,6 +59,7 @@ function createMockElement(tagName) {
 const sandbox = {
   console,
   createAstCache,
+  FramePerformanceMonitor,
   structuredClone: globalThis.structuredClone,
   localStorage: {
     getItem: (key) => storage.get(key) ?? null,
@@ -934,8 +936,8 @@ check("malformed expressions are invalid", () => {
   assert(result.status === "invalid", JSON.stringify(result));
 });
 
-check("recursive node estimator blue-flags equations above 2^12 nodes", () => {
-  sandbox.__debugScene.settings.maxRecursion = 10;
+check("recursive size estimator blue-flags equations above 2^14 tokens", () => {
+  sandbox.__debugScene.settings.maxRecursion = 13;
   const env = {
     a: "b+b+1",
     b: "a+a+1"
@@ -945,6 +947,16 @@ check("recursive node estimator blue-flags equations above 2^12 nodes", () => {
   assert(result.message.includes("large"), result.message);
   assert(result.message.includes("graph may not render"), result.message);
   assert(!result.message.includes("still attempting"), result.message);
+});
+
+check("size warning moves above 16,384 tokens without making validation expand the whole tree", () => {
+  sandbox.__debugScene.settings.maxRecursion = 11;
+  const env = { a: "b+b+1", b: "a+a+1" };
+  const count = sandbox.estimateExpandedNodeCount("a+b", env, ["a"]);
+  assert(count > 4096 && count <= 16384, String(count));
+  assert(sandbox.validateExpression("a+b", env, ["a"]).status === "valid");
+  sandbox.__debugScene.settings.maxRecursion = 1;
+  assert(sandbox.estimateExpandedNodeCount("a+a", { a: "a+a" }, ["a"]) === 3, "Cutoff replaces each reference with one 0, not x+y");
 });
 
 check("recursive node estimator keeps equations above 2^16 nodes blue flagged", () => {

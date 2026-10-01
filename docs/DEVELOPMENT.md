@@ -72,6 +72,11 @@ When investigating low FPS:
 3. Check expanded expression size, repeated draw layers, recursion depth, procedural octave count, and transcendental calls.
 4. Confirm the app is using WebGL rather than the CPU fallback.
 5. Keep `gl.finish()` out of live rendering; it is allowed only for export/readback.
+6. Compare physical canvas dimensions, not window dimensions, and stop other
+   benchmarks while measuring. The blue FPS warning uses completed frames, not
+   callback frequency. See [the recursion audit](RECURSION_PERFORMANCE.md) for
+   test equations, expansion counts, and the distinction between a shader-size
+   failure and slow rendering.
 
 Changing expressions or render structure should invalidate the cache. Viewport, time, random seed, clipping bounds, and background colour are uniforms and should not.
 
@@ -82,6 +87,7 @@ Before release, verify:
 - blank graph on landing and direct `app.html`;
 - favicon on landing, blank, URL scene, and all sample links;
 - Standard/Text/Standard round trip with folders, standalone and inline comments, fractions, exponents, piecewise expressions, and custom functions;
+- repeated Apply to graph closes all nested folders without changing source;
 - expression, slider, time slider, parameterized function, colour, boundary, transparency, point, folder, comment, and draw rows;
 - list literals/comprehensions, zero-based indexing, scalar broadcasting, local sum/product scopes, dynamic bounds, ordered list drawing, and blue size warnings;
 - rename reference propagation, duplicate/reserved-name diagnostics, dependency filtering, sorting, nested drag/drop, and dropdown creation;

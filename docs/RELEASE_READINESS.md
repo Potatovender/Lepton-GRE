@@ -1,6 +1,6 @@
 # Release Readiness
 
-Updated on 2026-09-29 for `20260929-video-timestamps`. The focused video-export
+Updated on 2026-10-01 for `20261001-recursion-diagnostics`. The focused recursion and video-export
 checks below supplement the 2026-09-16 baseline audit. This is a bounded
 validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
@@ -13,9 +13,28 @@ version/commit is in [release.json](https://potatovender.github.io/Lepton-GRE/re
 A query string alone does not publish new code.
 
 The Pages workflow now installs locked dependencies and runs verification before
-uploading an explicit 62-file public artifact. Deploy depends on that build of the
+uploading an explicit 63-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
+
+## Recursion and Folder Follow-up (2026-10-01)
+
+- Apply to graph now uses the same closed-folder import policy as URLs, samples,
+  and local saves, including nested folders. New folders created while editing
+  remain open. Closing folders does not rewrite or remove source content.
+- Scalar size warnings move from 4,096 to 16,384 estimated expanded tokens.
+  The obsolete `x+y` base-case contribution was removed from the estimator.
+  Actual low-FPS warnings use completed frames, separately from compilation.
+- Oversized shader expressions no longer disappear without an explanation.
+  Draw flags expose the reason, unaffected layers render, and export rejects
+  incomplete graphs. The per-expression and total shader safety budgets remain.
+- The device-specific depth sweep, exact audit AST counts, caveats, and next
+  optimization options are in [Recursion Performance](RECURSION_PERFORMANCE.md).
+- Local build/model checks, 17 syntax tests, 52 renderer tests, 172 runtime tests,
+  TypeScript, and desktop/mobile editor/status browser suites pass. The warning
+  suite deliberately delays completed frames to verify the two-second rule and
+  clickable blue status without depending on a slow test GPU. The audit records
+  82 native-browser depth/resolution cases separately from these regressions.
 
 ## Video Export Follow-up (2026-09-29)
 

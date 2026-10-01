@@ -319,6 +319,19 @@ expression tail = 1`)}`);
   });
   assert.equal(enterPlacement.created, enterPlacement.source + 1, JSON.stringify(enterPlacement));
   assert.equal(enterPlacement.createdParent, enterPlacement.sourceParent, "Enter-created line escaped the current folder");
+  await page.locator('[data-display-mode="text"]').click();
+  const folderSource = await page.locator('[data-scene-text]').inputValue();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.locator('[data-action="apply-text"]').click();
+    assert(await page.locator('[data-display-mode="text"]').getAttribute('aria-selected') === 'true', 'Apply changed display mode');
+    assert(await page.evaluate(() => window.__leptonDebug.scene().folders.every(folder => folder.collapsed)), 'Apply left nested folders open');
+    assert.equal(await page.locator('[data-scene-text]').inputValue(), folderSource, 'Closing folders changed source');
+    await page.locator('[data-display-mode="standard"]').click();
+    assert.equal(await page.locator('[data-toggle-folder]').count(), 1);
+    await page.locator('[data-toggle-folder]').first().click();
+    await page.locator('[data-toggle-folder]').nth(1).click();
+    await page.locator('[data-display-mode="text"]').click();
+  }
   assert.deepEqual(sessionErrors, [], "Long editor session raised browser errors");
   console.log("ok - Enter inserts and focuses the next expression inside the current folder; loaded folders start closed");
 

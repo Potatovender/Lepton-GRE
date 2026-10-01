@@ -6,7 +6,7 @@ export const SITE_FILES = [
   "src/math/expression-syntax.js", "src/math/builtins.js", "src/math/colour.js", "src/math/collections.js", "packages/renderer/src/index.js",
   "src/math/ast-cache.js",
   ...["scene-runtime", "scene-keys", "snapshot-renderer", "preview-worker", "preview-client", "photo-worker", "photo-client"].map((name) => `src/compiler/${name}.js`),
-  ...["clock", "scene-clock"].map((name) => `src/animation/${name}.js`),
+  ...["clock", "scene-clock", "frame-performance"].map((name) => `src/animation/${name}.js`),
   ...["index", "options", "output", "capabilities", "exporter", "scene-worker", "panel"].map((name) => `src/video/${name}.js`),
   "src/libs/mediabunny/mediabunny.mjs", "src/libs/mediabunny/LICENSE", "src/libs/mediabunny/vendor.json",
   "src/libs/mathquill/index.global.js", "src/libs/mathquill/style.css",

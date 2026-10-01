@@ -1,4 +1,4 @@
-import { SnapshotRenderer } from "./snapshot-renderer.js?v=20260929-video-timestamps";
+import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261001-recursion-diagnostics";
 
 self.onmessage = async ({ data }) => {
   const renderer = new SnapshotRenderer();
@@ -13,6 +13,7 @@ self.onmessage = async ({ data }) => {
     const width = Math.max(1, Math.round(ratio >= 1 ? edge : edge * ratio));
     const height = Math.max(1, Math.round(ratio >= 1 ? edge / ratio : edge));
     const result = await renderer.render({ width, height, bounds, grid: false, interactive: true });
+    if (result.diagnostics.renderIssues?.length) throw new Error(`Cannot export incomplete graph: ${result.diagnostics.summary}`);
     const blob = await result.canvas.convertToBlob({ type: "image/png" });
     self.postMessage({ blob });
   } catch (error) { self.postMessage({ message: error.message }); }

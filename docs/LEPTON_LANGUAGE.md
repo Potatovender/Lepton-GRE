@@ -2,7 +2,7 @@
 
 Lepton text is the lossless text representation of the Standard workspace. Order,
 folders, comments, settings, and draw-component order round-trip between both
-views. Loaded folders begin closed in Standard view. Expanding or collapsing
+views. Loaded folders and folders imported with Apply to graph begin closed in Standard view. Expanding or collapsing
 them is editor-only state and never changes this text representation. Pressing
 Enter on a Standard-view data row inserts a new expression immediately below it
 and preserves the current folder.
@@ -313,7 +313,9 @@ The y-then-x convention follows [atan2](https://developer.mozilla.org/en-US/docs
 - Expressions and sliders receive warnings for confusing reserved substrings; parameterized functions do not.
 - Function-local parameters may shadow outer entries with a warning and use the local value.
 - Recursive references stop at `max_recursion` and return `0` at the base case.
-- Large recursion estimates are blue warnings because the generated graph may be slow or may fail shader limits; they are not naming or syntax errors.
+- Expanded scalar expressions above 16,384 estimated tokens receive a blue size warning. This estimate counts syntax tokens, not exact AST nodes or GPU instructions. Large expressions are still attempted; the warning is not a predicted FPS limit.
+- During playback, visible graphs that remain below 15 completed frames per second for more than two seconds receive a blue performance warning on their draw layers. Pausing, editing, resizing, or hiding the page resets that measurement; compilation before the first frame is excluded. The warning clears after two seconds of recovery.
+- A layer exceeding the compiler's 200,000-character expanded-expression budget is skipped with a blue explanation. Unrelated valid layers remain visible. Photo/video exports reject incomplete output instead of silently exporting missing layers. Reduce recursion depth or repeated calls before retrying.
 
 In Standard math fields, recognized entry IDs are displayed upright like function
 names. Coordinates and function-local inputs retain ordinary mathematical italic

@@ -114,6 +114,30 @@ folder Problems = {
   const box = await tooltip.boundingBox();
   assert(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 391 && box.y + box.height <= 741, "Diagnostic escaped mobile viewport");
   await page.screenshot({ path: `${output}/mobile.png` });
+
+  // Delay real completed frames to exercise the FPS warning without relying on GPU speed.
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.__frameDelay = 160;
+    window.Worker = class extends NativeWorker {
+      set onmessage(callback) {
+        super.onmessage = (event) => event.data.type === "frame"
+          ? setTimeout(() => callback.call(this, event), window.__frameDelay)
+          : callback.call(this, event);
+      }
+    };
+  });
+  await page.goto(`${base}app.html?scene=${encodeURIComponent("time unbounded clock = 0\nexpression eq = sin(x+clock)\ndraw(eq)")}`);
+  await page.locator('[data-action="toggle-global-time"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-entry-kind="draws"] [data-status-message]')?.dataset.statusMessage.includes("below 15 FPS"));
+  const performanceFlag = page.locator('[data-entry-kind="draws"] [data-status-message]');
+  assert((await performanceFlag.getAttribute("class")).includes("info"));
+  await performanceFlag.click();
+  assert.match(await tooltip.textContent(), /over two seconds/);
+  await page.screenshot({ path: `${output}/performance.png` });
+  await page.keyboard.press("Escape");
+  await page.locator('[data-action="toggle-global-time"]').click();
+  await page.waitForFunction(() => !document.querySelector('[data-entry-kind="draws"] [data-status-message]')?.dataset.statusMessage.includes("below 15 FPS"));
   assert.deepEqual(errors, [], "Browser errors");
   console.log("ok - row/channel/settings status clicks, keyboard, hover, dismissal, live diagnostics, drag handles and mobile placement");
 } catch (error) {

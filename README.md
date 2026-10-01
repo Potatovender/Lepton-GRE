@@ -12,6 +12,7 @@ Lepton makes images, animations, and graphs from equations in the browser. A sce
 - Development and releases: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - Extension guide and proposed web/desktop roadmap: [docs/EXTENDING_LEPTON.md](docs/EXTENDING_LEPTON.md)
 - Data-analysis gap assessment: [docs/DATA_ANALYSIS.md](docs/DATA_ANALYSIS.md)
+- Recursion limits and measured performance: [docs/RECURSION_PERFORMANCE.md](docs/RECURSION_PERFORMANCE.md)
 
 ## Features
 

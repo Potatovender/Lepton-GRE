@@ -2659,6 +2659,11 @@ textarea.compact-field,
   position: absolute;
   left: 14px;
   bottom: 12px;
+  max-width: calc(100% - 28px);
+  max-height: 35%;
+  box-sizing: border-box;
+  overflow: auto;
+  overflow-wrap: anywhere;
   padding: 7px 9px;
   border: 1px solid #cfd5df;
   border-radius: 5px;
@@ -2672,6 +2677,14 @@ textarea.compact-field,
   background: rgba(255, 246, 246, 0.96);
   color: #9f2f28;
 }
+
+.render-overlay-info {
+  border-color: #9cbce4;
+  background: rgba(241, 247, 255, 0.96);
+  color: #245e9b;
+}
+
+.time-fps-slow { color: #245e9b; }
 
 .keyboard-toggle {
   position: absolute;

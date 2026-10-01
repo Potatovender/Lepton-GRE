@@ -1,12 +1,13 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20260929-video-timestamps";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20260929-video-timestamps";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20260929-video-timestamps";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20260929-video-timestamps";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20260929-video-timestamps";
-import { PreviewClient } from "./compiler/preview-client.js?v=20260929-video-timestamps";
-import { openVideoPanel } from "./video/panel.js?v=20260929-video-timestamps";
-import { createAstCache } from "./math/ast-cache.js?v=20260929-video-timestamps";
-import { exportPhoto } from "./compiler/photo-client.js?v=20260929-video-timestamps";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261001-recursion-diagnostics";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261001-recursion-diagnostics";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261001-recursion-diagnostics";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261001-recursion-diagnostics";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261001-recursion-diagnostics";
+import { PreviewClient } from "./compiler/preview-client.js?v=20261001-recursion-diagnostics";
+import { openVideoPanel } from "./video/panel.js?v=20261001-recursion-diagnostics";
+import { createAstCache } from "./math/ast-cache.js?v=20261001-recursion-diagnostics";
+import { exportPhoto } from "./compiler/photo-client.js?v=20261001-recursion-diagnostics";
+import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261001-recursion-diagnostics";
 
 const cachedSyntax = createAstCache();
 
@@ -55,7 +56,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20260929-video-timestamps";
+const APP_VERSION = "20261001-recursion-diagnostics";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -147,7 +148,8 @@ const COMMON_ASPECT_RATIOS = [
   { value: "16:9", label: "16:9" },
   { value: "2:1", label: "2:1" }
 ];
-const NODE_BLUE_FLAG_THRESHOLD = 2 ** 12;
+const NODE_BLUE_FLAG_THRESHOLD = 2 ** 14;
+const VALIDATION_EXPANSION_BUDGET = 2 ** 12;
 const NODE_COUNT_DISPLAY_CAP = 2 ** 16;
 const DEFAULT_DRAW_FUNCTION = { id: "f1", kind: "variable", expression: "x" };
 const DEFAULT_DRAW_COLOR = { id: "default", label: "default", red: "x", green: "x", blue: "x" };
@@ -316,8 +318,13 @@ let boundaryPulseTimer = 0;
 let aspectRatioCustomOpen = false;
 let animationFrameId = 0;
 let animationLastTimestamp = 0;
-let animationFpsWindowStart = 0;
-let animationFpsFrameCount = 0;
+const animationPerformance = new FramePerformanceMonitor();
+document.addEventListener("visibilitychange", () => {
+  animationPerformance.reset();
+  animationFps = 0;
+  updateFpsCounter();
+  if (latestDiagnostics) updateStatusLights(latestDiagnostics);
+});
 let animationFps = 0;
 let latestDiagnostics = null;
 const TIME_VARIABLE_RATE = 1;
@@ -955,7 +962,7 @@ function applyTextDraft(switchToStandard = false) {
   const field = root.querySelector("[data-scene-text]");
   const source = field?.value ?? textDraft ?? "";
   const before = sceneSnapshot();
-  const imported = importScene(source);
+  const imported = importLoadedScene(source);
   scene = imported;
   viewport = sceneViewport();
   if (isValidViewport(viewport)) saveViewport();
@@ -4004,8 +4011,7 @@ function toggleTimePlayback(id) {
 function startAnimationLoop() {
   if (animationFrameId) return;
   animationLastTimestamp = 0;
-  animationFpsWindowStart = 0;
-  animationFpsFrameCount = 0;
+  animationPerformance.reset();
   animationFps = 0;
   updateFpsCounter();
   animationFrameId = requestAnimationFrame(stepTimeAnimation);
@@ -4016,8 +4022,7 @@ function stopAnimationLoop() {
   cancelAnimationFrame(animationFrameId);
   animationFrameId = 0;
   animationLastTimestamp = 0;
-  animationFpsWindowStart = 0;
-  animationFpsFrameCount = 0;
+  animationPerformance.reset();
   animationFps = 0;
   updateFpsCounter();
 }
@@ -4039,19 +4044,21 @@ function stepTimeAnimation(timestamp) {
 }
 
 function recordAnimationFrame(timestamp) {
-  if (!animationFpsWindowStart) animationFpsWindowStart = timestamp;
-  animationFpsFrameCount += 1;
-  const elapsed = timestamp - animationFpsWindowStart;
-  if (elapsed < 500) return;
-  animationFps = Math.max(0, Math.round((animationFpsFrameCount * 1000) / elapsed));
-  animationFpsWindowStart = timestamp;
-  animationFpsFrameCount = 0;
+  const wasSlow = animationPerformance.slow;
+  const changed = animationPerformance.frame(timestamp, playingTimeIds.size > 0 && !document.hidden);
+  if (!changed && wasSlow === animationPerformance.slow) return;
+  animationFps = Math.round(animationPerformance.fps);
   updateFpsCounter();
+  if (wasSlow !== animationPerformance.slow && latestDiagnostics) updateStatusLights(latestDiagnostics);
 }
 
 function updateFpsCounter() {
   const counter = root?.querySelector?.("[data-fps-counter]");
-  if (counter) counter.textContent = playingTimeIds.size ? `${animationFps} FPS` : "-- FPS";
+  if (counter) {
+    counter.textContent = playingTimeIds.size ? `${animationFps} FPS` : "-- FPS";
+    counter.classList.toggle("time-fps-slow", animationPerformance.slow);
+    counter.title = animationPerformance.slow ? "Graph stayed below 15 FPS for over two seconds. Reduce recursion depth, repeated calculations, or the rendered size." : "Completed graph frames per second";
+  }
 }
 
 function advanceTimeVariables(deltaSeconds) {
@@ -4631,7 +4638,12 @@ function requestWorkerPreview(transient = false) {
   const canvas = root.querySelector(".grid-canvas");
   if (!canvas) return;
   if (!previewClient) previewClient = new PreviewClient({
-    onStatus: (status) => { if (!status.transient) updateCompileStatus({ state: "loading" }); },
+    onStatus: (status) => {
+      if (!status.transient) {
+        animationPerformance.reset();
+        updateCompileStatus({ state: "loading" });
+      }
+    },
     onDiagnostics: (result) => {
       latestDiagnostics = result.diagnostics;
       verifiedSceneKey = result.sceneKey;
@@ -4919,7 +4931,15 @@ function renderSceneWebGlInto(canvas, options = {}) {
       width, height, dpr: options.dpr ?? window.devicePixelRatio ?? 1,
       bounds: visibleViewport,
       clipBounds: scene.settings.drawOnlyInsideBoundary && isValidViewport(clip) ? clip : null,
-      background, floats, shaderKey: webGlShaderCacheKey(), fragmentSource: buildFragmentShader,
+      background, floats, shaderKey: webGlShaderCacheKey(), fragmentSource: () => {
+        const issues = [];
+        const source = buildFragmentShader(issues);
+        if (options.updateOverlay !== false) {
+          latestDiagnostics = applyShaderIssues(latestDiagnostics ?? validateSceneSync(), issues);
+          updateStatusLights(latestDiagnostics);
+        }
+        return source;
+      },
       maxSourceLength: MAX_SAFE_FRAGMENT_SOURCE_LENGTH, synchronous: options.synchronous === true
     });
     window.__leptonLastShaderCompileMs = result.compileMs;
@@ -4979,7 +4999,7 @@ function showShaderError(log, sourceLength) {
 
 function clearShaderError() {
   const overlay = root.querySelector(".render-overlay");
-  if (overlay?.classList.contains("render-overlay-error")) overlay.remove();
+  if (overlay?.classList.contains("render-overlay-error") && !latestDiagnostics?.renderIssues?.length) overlay.remove();
 }
 
 function resolveBackgroundColor() {
@@ -4996,11 +5016,11 @@ function resolveBackgroundColor() {
   }
 }
 
-function buildFragmentShader() {
+function buildFragmentShader(issues = []) {
   const previous = activeCollectionGenerator;
   activeCollectionGenerator = { helpers: [], next: 0 };
   try {
-    const source = buildFragmentShaderBody();
+    const source = buildFragmentShaderBody(issues);
     return activeCollectionGenerator.modern || activeCollectionGenerator.helpers.length || source.includes("float listIndex=")
       ? `#version 300 es\nprecision highp float;\nout vec4 leptonFragmentColor;\n${source.replaceAll("gl_FragColor", "leptonFragmentColor")}`
       : source;
@@ -5008,7 +5028,7 @@ function buildFragmentShader() {
   finally { activeCollectionGenerator = previous; }
 }
 
-function buildFragmentShaderBody() {
+function buildFragmentShaderBody(issues = []) {
   if (window.__leptonForceGradient) {
     return `
       precision highp float;
@@ -5023,9 +5043,9 @@ function buildFragmentShaderBody() {
   const env = sceneFunctionEnv(true);
   const boundaryEnv = boundaryExpressionEnv(true);
   const dynamicMap = timeUniformGlslMap();
-  const layers = dataEntries(scene.draws)
-    .map((draw) => {
-      if (draw?.hidden) return null;
+  const layers = scene.draws
+    .map((draw, index) => {
+      if (isCommentEntry(draw) || draw?.hidden) return null;
       const fn = resolveFunctionEntry(draw?.equationId);
       const color = resolveColorEntry(drawComponent(draw, "color")?.id ?? "default");
       const restriction = resolveBoundaryEntry(drawComponent(draw, "boundary")?.id ?? "default");
@@ -5039,6 +5059,7 @@ function buildFragmentShaderBody() {
       ) {
         return null;
       }
+      const helperCount = activeCollectionGenerator.helpers.length;
       try {
         const target = drawTargetText(draw);
         const collection = usesCollections(target, env) ? collectionGlsl(target, env, null, dynamicMap) : null;
@@ -5055,7 +5076,9 @@ function buildFragmentShaderBody() {
           transparency: expressionToGlsl(transparency.expression, env, "z", [], scene.settings.angleMode, dynamicMap),
           boundCheck: "boundValue >= 0.0"
         };
-      } catch {
+      } catch (error) {
+        activeCollectionGenerator.helpers.length = helperCount;
+        issues.push({ index, status: isShaderResourceError(error) ? "info" : "invalid", message: `Draw layer "${draw.equationId}" skipped: ${error.message}` });
         return null;
       }
     })
@@ -5813,7 +5836,9 @@ function scalarExpressionToGlsl(source, env = {}, zName = null, stack = [], angl
   expression = convertPowers(expression);
   expression = normalizeGlslNumbers(expression);
   if (expression.length > 200000) {
-    throw new Error("Expanded expression is too large");
+    const error = new Error("Expanded expression exceeds the 200,000-character compiler budget. Reduce maximum recursion depth or simplify repeated calls.");
+    error.code = "SHADER_SIZE";
+    throw error;
   }
   if (!/^[\dA-Za-z_+\-*/().,\s~<>=!]+$/.test(expression)) {
     throw new Error(`Unsupported GLSL expression: ${source}`);
@@ -6535,6 +6560,7 @@ function validateExpression(source, env, stack = [], localNames = new Set()) {
       const ctx = { x: 1, y: 1, env: buildRuntimeEnv(env), locals: Object.fromEntries([...localNames].map((name) => [name, 1])) };
       const nodeCount = plan.cost(ctx);
       if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes at x=y=1); graph may not render` };
+      if (nodeCount > VALIDATION_EXPANSION_BUDGET) return { status: "valid", message: "Expression dependencies are valid; rendering is checked during compilation" };
       plan.evaluate(ctx);
       emitCollectionPlan(plan, { helpers: [], next: 0 }, { x: "x", y: "y", locals: Object.fromEntries([...localNames].map((name) => [name, "1.0"])) });
       return { status: "valid", message: plan.kind === "list" ? "List expression is valid" : "Expression is valid" };
@@ -6545,8 +6571,9 @@ function validateExpression(source, env, stack = [], localNames = new Set()) {
     assertExpressionDependencies(source, env, localNames);
     const nodeCount = estimateExpandedNodeCount(source, env, stack, new Map(), localNames);
     if (nodeCount > NODE_BLUE_FLAG_THRESHOLD) {
-      return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} nodes); graph may not render` };
+      return { status: "info", message: `Equation is large (${formatNodeCount(nodeCount)} estimated expanded tokens); graph may not render. This is a size warning, not a measured FPS limit.` };
     }
+    if (nodeCount > VALIDATION_EXPANSION_BUDGET) return { status: "valid", message: "Expression dependencies are valid; rendering is checked during compilation" };
     expressionToGlsl(source, env, null, stack, scene.settings.angleMode, Object.fromEntries([...localNames].map((name) => [name, name === "x" ? "x" : name === "y" ? "y" : "0.0"])));
     const runtimeEnv = buildRuntimeEnv(env);
     const previousLocals = runtimeEnv.__locals;
@@ -6558,7 +6585,7 @@ function validateExpression(source, env, stack = [], localNames = new Set()) {
     }
     return { status: "valid", message: "Expression is valid" };
   } catch (error) {
-    return { status: error.code === "LIST_SIZE" ? "info" : "invalid", message: error.message };
+    return { status: isShaderResourceError(error) ? "info" : "invalid", message: error.message };
   }
 }
 
@@ -6572,7 +6599,7 @@ function estimateExpandedNodeCount(source, env = {}, stack = [], memo = new Map(
     const entry = envEntry(env, name);
     if (BUILTIN_NAMES.has(name) || localNames.has(name) || !entry) continue;
     if (stack.length >= recursionLimit()) {
-      total = cappedNodeAdd(total, 2);
+      // The existing identifier token becomes the scalar base case, 0.
       continue;
     }
     const memoKey = `${name}:${stack.length}`;
@@ -6627,6 +6654,14 @@ function updateStatusIndicator(light, diagnostic) {
 }
 
 function updateStatusLights(diagnostics) {
+  if (animationPerformance.slow && playingTimeIds.size) {
+    diagnostics = structuredClone(diagnostics);
+    diagnostics.draws = diagnostics.draws.map((item, index) => scene.draws[index]?.hidden || isCommentEntry(scene.draws[index]) ? item : combineDiagnostics([
+      item.status === "info" ? null : item,
+      { status: "info", message: `Graph stayed below 15 FPS for over two seconds on this device. Reduce recursion depth, repeated calculations, or the rendered size.${item.status === "info" ? ` ${item.message}` : ""}` }
+    ]));
+    diagnostics.folders = aggregateFolderDiagnostics(diagnostics);
+  }
   if (settingsPanelOpen || activeTab === "settings") {
     const gridStatus = diagnostics.settings?.[0];
     const status = root.querySelector(".settings-section-title .entry-status");
@@ -6659,18 +6694,40 @@ function updateStatusLights(diagnostics) {
   });
 
   let overlay = root.querySelector(".render-overlay");
-  if (diagnostics.hasErrors && !overlay && root.querySelector(".renderer-pane")) {
+  const skipped = diagnostics.renderIssues?.length > 0;
+  if ((diagnostics.hasErrors || skipped) && !overlay && root.querySelector(".renderer-pane")) {
     overlay = document.createElement("div");
     overlay.className = "render-overlay render-overlay-error";
     root.querySelector(".renderer-pane").append(overlay);
   }
-  if (overlay) { overlay.hidden = !diagnostics.hasErrors; overlay.textContent = diagnostics.hasErrors ? `Some layers skipped: ${diagnostics.summary}` : ""; }
+  if (overlay) {
+    overlay.hidden = !diagnostics.hasErrors && !skipped;
+    overlay.classList.toggle("render-overlay-info", !diagnostics.hasErrors && skipped);
+    overlay.textContent = diagnostics.hasErrors || skipped ? `Some layers skipped: ${diagnostics.summary}` : "";
+  }
 }
 
 function combineDiagnostics(items) {
   const present = items.filter(Boolean);
   return present.reduce((best, item) => DIAGNOSTIC_PRIORITY[item.status] > DIAGNOSTIC_PRIORITY[best.status] ? item : best,
     { status: "valid", message: "Expression is valid" });
+}
+
+function isShaderResourceError(error) {
+  return error.code === "SHADER_SIZE" || error.code === "LIST_SIZE" || error instanceof RangeError;
+}
+
+function applyShaderIssues(diagnostics, issues) {
+  if (!issues.length) return diagnostics;
+  const result = structuredClone(diagnostics);
+  result.renderIssues = issues;
+  for (const issue of issues) {
+    result.draws[issue.index] = combineDiagnostics([issue, result.draws[issue.index]]);
+  }
+  result.folders = aggregateFolderDiagnostics(result);
+  result.hasErrors ||= issues.some((issue) => issue.status === "invalid");
+  if (!diagnostics.hasErrors) result.summary = `${issues[0].message}${issues.length > 1 ? ` (${issues.length - 1} other layers skipped)` : ""}`;
+  return result;
 }
 
 function handleMathBeforeInput(field, event) {

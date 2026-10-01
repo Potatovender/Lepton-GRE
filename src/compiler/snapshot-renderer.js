@@ -1,6 +1,6 @@
-import { createSceneRuntime } from "./scene-runtime.js?v=20260929-video-timestamps";
-import { sceneProgramKey, sceneDiagnosticKey } from "./scene-keys.js?v=20260929-video-timestamps";
-import { renderFrameAsync, disposeRenderer } from "../../packages/renderer/src/index.js?v=20260929-video-timestamps";
+import { createSceneRuntime } from "./scene-runtime.js?v=20261001-recursion-diagnostics";
+import { sceneProgramKey, sceneDiagnosticKey } from "./scene-keys.js?v=20261001-recursion-diagnostics";
+import { renderFrameAsync, disposeRenderer } from "../../packages/renderer/src/index.js?v=20261001-recursion-diagnostics";
 
 /** One private scene evaluator and GPU context, independent of the editor DOM. */
 export class SnapshotRenderer {
@@ -31,7 +31,7 @@ export class SnapshotRenderer {
   async render({ width, height, bounds, baseViewport, overlayScale = 1, points = true, grid = true, clockValues = false, interactive = false, signal, onPhase, onDiagnostics }) {
     signal?.throwIfAborted();
     onPhase?.("validating");
-    const diagnostics = this.validate(clockValues);
+    let diagnostics = this.validate(clockValues);
     onDiagnostics?.(diagnostics);
     const clip = this.runtime.sceneViewport();
     const viewport = bounds ?? this.runtime.displayViewportForSize(baseViewport ?? clip, width, height);
@@ -44,19 +44,22 @@ export class SnapshotRenderer {
     let program = this.sourceCache.get(key);
     if (!program) {
       onPhase?.("compiling");
-      const source = this.runtime.buildFragmentShader();
+      const issues = [];
+      const source = this.runtime.buildFragmentShader(issues);
       if (source.length > 1_500_000) throw new Error("Generated shader exceeds the source-size safety budget");
       // Display spelling and numeric formatting can change without changing GLSL.
       // Cache linked programs by emitted code, not by the editor's raw strings.
       const digest = globalThis.crypto?.subtle
         ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source)) : null;
-      program = { source, shaderKey: digest ? Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("") : source };
+      program = { source, issues, shaderKey: digest ? Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("") : source };
       signal?.throwIfAborted();
       this.sourceCache.set(key, program);
       this.buildCount += 1;
       while (this.sourceCache.size > 3) this.sourceCache.delete(this.sourceCache.keys().next().value);
     }
     const { source, shaderKey } = program;
+    diagnostics = this.runtime.applyShaderIssues(diagnostics, program.issues);
+    if (program.issues.length) onDiagnostics?.(diagnostics);
     const entries = this.runtime.timeVariableEntries();
     const floats = Object.fromEntries(this.runtime.timeUniformBindings().map(({ id, uniform }) => [uniform, this.runtime.evaluateScalarSetting(entries.find(({ entry }) => entry.id === id)?.entry.expression)]));
     floats.u_random_seed = Number(this.scene.settings.randomSeed) || 1;

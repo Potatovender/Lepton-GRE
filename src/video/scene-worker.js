@@ -1,6 +1,6 @@
-import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20260929-video-timestamps";
-import { createSceneClock } from "../animation/scene-clock.js?v=20260929-video-timestamps";
-import { createVideoExporter } from "./exporter.js?v=20260929-video-timestamps";
+import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20261001-recursion-diagnostics";
+import { createSceneClock } from "../animation/scene-clock.js?v=20261001-recursion-diagnostics";
+import { createVideoExporter } from "./exporter.js?v=20261001-recursion-diagnostics";
 import * as mediabunny from "../libs/mediabunny/mediabunny.mjs";
 
 const exporter = createVideoExporter(mediabunny);
@@ -36,6 +36,7 @@ self.onmessage = async ({ data }) => {
       if (diagnostics.hasErrors) throw new Error(`Cannot export incomplete graph: ${diagnostics.summary}`);
       const result = await renderer.render({ width: data.options.width, height: data.options.height,
         bounds, grid: data.grid, clockValues: true, interactive: true, signal: controller.signal });
+      if (result.diagnostics.renderIssues?.length) throw new Error(`Cannot export incomplete graph: ${result.diagnostics.summary}`);
       return result.canvas;
     };
     const method = data.type === "estimate" ? "estimateVideo" : "exportVideo";

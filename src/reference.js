@@ -1,4 +1,4 @@
-import { renderFunctionReference } from "./reference-data.js?v=20260929-video-timestamps";
+import { renderFunctionReference } from "./reference-data.js?v=20261001-recursion-diagnostics";
 
 const catalogue = document.querySelector("[data-function-catalogue]");
 // The release build includes the complete catalogue in HTML for offline reading

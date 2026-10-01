@@ -1,0 +1,5705 @@
+{
+  "baseline": "77f6bacb79590fd99b2fe4bd15578ca97819ffb3",
+  "date": "2026-10-01",
+  "metric": "Uncapped completed render/present throughput, not display refresh FPS. uncappedNodes and rowNodes are the old token estimate, not AST counts. See report for AST counts.",
+  "runs": [
+    {
+      "name": "safari-960",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15",
+      "results": [
+        {
+          "family": "binary",
+          "depth": 1,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "100",
+          "rowNodes": 36,
+          "expressionLength": 192,
+          "expansionMs": 1,
+          "firstFrameMs": 28,
+          "sourceLength": 7517,
+          "compileMs": 10.999999999999993,
+          "frames": 883,
+          "fps": 160.54545454545453,
+          "windows": [
+            {
+              "elapsed": 501,
+              "fps": 263.47305389221555
+            },
+            {
+              "elapsed": 1001,
+              "fps": 260
+            },
+            {
+              "elapsed": 1507,
+              "fps": 183.79446640316206
+            },
+            {
+              "elapsed": 2008,
+              "fps": 83.83233532934132
+            },
+            {
+              "elapsed": 2509,
+              "fps": 125.74850299401197
+            },
+            {
+              "elapsed": 3009,
+              "fps": 128
+            },
+            {
+              "elapsed": 3510,
+              "fps": 127.7445109780439
+            },
+            {
+              "elapsed": 4012,
+              "fps": 177.29083665338646
+            },
+            {
+              "elapsed": 4517,
+              "fps": 156.43564356435644
+            },
+            {
+              "elapsed": 5018,
+              "fps": 167.66467065868264
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.4473386183465453,
+          "batchCount": 11,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1785433008,
+              "min": 40,
+              "max": 219
+            },
+            {
+              "hash": 2009078272,
+              "min": 40,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 2,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "228",
+          "rowNodes": 100,
+          "expressionLength": 444,
+          "expansionMs": 9.000000000000007,
+          "firstFrameMs": 228,
+          "sourceLength": 7769,
+          "compileMs": 102.00000000000003,
+          "frames": 573,
+          "fps": 103.28046142754145,
+          "windows": [
+            {
+              "elapsed": 503,
+              "fps": 77.53479125248509
+            },
+            {
+              "elapsed": 1006,
+              "fps": 93.43936381709742
+            },
+            {
+              "elapsed": 1528,
+              "fps": 93.86973180076629
+            },
+            {
+              "elapsed": 2111,
+              "fps": 60.03430531732418
+            },
+            {
+              "elapsed": 2703,
+              "fps": 89.52702702702703
+            },
+            {
+              "elapsed": 3209,
+              "fps": 108.69565217391305
+            },
+            {
+              "elapsed": 3714,
+              "fps": 110.89108910891089
+            },
+            {
+              "elapsed": 4217,
+              "fps": 147.117296222664
+            },
+            {
+              "elapsed": 4719,
+              "fps": 115.5378486055777
+            },
+            {
+              "elapsed": 5221,
+              "fps": 143.42629482071712
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 4.614310645724251,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3784881296,
+              "min": 32,
+              "max": 219
+            },
+            {
+              "hash": 2197847360,
+              "min": 32,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 3,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "484",
+          "rowNodes": 228,
+          "expressionLength": 948,
+          "expansionMs": 23,
+          "firstFrameMs": 203,
+          "sourceLength": 8273,
+          "compileMs": 94,
+          "frames": 711,
+          "fps": 128.96789406856522,
+          "windows": [
+            {
+              "elapsed": 502.0000000000001,
+              "fps": 137.45019920318722
+            },
+            {
+              "elapsed": 1008,
+              "fps": 144.26877470355734
+            },
+            {
+              "elapsed": 1510,
+              "fps": 125.4980079681275
+            },
+            {
+              "elapsed": 2010,
+              "fps": 104
+            },
+            {
+              "elapsed": 2516,
+              "fps": 130.43478260869566
+            },
+            {
+              "elapsed": 3020,
+              "fps": 148.8095238095238
+            },
+            {
+              "elapsed": 3525,
+              "fps": 170.2970297029703
+            },
+            {
+              "elapsed": 4075,
+              "fps": 92.72727272727273
+            },
+            {
+              "elapsed": 4633,
+              "fps": 123.65591397849462
+            },
+            {
+              "elapsed": 5133,
+              "fps": 132
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.96905766526019,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3486067392,
+              "min": 29,
+              "max": 219
+            },
+            {
+              "hash": 1958871456,
+              "min": 29,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 4,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "996",
+          "rowNodes": 484,
+          "expressionLength": 1956,
+          "expansionMs": 26,
+          "firstFrameMs": 196,
+          "sourceLength": 9281,
+          "compileMs": 66,
+          "frames": 553,
+          "fps": 100.52717687693146,
+          "windows": [
+            {
+              "elapsed": 576,
+              "fps": 36.458333333333336
+            },
+            {
+              "elapsed": 1081,
+              "fps": 75.24752475247524
+            },
+            {
+              "elapsed": 1583,
+              "fps": 123.50597609561753
+            },
+            {
+              "elapsed": 2085,
+              "fps": 135.4581673306773
+            },
+            {
+              "elapsed": 2669,
+              "fps": 107.87671232876713
+            },
+            {
+              "elapsed": 3192,
+              "fps": 105.16252390057362
+            },
+            {
+              "elapsed": 3790,
+              "fps": 105.35117056856187
+            },
+            {
+              "elapsed": 4297.000000000001,
+              "fps": 104.53648915187358
+            },
+            {
+              "elapsed": 4800,
+              "fps": 127.23658051689884
+            },
+            {
+              "elapsed": 5355,
+              "fps": 93.69369369369369
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 4.882459312839058,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1215489792,
+              "min": 28,
+              "max": 219
+            },
+            {
+              "hash": 3402668352,
+              "min": 28,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 5,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "2020",
+          "rowNodes": 996,
+          "expressionLength": 3972,
+          "expansionMs": 33.000000000000014,
+          "firstFrameMs": 379,
+          "sourceLength": 11297,
+          "compileMs": 112,
+          "frames": 562,
+          "fps": 102.03340595497458,
+          "windows": [
+            {
+              "elapsed": 508,
+              "fps": 59.05511811023622
+            },
+            {
+              "elapsed": 1009,
+              "fps": 145.70858283433134
+            },
+            {
+              "elapsed": 1509,
+              "fps": 76
+            },
+            {
+              "elapsed": 2027,
+              "fps": 92.66409266409266
+            },
+            {
+              "elapsed": 2535,
+              "fps": 102.36220472440945
+            },
+            {
+              "elapsed": 3083,
+              "fps": 102.18978102189782
+            },
+            {
+              "elapsed": 3671,
+              "fps": 85.03401360544218
+            },
+            {
+              "elapsed": 4198,
+              "fps": 85.38899430740038
+            },
+            {
+              "elapsed": 4704.000000000001,
+              "fps": 140.3162055335966
+            },
+            {
+              "elapsed": 5204.000000000001,
+              "fps": 132
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 4.603202846975096,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 95061792,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 2512264352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 6,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "4068",
+          "rowNodes": 2020,
+          "expressionLength": 8004,
+          "expansionMs": 64,
+          "firstFrameMs": 395,
+          "sourceLength": 15329,
+          "compileMs": 107,
+          "frames": 716,
+          "fps": 127.99427958526991,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 48
+            },
+            {
+              "elapsed": 1003,
+              "fps": 145.1292246520875
+            },
+            {
+              "elapsed": 1505.0000000000002,
+              "fps": 127.4900398406374
+            },
+            {
+              "elapsed": 2006,
+              "fps": 159.68063872255496
+            },
+            {
+              "elapsed": 2509,
+              "fps": 178.92644135188866
+            },
+            {
+              "elapsed": 3016.0000000000005,
+              "fps": 102.56410256410247
+            },
+            {
+              "elapsed": 3519.0000000000005,
+              "fps": 137.1769383697813
+            },
+            {
+              "elapsed": 4027,
+              "fps": 114.1732283464568
+            },
+            {
+              "elapsed": 4534,
+              "fps": 147.92899408284023
+            },
+            {
+              "elapsed": 5070.000000000001,
+              "fps": 117.53731343283562
+            },
+            {
+              "elapsed": 5594.000000000001,
+              "fps": 129.7709923664122
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.7220670391061477,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3900724288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1765510352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 7,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "8164",
+          "rowNodes": 4068,
+          "expressionLength": 16068,
+          "expansionMs": 69,
+          "firstFrameMs": 622,
+          "sourceLength": 23393,
+          "compileMs": 89,
+          "frames": 725,
+          "fps": 131.74632018898782,
+          "windows": [
+            {
+              "elapsed": 507,
+              "fps": 126.23274161735701
+            },
+            {
+              "elapsed": 1025,
+              "fps": 129.34362934362935
+            },
+            {
+              "elapsed": 1577,
+              "fps": 97.82608695652173
+            },
+            {
+              "elapsed": 2080,
+              "fps": 141.15308151093438
+            },
+            {
+              "elapsed": 2620,
+              "fps": 170.37037037037038
+            },
+            {
+              "elapsed": 3221,
+              "fps": 109.81697171381032
+            },
+            {
+              "elapsed": 3725,
+              "fps": 105.15873015873017
+            },
+            {
+              "elapsed": 4229,
+              "fps": 125
+            },
+            {
+              "elapsed": 4733,
+              "fps": 180.55555555555554
+            },
+            {
+              "elapsed": 5236,
+              "fps": 143.14115308151094
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.84965517241378,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3632888288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1725909152,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 8,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "16356",
+          "rowNodes": 8164,
+          "expressionLength": 32196,
+          "expansionMs": 162,
+          "firstFrameMs": 431.0000000000001,
+          "sourceLength": 39521,
+          "compileMs": 151,
+          "frames": 758,
+          "fps": 137.71802325581396,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 106
+            },
+            {
+              "elapsed": 1002,
+              "fps": 105.57768924302789
+            },
+            {
+              "elapsed": 1506,
+              "fps": 123.01587301587301
+            },
+            {
+              "elapsed": 2098,
+              "fps": 118.24324324324324
+            },
+            {
+              "elapsed": 2599,
+              "fps": 171.6566866267465
+            },
+            {
+              "elapsed": 3102,
+              "fps": 125.24850894632206
+            },
+            {
+              "elapsed": 3603,
+              "fps": 143.7125748502994
+            },
+            {
+              "elapsed": 4107,
+              "fps": 164.68253968253967
+            },
+            {
+              "elapsed": 4610,
+              "fps": 161.0337972166998
+            },
+            {
+              "elapsed": 5116,
+              "fps": 167.98418972332016
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.5606860158311293,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3503128288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1616456352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 9,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "32740",
+          "rowNodes": 16356,
+          "expressionLength": 64452,
+          "expansionMs": 399,
+          "firstFrameMs": 746,
+          "sourceLength": 71777,
+          "compileMs": 388.9999999999999,
+          "frames": 780,
+          "fps": 140.4140414041404,
+          "windows": [
+            {
+              "elapsed": 524,
+              "fps": 122.13740458015268
+            },
+            {
+              "elapsed": 1117,
+              "fps": 119.73018549747049
+            },
+            {
+              "elapsed": 1667,
+              "fps": 118.18181818181819
+            },
+            {
+              "elapsed": 2167,
+              "fps": 164
+            },
+            {
+              "elapsed": 2734,
+              "fps": 126.98412698412699
+            },
+            {
+              "elapsed": 3237,
+              "fps": 172.96222664015906
+            },
+            {
+              "elapsed": 3743,
+              "fps": 185.77075098814228
+            },
+            {
+              "elapsed": 4247,
+              "fps": 113.0952380952381
+            },
+            {
+              "elapsed": 4747,
+              "fps": 154
+            },
+            {
+              "elapsed": 5286,
+              "fps": 135.43599257884972
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.3230769230769317,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3448812288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 929028352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 10,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "65508",
+          "rowNodes": 32740,
+          "expressionLength": 128964,
+          "expansionMs": 685,
+          "firstFrameMs": 1535,
+          "sourceLength": 136289,
+          "compileMs": 863,
+          "frames": 635,
+          "fps": 115.41257724463831,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 140
+            },
+            {
+              "elapsed": 1001,
+              "fps": 147.70459081836327
+            },
+            {
+              "elapsed": 1551,
+              "fps": 107.27272727272727
+            },
+            {
+              "elapsed": 2147.000000000001,
+              "fps": 115.77181208053673
+            },
+            {
+              "elapsed": 2729,
+              "fps": 80.75601374570459
+            },
+            {
+              "elapsed": 3257,
+              "fps": 89.01515151515152
+            },
+            {
+              "elapsed": 3805,
+              "fps": 114.96350364963503
+            },
+            {
+              "elapsed": 4400,
+              "fps": 109.24369747899159
+            },
+            {
+              "elapsed": 4960,
+              "fps": 117.85714285714286
+            },
+            {
+              "elapsed": 5495,
+              "fps": 138.3177570093458
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.85354330708662,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3426887488,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1335556752,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 11,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "131044",
+          "rowNodes": 65508,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 1335556752,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 1,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "38",
+          "rowNodes": 11,
+          "expressionLength": 91,
+          "expansionMs": 9,
+          "firstFrameMs": 203,
+          "sourceLength": 7416,
+          "compileMs": 106,
+          "frames": 665,
+          "fps": 119.43247126436779,
+          "windows": [
+            {
+              "elapsed": 536,
+              "fps": 125
+            },
+            {
+              "elapsed": 1039,
+              "fps": 143.14115308151094
+            },
+            {
+              "elapsed": 1545,
+              "fps": 124.50592885375494
+            },
+            {
+              "elapsed": 2048,
+              "fps": 109.34393638170974
+            },
+            {
+              "elapsed": 2548,
+              "fps": 138
+            },
+            {
+              "elapsed": 3057,
+              "fps": 121.8074656188605
+            },
+            {
+              "elapsed": 3616,
+              "fps": 127.01252236135957
+            },
+            {
+              "elapsed": 4208,
+              "fps": 116.55405405405405
+            },
+            {
+              "elapsed": 4735,
+              "fps": 96.7741935483871
+            },
+            {
+              "elapsed": 5294.000000000001,
+              "fps": 107.33452593917693
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 4.021052631578952,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 2308684096,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 3325083392,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 2,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "90",
+          "rowNodes": 38,
+          "expressionLength": 215,
+          "expansionMs": 8,
+          "firstFrameMs": 204,
+          "sourceLength": 7540,
+          "compileMs": 106.99999999999999,
+          "frames": 793,
+          "fps": 142.65155603525815,
+          "windows": [
+            {
+              "elapsed": 504,
+              "fps": 105.15873015873017
+            },
+            {
+              "elapsed": 1005,
+              "fps": 145.70858283433134
+            },
+            {
+              "elapsed": 1507,
+              "fps": 169.32270916334662
+            },
+            {
+              "elapsed": 2011,
+              "fps": 178.57142857142858
+            },
+            {
+              "elapsed": 2512,
+              "fps": 133.7325349301397
+            },
+            {
+              "elapsed": 3013.0000000000005,
+              "fps": 129.74051896207573
+            },
+            {
+              "elapsed": 3516,
+              "fps": 168.98608349900613
+            },
+            {
+              "elapsed": 4035,
+              "fps": 105.97302504816956
+            },
+            {
+              "elapsed": 4537,
+              "fps": 131.47410358565736
+            },
+            {
+              "elapsed": 5064,
+              "fps": 136.6223908918406
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.703656998738967,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 2327204576,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 634912576,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 3,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "194",
+          "rowNodes": 90,
+          "expressionLength": 463,
+          "expansionMs": 20,
+          "firstFrameMs": 258.00000000000006,
+          "sourceLength": 7788,
+          "compileMs": 107,
+          "frames": 597,
+          "fps": 108.4862802107941,
+          "windows": [
+            {
+              "elapsed": 518,
+              "fps": 110.03861003861005
+            },
+            {
+              "elapsed": 1118,
+              "fps": 93.33333333333333
+            },
+            {
+              "elapsed": 1627,
+              "fps": 159.13555992141454
+            },
+            {
+              "elapsed": 2427,
+              "fps": 46.25
+            },
+            {
+              "elapsed": 2933,
+              "fps": 55.33596837944664
+            },
+            {
+              "elapsed": 3510,
+              "fps": 121.31715771230503
+            },
+            {
+              "elapsed": 4039,
+              "fps": 122.87334593572778
+            },
+            {
+              "elapsed": 4542,
+              "fps": 176.93836978131213
+            },
+            {
+              "elapsed": 5046,
+              "fps": 121.03174603174604
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 5.232830820770504,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1323492336,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 1874762336,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 4,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "402",
+          "rowNodes": 194,
+          "expressionLength": 959,
+          "expansionMs": 14.000000000000014,
+          "firstFrameMs": 249,
+          "sourceLength": 8284,
+          "compileMs": 103,
+          "frames": 684,
+          "fps": 124.36363636363636,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 98
+            },
+            {
+              "elapsed": 1037,
+              "fps": 68.90130353817504
+            },
+            {
+              "elapsed": 1654.0000000000002,
+              "fps": 103.72771474878441
+            },
+            {
+              "elapsed": 2164,
+              "fps": 111.76470588235298
+            },
+            {
+              "elapsed": 2669,
+              "fps": 136.63366336633663
+            },
+            {
+              "elapsed": 3179,
+              "fps": 123.52941176470588
+            },
+            {
+              "elapsed": 3680,
+              "fps": 169.66067864271457
+            },
+            {
+              "elapsed": 4180,
+              "fps": 168
+            },
+            {
+              "elapsed": 4681,
+              "fps": 163.67265469061877
+            },
+            {
+              "elapsed": 5187,
+              "fps": 128.4584980237154
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.995614035087724,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 2829174704,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 918413408,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 5,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "818",
+          "rowNodes": 402,
+          "expressionLength": 1951,
+          "expansionMs": 34,
+          "firstFrameMs": 384,
+          "sourceLength": 9276,
+          "compileMs": 98,
+          "frames": 725,
+          "fps": 131.7463201889878,
+          "windows": [
+            {
+              "elapsed": 545,
+              "fps": 97.24770642201835
+            },
+            {
+              "elapsed": 1084,
+              "fps": 133.58070500927644
+            },
+            {
+              "elapsed": 1591,
+              "fps": 138.06706114398423
+            },
+            {
+              "elapsed": 2125,
+              "fps": 142.32209737827716
+            },
+            {
+              "elapsed": 2628,
+              "fps": 135.18886679920476
+            },
+            {
+              "elapsed": 3218,
+              "fps": 96.61016949152543
+            },
+            {
+              "elapsed": 3752,
+              "fps": 147.94007490636704
+            },
+            {
+              "elapsed": 4258,
+              "fps": 193.67588932806325
+            },
+            {
+              "elapsed": 4767,
+              "fps": 102.16110019646365
+            },
+            {
+              "elapsed": 5350,
+              "fps": 130.36020583190395
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.5572413793103435,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3651015712,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 4227142304,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 6,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "1650",
+          "rowNodes": 818,
+          "expressionLength": 3935,
+          "expansionMs": 38,
+          "firstFrameMs": 484,
+          "sourceLength": 11260,
+          "compileMs": 108,
+          "frames": 781,
+          "fps": 141.94838240639768,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 82
+            },
+            {
+              "elapsed": 1000,
+              "fps": 172
+            },
+            {
+              "elapsed": 1579,
+              "fps": 141.62348877374785
+            },
+            {
+              "elapsed": 2105,
+              "fps": 146.38783269961976
+            },
+            {
+              "elapsed": 2665,
+              "fps": 135.71428571428572
+            },
+            {
+              "elapsed": 3244,
+              "fps": 132.98791018998273
+            },
+            {
+              "elapsed": 3745,
+              "fps": 175.64870259481037
+            },
+            {
+              "elapsed": 4249,
+              "fps": 168.65079365079364
+            },
+            {
+              "elapsed": 4752,
+              "fps": 133.20079522862824
+            },
+            {
+              "elapsed": 5254,
+              "fps": 149.402390438247
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.4673495518565987,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 2401560976,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 3355880576,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 7,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "3314",
+          "rowNodes": 1650,
+          "expressionLength": 7903,
+          "expansionMs": 71,
+          "firstFrameMs": 817.0000000000001,
+          "sourceLength": 15228,
+          "compileMs": 104.99999999999989,
+          "frames": 691,
+          "fps": 125.56787206978012,
+          "windows": [
+            {
+              "elapsed": 535,
+              "fps": 130.84112149532712
+            },
+            {
+              "elapsed": 1035,
+              "fps": 130
+            },
+            {
+              "elapsed": 1541,
+              "fps": 124.50592885375494
+            },
+            {
+              "elapsed": 2045,
+              "fps": 170.63492063492063
+            },
+            {
+              "elapsed": 2600,
+              "fps": 111.71171171171171
+            },
+            {
+              "elapsed": 3100.0000000000005,
+              "fps": 181.99999999999983
+            },
+            {
+              "elapsed": 3619,
+              "fps": 96.33911368015423
+            },
+            {
+              "elapsed": 4152,
+              "fps": 91.93245778611632
+            },
+            {
+              "elapsed": 4655,
+              "fps": 131.2127236580517
+            },
+            {
+              "elapsed": 5159,
+              "fps": 111.11111111111111
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 4.007235890014446,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1921002704,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 221204784,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 8,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "6642",
+          "rowNodes": 3314,
+          "expressionLength": 15839,
+          "expansionMs": 84,
+          "firstFrameMs": 962,
+          "sourceLength": 23164,
+          "compileMs": 104,
+          "frames": 1191,
+          "fps": 216.50608980185416,
+          "windows": [
+            {
+              "elapsed": 501,
+              "fps": 209.5808383233533
+            },
+            {
+              "elapsed": 1002,
+              "fps": 175.64870259481037
+            },
+            {
+              "elapsed": 1509,
+              "fps": 214.99013806706114
+            },
+            {
+              "elapsed": 2012,
+              "fps": 224.6520874751491
+            },
+            {
+              "elapsed": 2513,
+              "fps": 211.57684630738524
+            },
+            {
+              "elapsed": 3014,
+              "fps": 223.55289421157684
+            },
+            {
+              "elapsed": 3517,
+              "fps": 228.62823061630218
+            },
+            {
+              "elapsed": 4019,
+              "fps": 237.05179282868525
+            },
+            {
+              "elapsed": 4523,
+              "fps": 242.06349206349208
+            },
+            {
+              "elapsed": 5024,
+              "fps": 205.5888223552894
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 2.7884130982367745,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3332601200,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 3036820192,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 9,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "13298",
+          "rowNodes": 6642,
+          "expressionLength": 31711,
+          "expansionMs": 32,
+          "firstFrameMs": 143,
+          "sourceLength": 39036,
+          "compileMs": 85,
+          "frames": 1032,
+          "fps": 187.36383442265796,
+          "windows": [
+            {
+              "elapsed": 503.0000000000001,
+              "fps": 210.73558648111327
+            },
+            {
+              "elapsed": 1008,
+              "fps": 190.09900990099015
+            },
+            {
+              "elapsed": 1509,
+              "fps": 195.60878243512974
+            },
+            {
+              "elapsed": 2012,
+              "fps": 153.08151093439363
+            },
+            {
+              "elapsed": 2527,
+              "fps": 64.07766990291262
+            },
+            {
+              "elapsed": 3029,
+              "fps": 139.4422310756972
+            },
+            {
+              "elapsed": 3530,
+              "fps": 159.6806387225549
+            },
+            {
+              "elapsed": 4031,
+              "fps": 235.52894211576847
+            },
+            {
+              "elapsed": 4531,
+              "fps": 234
+            },
+            {
+              "elapsed": 5033,
+              "fps": 247.01195219123505
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.2383720930232487,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1196451344,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 1685969744,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 10,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "26610",
+          "rowNodes": 13298,
+          "expressionLength": 63455,
+          "expansionMs": 59,
+          "firstFrameMs": 259,
+          "sourceLength": 70780,
+          "compileMs": 180,
+          "frames": 1374,
+          "fps": 249.72737186477644,
+          "windows": [
+            {
+              "elapsed": 502,
+              "fps": 219.12350597609563
+            },
+            {
+              "elapsed": 1004,
+              "fps": 247.01195219123505
+            },
+            {
+              "elapsed": 1512,
+              "fps": 248.03149606299212
+            },
+            {
+              "elapsed": 2013,
+              "fps": 259.4810379241517
+            },
+            {
+              "elapsed": 2514,
+              "fps": 279.4411177644711
+            },
+            {
+              "elapsed": 3016,
+              "fps": 231.0756972111554
+            },
+            {
+              "elapsed": 3519,
+              "fps": 260.4373757455268
+            },
+            {
+              "elapsed": 4020,
+              "fps": 247.50499001996008
+            },
+            {
+              "elapsed": 4520,
+              "fps": 264
+            },
+            {
+              "elapsed": 5027,
+              "fps": 238.6587771203156
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 2.312227074235815,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1525305296,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 2731324496,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 11,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "53234",
+          "rowNodes": 26610,
+          "expressionLength": 126943,
+          "expansionMs": 116,
+          "firstFrameMs": 606,
+          "sourceLength": 134268,
+          "compileMs": 473,
+          "frames": 1176,
+          "fps": 213.77931285220868,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 242
+            },
+            {
+              "elapsed": 1002,
+              "fps": 201.19521912350598
+            },
+            {
+              "elapsed": 1504,
+              "fps": 189.24302788844622
+            },
+            {
+              "elapsed": 2007,
+              "fps": 228.62823061630218
+            },
+            {
+              "elapsed": 2512,
+              "fps": 188.11881188118812
+            },
+            {
+              "elapsed": 3014,
+              "fps": 213.14741035856574
+            },
+            {
+              "elapsed": 3514,
+              "fps": 194
+            },
+            {
+              "elapsed": 4016,
+              "fps": 203.18725099601593
+            },
+            {
+              "elapsed": 4517,
+              "fps": 265.4690618762475
+            },
+            {
+              "elapsed": 5018,
+              "fps": 195.60878243512974
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 2.8724489795918244,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1089604448,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 2472884944,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 12,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "106482",
+          "rowNodes": 53234,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 2472884944,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 1,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "126",
+          "rowNodes": 44,
+          "expressionLength": 234,
+          "expansionMs": 2,
+          "firstFrameMs": 29,
+          "sourceLength": 7559,
+          "compileMs": 10,
+          "frames": 1279,
+          "fps": 232.5031812397746,
+          "windows": [
+            {
+              "elapsed": 503,
+              "fps": 208.74751491053678
+            },
+            {
+              "elapsed": 1006,
+              "fps": 220.67594433399603
+            },
+            {
+              "elapsed": 1507,
+              "fps": 221.5568862275449
+            },
+            {
+              "elapsed": 2009,
+              "fps": 239.0438247011952
+            },
+            {
+              "elapsed": 2511,
+              "fps": 227.09163346613545
+            },
+            {
+              "elapsed": 3012,
+              "fps": 245.50898203592814
+            },
+            {
+              "elapsed": 3514.0000000000005,
+              "fps": 241.03585657370496
+            },
+            {
+              "elapsed": 4014.9999999999995,
+              "fps": 231.536926147705
+            },
+            {
+              "elapsed": 4517,
+              "fps": 266.9322709163344
+            },
+            {
+              "elapsed": 5017,
+              "fps": 226
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 2.498045347928068,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 108318480,
+              "min": 166,
+              "max": 186
+            },
+            {
+              "hash": 1251316976,
+              "min": 166,
+              "max": 186
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 2,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "290",
+          "rowNodes": 126,
+          "expressionLength": 638,
+          "expansionMs": 2.9999999999999982,
+          "firstFrameMs": 53,
+          "sourceLength": 7963,
+          "compileMs": 21.000000000000007,
+          "frames": 1282,
+          "fps": 233.0909090909091,
+          "windows": [
+            {
+              "elapsed": 502,
+              "fps": 231.0756972111554
+            },
+            {
+              "elapsed": 1002,
+              "fps": 264
+            },
+            {
+              "elapsed": 1503,
+              "fps": 243.5129740518962
+            },
+            {
+              "elapsed": 2006,
+              "fps": 244.5328031809145
+            },
+            {
+              "elapsed": 2512,
+              "fps": 245.0592885375494
+            },
+            {
+              "elapsed": 3015,
+              "fps": 242.54473161033798
+            },
+            {
+              "elapsed": 3515,
+              "fps": 264
+            },
+            {
+              "elapsed": 4015,
+              "fps": 228
+            },
+            {
+              "elapsed": 4515,
+              "fps": 188
+            },
+            {
+              "elapsed": 5016,
+              "fps": 187.624750499002
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 2.48517940717628,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 1996414592,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 3358435088,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 3,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "618",
+          "rowNodes": 290,
+          "expressionLength": 1590,
+          "expansionMs": 5.000000000000002,
+          "firstFrameMs": 59,
+          "sourceLength": 8915,
+          "compileMs": 21,
+          "frames": 1241,
+          "fps": 225.47238372093022,
+          "windows": [
+            {
+              "elapsed": 502,
+              "fps": 221.11553784860558
+            },
+            {
+              "elapsed": 1005,
+              "fps": 234.5924453280318
+            },
+            {
+              "elapsed": 1508,
+              "fps": 202.78330019880715
+            },
+            {
+              "elapsed": 2009,
+              "fps": 197.60479041916167
+            },
+            {
+              "elapsed": 2510,
+              "fps": 193.6127744510978
+            },
+            {
+              "elapsed": 3012,
+              "fps": 250.996015936255
+            },
+            {
+              "elapsed": 3513,
+              "fps": 245.50898203592814
+            },
+            {
+              "elapsed": 4016,
+              "fps": 206.75944333996023
+            },
+            {
+              "elapsed": 4517.000000000001,
+              "fps": 267.46506986027896
+            },
+            {
+              "elapsed": 5018,
+              "fps": 255.4890219560883
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 2.6373892022562564,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3449462592,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 593631392,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 4,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "1274",
+          "rowNodes": 618,
+          "expressionLength": 3782,
+          "expansionMs": 7,
+          "firstFrameMs": 87,
+          "sourceLength": 11107,
+          "compileMs": 30,
+          "frames": 1093,
+          "fps": 198.65503453289713,
+          "windows": [
+            {
+              "elapsed": 501,
+              "fps": 183.63273453093814
+            },
+            {
+              "elapsed": 1004,
+              "fps": 202.78330019880715
+            },
+            {
+              "elapsed": 1506,
+              "fps": 187.25099601593627
+            },
+            {
+              "elapsed": 2007,
+              "fps": 207.58483033932137
+            },
+            {
+              "elapsed": 2508,
+              "fps": 179.64071856287424
+            },
+            {
+              "elapsed": 3015,
+              "fps": 207.10059171597632
+            },
+            {
+              "elapsed": 3516,
+              "fps": 181.63672654690617
+            },
+            {
+              "elapsed": 4019,
+              "fps": 212.72365805168985
+            },
+            {
+              "elapsed": 4519,
+              "fps": 188
+            },
+            {
+              "elapsed": 5020,
+              "fps": 227.5449101796407
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.089661482159201,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3640263792,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 784486592,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 5,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "2586",
+          "rowNodes": 1274,
+          "expressionLength": 8742,
+          "expansionMs": 11.999999999999998,
+          "firstFrameMs": 122,
+          "sourceLength": 16067,
+          "compileMs": 38.000000000000014,
+          "frames": 1137,
+          "fps": 206.68969278313034,
+          "windows": [
+            {
+              "elapsed": 502,
+              "fps": 199.20318725099602
+            },
+            {
+              "elapsed": 1003,
+              "fps": 205.5888223552894
+            },
+            {
+              "elapsed": 1503.0000000000002,
+              "fps": 193.99999999999991
+            },
+            {
+              "elapsed": 2011,
+              "fps": 216.53543307086625
+            },
+            {
+              "elapsed": 2517,
+              "fps": 205.53359683794466
+            },
+            {
+              "elapsed": 3019,
+              "fps": 193.22709163346613
+            },
+            {
+              "elapsed": 3521,
+              "fps": 213.14741035856574
+            },
+            {
+              "elapsed": 4025,
+              "fps": 220.23809523809524
+            },
+            {
+              "elapsed": 4527,
+              "fps": 209.16334661354583
+            },
+            {
+              "elapsed": 5031,
+              "fps": 206.34920634920636
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.033421284080927,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3658742192,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 808820592,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 6,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "5210",
+          "rowNodes": 2586,
+          "expressionLength": 19814,
+          "expansionMs": 20,
+          "firstFrameMs": 201,
+          "sourceLength": 27139,
+          "compileMs": 57,
+          "frames": 1037,
+          "fps": 188.47691748455108,
+          "windows": [
+            {
+              "elapsed": 503,
+              "fps": 192.84294234592446
+            },
+            {
+              "elapsed": 1004,
+              "fps": 193.6127744510978
+            },
+            {
+              "elapsed": 1504,
+              "fps": 196
+            },
+            {
+              "elapsed": 2005,
+              "fps": 195.60878243512974
+            },
+            {
+              "elapsed": 2506,
+              "fps": 195.60878243512974
+            },
+            {
+              "elapsed": 3007,
+              "fps": 201.59680638722554
+            },
+            {
+              "elapsed": 3510,
+              "fps": 196.81908548707753
+            },
+            {
+              "elapsed": 4012,
+              "fps": 193.22709163346613
+            },
+            {
+              "elapsed": 4515,
+              "fps": 186.87872763419483
+            },
+            {
+              "elapsed": 5017,
+              "fps": 183.26693227091633
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 3.4243008678881313,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3666649392,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 803976992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 7,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "10458",
+          "rowNodes": 5210,
+          "expressionLength": 44262,
+          "expansionMs": 38.00000000000001,
+          "firstFrameMs": 310,
+          "sourceLength": 51587,
+          "compileMs": 118,
+          "frames": 510,
+          "fps": 92.71041628794765,
+          "windows": [
+            {
+              "elapsed": 506,
+              "fps": 83.00395256916995
+            },
+            {
+              "elapsed": 1014,
+              "fps": 68.89763779527559
+            },
+            {
+              "elapsed": 1520,
+              "fps": 81.02766798418972
+            },
+            {
+              "elapsed": 2022.0000000000005,
+              "fps": 111.55378486055767
+            },
+            {
+              "elapsed": 2524,
+              "fps": 115.53784860557779
+            },
+            {
+              "elapsed": 3030.0000000000005,
+              "fps": 114.62450592885365
+            },
+            {
+              "elapsed": 3537,
+              "fps": 45.364891518737714
+            },
+            {
+              "elapsed": 4039,
+              "fps": 71.71314741035856
+            },
+            {
+              "elapsed": 4541,
+              "fps": 77.68924302788845
+            },
+            {
+              "elapsed": 5044,
+              "fps": 139.16500994035786
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.733333333333324,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3668690992,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 803976992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 8,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "20954",
+          "rowNodes": 10458,
+          "expressionLength": 97766,
+          "expansionMs": 429.00000000000006,
+          "firstFrameMs": 1073,
+          "sourceLength": 105091,
+          "compileMs": 288,
+          "frames": 458,
+          "fps": 83.22733054697437,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 28
+            },
+            {
+              "elapsed": 1000,
+              "fps": 70
+            },
+            {
+              "elapsed": 1546,
+              "fps": 60.43956043956044
+            },
+            {
+              "elapsed": 2058,
+              "fps": 91.796875
+            },
+            {
+              "elapsed": 2566,
+              "fps": 104.33070866141732
+            },
+            {
+              "elapsed": 3066,
+              "fps": 84
+            },
+            {
+              "elapsed": 3568,
+              "fps": 93.62549800796813
+            },
+            {
+              "elapsed": 4079,
+              "fps": 103.71819960861056
+            },
+            {
+              "elapsed": 4583,
+              "fps": 83.33333333333333
+            },
+            {
+              "elapsed": 5086.000000000001,
+              "fps": 101.39165009940339
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 8.626637554585177,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "Apple GPU",
+          "pixels": [
+            {
+              "hash": 3669124592,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 811070592,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 9,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "41946",
+          "rowNodes": 20954,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 811070592,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chrome-960",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "results": [
+        {
+          "family": "binary",
+          "depth": 1,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "100",
+          "rowNodes": 36,
+          "expressionLength": 192,
+          "expansionMs": 0.7999999523162842,
+          "firstFrameMs": 40.299999952316284,
+          "sourceLength": 7517,
+          "compileMs": 17.90000009536743,
+          "frames": 672,
+          "fps": 122.05975842339478,
+          "windows": [
+            {
+              "elapsed": 504.30000019073486,
+              "fps": 122.94269279506354
+            },
+            {
+              "elapsed": 1005.2000000476837,
+              "fps": 127.7700140113349
+            },
+            {
+              "elapsed": 1508.7000000476837,
+              "fps": 125.12413108242303
+            },
+            {
+              "elapsed": 2011.8000001907349,
+              "fps": 117.27290793723708
+            },
+            {
+              "elapsed": 2520.300000190735,
+              "fps": 116.0275319567355
+            },
+            {
+              "elapsed": 3026.7000000476837,
+              "fps": 116.50868881648243
+            },
+            {
+              "elapsed": 3532.4000000953674,
+              "fps": 116.66996241731609
+            },
+            {
+              "elapsed": 4033.5,
+              "fps": 117.74096988870217
+            },
+            {
+              "elapsed": 4535.900000095367,
+              "fps": 129.37898086716055
+            },
+            {
+              "elapsed": 5040.800000190735,
+              "fps": 124.77718357714463
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.3677083275147845,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1785433008,
+              "min": 40,
+              "max": 219
+            },
+            {
+              "hash": 2216124672,
+              "min": 40,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 2,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "228",
+          "rowNodes": 100,
+          "expressionLength": 444,
+          "expansionMs": 0.7999999523162842,
+          "firstFrameMs": 39.59999990463257,
+          "sourceLength": 7769,
+          "compileMs": 20.100000143051147,
+          "frames": 701,
+          "fps": 127.44295973093355,
+          "windows": [
+            {
+              "elapsed": 502.2000000476837,
+              "fps": 127.43926721211315
+            },
+            {
+              "elapsed": 1007,
+              "fps": 126.78288432259406
+            },
+            {
+              "elapsed": 1514,
+              "fps": 130.17751479289942
+            },
+            {
+              "elapsed": 2021.2999999523163,
+              "fps": 130.10053224167885
+            },
+            {
+              "elapsed": 2526.2000000476837,
+              "fps": 126.75777379265486
+            },
+            {
+              "elapsed": 3033.5,
+              "fps": 124.1868716852389
+            },
+            {
+              "elapsed": 3538.7999999523163,
+              "fps": 130.6154759672041
+            },
+            {
+              "elapsed": 4039.5,
+              "fps": 129.8182544314156
+            },
+            {
+              "elapsed": 4544.799999952316,
+              "fps": 124.67840887778573
+            },
+            {
+              "elapsed": 5046.700000047684,
+              "fps": 121.53815498786454
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.121112696624516,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3784881296,
+              "min": 32,
+              "max": 219
+            },
+            {
+              "hash": 2814477760,
+              "min": 32,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 3,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "484",
+          "rowNodes": 228,
+          "expressionLength": 948,
+          "expansionMs": 1.1999998092651367,
+          "firstFrameMs": 40.80000019073486,
+          "sourceLength": 8273,
+          "compileMs": 20.700000047683716,
+          "frames": 688,
+          "fps": 124.9409799171749,
+          "windows": [
+            {
+              "elapsed": 505,
+              "fps": 126.73267326732673
+            },
+            {
+              "elapsed": 1009,
+              "fps": 128.96825396825398
+            },
+            {
+              "elapsed": 1514.7000000476837,
+              "fps": 126.55724736793609
+            },
+            {
+              "elapsed": 2021.5999999046326,
+              "fps": 130.20319593337092
+            },
+            {
+              "elapsed": 2522.899999856949,
+              "fps": 127.66806304824992
+            },
+            {
+              "elapsed": 3026.0999999046326,
+              "fps": 129.17329092575625
+            },
+            {
+              "elapsed": 3533.0999999046326,
+              "fps": 130.17751479289942
+            },
+            {
+              "elapsed": 4038,
+              "fps": 128.7383640081651
+            },
+            {
+              "elapsed": 4539.599999904633,
+              "fps": 127.59170656333352
+            },
+            {
+              "elapsed": 5046.899999856949,
+              "fps": 118.27321112879895
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.242441862128501,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3486067392,
+              "min": 29,
+              "max": 219
+            },
+            {
+              "hash": 2004414256,
+              "min": 29,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 4,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "996",
+          "rowNodes": 484,
+          "expressionLength": 1956,
+          "expansionMs": 2,
+          "firstFrameMs": 43.299999952316284,
+          "sourceLength": 9281,
+          "compileMs": 20.100000143051147,
+          "frames": 615,
+          "fps": 111.80598479875032,
+          "windows": [
+            {
+              "elapsed": 510.60000014305115,
+              "fps": 109.67489225286111
+            },
+            {
+              "elapsed": 1018.6000001430511,
+              "fps": 106.2992125984252
+            },
+            {
+              "elapsed": 1523.2000000476837,
+              "fps": 112.96076102016008
+            },
+            {
+              "elapsed": 2023.2000000476837,
+              "fps": 112
+            },
+            {
+              "elapsed": 2528.2999999523163,
+              "fps": 110.86913484572027
+            },
+            {
+              "elapsed": 3031.7000000476837,
+              "fps": 123.16249501043764
+            },
+            {
+              "elapsed": 3538.9000000953674,
+              "fps": 114.35331229208835
+            },
+            {
+              "elapsed": 4049,
+              "fps": 103.90119586337735
+            },
+            {
+              "elapsed": 4549.299999952316,
+              "fps": 103.9376374274558
+            },
+            {
+              "elapsed": 5055.799999952316,
+              "fps": 118.46001974333663
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.900650403170082,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1215489792,
+              "min": 28,
+              "max": 219
+            },
+            {
+              "hash": 3526143152,
+              "min": 28,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 5,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "2020",
+          "rowNodes": 996,
+          "expressionLength": 3972,
+          "expansionMs": 2.8999998569488525,
+          "firstFrameMs": 47.5,
+          "sourceLength": 11297,
+          "compileMs": 20.700000047683716,
+          "frames": 600,
+          "fps": 109.04332655125015,
+          "windows": [
+            {
+              "elapsed": 505.7999999523163,
+              "fps": 104.78449981217183
+            },
+            {
+              "elapsed": 1006.8999998569489,
+              "fps": 111.75414091131053
+            },
+            {
+              "elapsed": 1516.1999998092651,
+              "fps": 115.845277843165
+            },
+            {
+              "elapsed": 2022,
+              "fps": 112.69276389581961
+            },
+            {
+              "elapsed": 2529.7999999523163,
+              "fps": 114.21819615093806
+            },
+            {
+              "elapsed": 3037.199999809265,
+              "fps": 98.54158457646135
+            },
+            {
+              "elapsed": 3539.699999809265,
+              "fps": 95.5223880597015
+            },
+            {
+              "elapsed": 4043.7999999523163,
+              "fps": 103.15413605483769
+            },
+            {
+              "elapsed": 4549.699999809265,
+              "fps": 104.7637873393686
+            },
+            {
+              "elapsed": 5050.899999856949,
+              "fps": 113.7270550570173
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 7.073166669209798,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 95061792,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 2371954752,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 6,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "4068",
+          "rowNodes": 2020,
+          "expressionLength": 8004,
+          "expansionMs": 4.3999998569488525,
+          "firstFrameMs": 55.5,
+          "sourceLength": 15329,
+          "compileMs": 21.100000143051147,
+          "frames": 590,
+          "fps": 107.2590761213042,
+          "windows": [
+            {
+              "elapsed": 501.09999990463257,
+              "fps": 107.76292159304944
+            },
+            {
+              "elapsed": 1002.0999999046326,
+              "fps": 115.76846307385229
+            },
+            {
+              "elapsed": 1511.3999998569489,
+              "fps": 111.91831927221025
+            },
+            {
+              "elapsed": 2021.7999999523163,
+              "fps": 97.96238242683695
+            },
+            {
+              "elapsed": 2538.899999856949,
+              "fps": 98.6269580533858
+            },
+            {
+              "elapsed": 3046.5,
+              "fps": 110.3230890154022
+            },
+            {
+              "elapsed": 3551.699999809265,
+              "fps": 100.95011880295864
+            },
+            {
+              "elapsed": 4052.699999809265,
+              "fps": 105.78842315369262
+            },
+            {
+              "elapsed": 4563.299999952316,
+              "fps": 107.71641203406001
+            },
+            {
+              "elapsed": 5070.799999952316,
+              "fps": 110.34482758620689
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 7.177288132198786,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3900724288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1772487552,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 7,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "8164",
+          "rowNodes": 4068,
+          "expressionLength": 16068,
+          "expansionMs": 7.400000095367432,
+          "firstFrameMs": 69.79999995231628,
+          "sourceLength": 23393,
+          "compileMs": 19.40000009536743,
+          "frames": 602,
+          "fps": 109.30747721058496,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 100
+            },
+            {
+              "elapsed": 1006.2000000476837,
+              "fps": 98.77518766355202
+            },
+            {
+              "elapsed": 1514.2000000476837,
+              "fps": 112.20472440944881
+            },
+            {
+              "elapsed": 2017.5,
+              "fps": 113.25253329107947
+            },
+            {
+              "elapsed": 2522.5,
+              "fps": 110.89108910891089
+            },
+            {
+              "elapsed": 3031.5,
+              "fps": 115.91355599214145
+            },
+            {
+              "elapsed": 3532.2000000476837,
+              "fps": 107.84901137379141
+            },
+            {
+              "elapsed": 4044,
+              "fps": 109.41774131539165
+            },
+            {
+              "elapsed": 4546,
+              "fps": 109.56175298804781
+            },
+            {
+              "elapsed": 5046.099999904633,
+              "fps": 111.97760450045794
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 7.062956798116234,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3632888288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1781272352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 8,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "16356",
+          "rowNodes": 8164,
+          "expressionLength": 32196,
+          "expansionMs": 13.5,
+          "firstFrameMs": 55.200000047683716,
+          "sourceLength": 39521,
+          "compileMs": 20.299999952316284,
+          "frames": 571,
+          "fps": 103.778557275432,
+          "windows": [
+            {
+              "elapsed": 502.7000000476837,
+              "fps": 93.49512630901494
+            },
+            {
+              "elapsed": 1004.3000001907349,
+              "fps": 91.70653904880636
+            },
+            {
+              "elapsed": 1508.7000000476837,
+              "fps": 101.11023000488488
+            },
+            {
+              "elapsed": 2012.8000001907349,
+              "fps": 107.12160282617761
+            },
+            {
+              "elapsed": 2513.100000143051,
+              "fps": 107.93523886697332
+            },
+            {
+              "elapsed": 3016.2000000476837,
+              "fps": 95.40846751957635
+            },
+            {
+              "elapsed": 3525.600000143051,
+              "fps": 92.2654102693382
+            },
+            {
+              "elapsed": 4034.300000190735,
+              "fps": 90.42657754214297
+            },
+            {
+              "elapsed": 4538.700000047684,
+              "fps": 118.9532117704528
+            },
+            {
+              "elapsed": 5041.400000095367,
+              "fps": 123.33399640763672
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 7.49281961696578,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3503128288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1426260352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 9,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "32740",
+          "rowNodes": 16356,
+          "expressionLength": 64452,
+          "expansionMs": 21.40000009536743,
+          "firstFrameMs": 85.29999995231628,
+          "sourceLength": 71777,
+          "compileMs": 49.799999952316284,
+          "frames": 684,
+          "fps": 124.3071331213085,
+          "windows": [
+            {
+              "elapsed": 501.7999999523163,
+              "fps": 121.56237545993731
+            },
+            {
+              "elapsed": 1006.5,
+              "fps": 124.82662966920508
+            },
+            {
+              "elapsed": 1509.2999999523163,
+              "fps": 125.29832936749143
+            },
+            {
+              "elapsed": 2014.0999999046326,
+              "fps": 124.80190175505352
+            },
+            {
+              "elapsed": 2520.0999999046326,
+              "fps": 124.50592885375494
+            },
+            {
+              "elapsed": 3027.699999809265,
+              "fps": 124.1134752006233
+            },
+            {
+              "elapsed": 3531.399999856949,
+              "fps": 125.07444906499104
+            },
+            {
+              "elapsed": 4034.399999856949,
+              "fps": 123.26043737574552
+            },
+            {
+              "elapsed": 4536.799999952316,
+              "fps": 125.398089148171
+            },
+            {
+              "elapsed": 5043.299999952316,
+              "fps": 124.38302073050346
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.264035093854045,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3448812288,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1383478352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 10,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "65508",
+          "rowNodes": 32740,
+          "expressionLength": 128964,
+          "expansionMs": 39.799999952316284,
+          "firstFrameMs": 138.20000004768372,
+          "sourceLength": 136289,
+          "compileMs": 85.09999990463257,
+          "frames": 685,
+          "fps": 124.47529573916405,
+          "windows": [
+            {
+              "elapsed": 505.90000009536743,
+              "fps": 122.55386437697638
+            },
+            {
+              "elapsed": 1010.6000001430511,
+              "fps": 124.82662966920508
+            },
+            {
+              "elapsed": 1516.1000001430511,
+              "fps": 124.62908011869436
+            },
+            {
+              "elapsed": 2022.8000001907349,
+              "fps": 124.33392538794413
+            },
+            {
+              "elapsed": 2523.9000000953674,
+              "fps": 125.72340852522434
+            },
+            {
+              "elapsed": 3030.800000190735,
+              "fps": 124.28486878703347
+            },
+            {
+              "elapsed": 3537.100000143051,
+              "fps": 124.43215486062293
+            },
+            {
+              "elapsed": 4037.800000190735,
+              "fps": 123.82664268842717
+            },
+            {
+              "elapsed": 4542.5,
+              "fps": 124.82662972817276
+            },
+            {
+              "elapsed": 5042.800000190735,
+              "fps": 125.92444528479277
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.260729925823908,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3426887488,
+              "min": 27,
+              "max": 219
+            },
+            {
+              "hash": 1323996352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "binary",
+          "depth": 11,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "131044",
+          "rowNodes": 65508,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 1323996352,
+              "min": 27,
+              "max": 219
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 1,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "38",
+          "rowNodes": 11,
+          "expressionLength": 91,
+          "expansionMs": 0.7000000476837158,
+          "firstFrameMs": 38.200000047683716,
+          "sourceLength": 7416,
+          "compileMs": 19.899999856948853,
+          "frames": 686,
+          "fps": 124.72273735392399,
+          "windows": [
+            {
+              "elapsed": 508.7000000476837,
+              "fps": 121.87930016549704
+            },
+            {
+              "elapsed": 1010,
+              "fps": 125.67324956312102
+            },
+            {
+              "elapsed": 1510.1000001430511,
+              "fps": 123.9752049235457
+            },
+            {
+              "elapsed": 2012.2000000476837,
+              "fps": 125.47301336778737
+            },
+            {
+              "elapsed": 2517.4000000953674,
+              "fps": 124.70308787421554
+            },
+            {
+              "elapsed": 3021.600000143051,
+              "fps": 124.9504164895714
+            },
+            {
+              "elapsed": 3526.9000000953674,
+              "fps": 124.67840887778573
+            },
+            {
+              "elapsed": 4032.7000000476837,
+              "fps": 124.55516015409106
+            },
+            {
+              "elapsed": 4534.300000190735,
+              "fps": 125.59808608858263
+            },
+            {
+              "elapsed": 5034.300000190735,
+              "fps": 126
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.237755100164052,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2308684096,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 3346183792,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 2,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "90",
+          "rowNodes": 38,
+          "expressionLength": 215,
+          "expansionMs": 0.9000000953674316,
+          "firstFrameMs": 40.09999990463257,
+          "sourceLength": 7540,
+          "compileMs": 20.299999952316284,
+          "frames": 678,
+          "fps": 123.11603413836934,
+          "windows": [
+            {
+              "elapsed": 500.5,
+              "fps": 121.87812187812187
+            },
+            {
+              "elapsed": 1003.5999999046326,
+              "fps": 123.23593721278611
+            },
+            {
+              "elapsed": 1503.7999999523163,
+              "fps": 123.95041982025107
+            },
+            {
+              "elapsed": 2007.5999999046326,
+              "fps": 121.07979358033651
+            },
+            {
+              "elapsed": 2509.2999999523163,
+              "fps": 123.57982857107287
+            },
+            {
+              "elapsed": 3015.2000000476837,
+              "fps": 122.55386437697638
+            },
+            {
+              "elapsed": 3517.399999856949,
+              "fps": 123.45679017034551
+            },
+            {
+              "elapsed": 4021,
+              "fps": 125.09928511140667
+            },
+            {
+              "elapsed": 4523.799999952316,
+              "fps": 123.30946699657886
+            },
+            {
+              "elapsed": 5025.899999856949,
+              "fps": 123.48137823496535
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.332890856582506,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2327204576,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 769780976,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 3,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "194",
+          "rowNodes": 90,
+          "expressionLength": 463,
+          "expansionMs": 1.1999998092651367,
+          "firstFrameMs": 42.10000014305115,
+          "sourceLength": 7788,
+          "compileMs": 20.59999990463257,
+          "frames": 683,
+          "fps": 124.08931523988193,
+          "windows": [
+            {
+              "elapsed": 505.40000009536743,
+              "fps": 120.6964780144232
+            },
+            {
+              "elapsed": 1012.5999999046326,
+              "fps": 124.21135651358722
+            },
+            {
+              "elapsed": 1520,
+              "fps": 122.19156481739634
+            },
+            {
+              "elapsed": 2020.2999999523163,
+              "fps": 123.92564462504345
+            },
+            {
+              "elapsed": 2525,
+              "fps": 124.82662966920508
+            },
+            {
+              "elapsed": 3030.4000000953674,
+              "fps": 124.65373958866658
+            },
+            {
+              "elapsed": 3532.7999999523163,
+              "fps": 125.39808920767982
+            },
+            {
+              "elapsed": 4036.2000000476837,
+              "fps": 125.1489868654447
+            },
+            {
+              "elapsed": 4538.599999904633,
+              "fps": 125.39808920767982
+            },
+            {
+              "elapsed": 5043.900000095367,
+              "fps": 124.678408818958
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.2754026366885896,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1323492336,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 2442902736,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 4,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "402",
+          "rowNodes": 194,
+          "expressionLength": 959,
+          "expansionMs": 1.5,
+          "firstFrameMs": 43.39999985694885,
+          "sourceLength": 8284,
+          "compileMs": 20.600000143051147,
+          "frames": 681,
+          "fps": 123.69673411345286,
+          "windows": [
+            {
+              "elapsed": 505.5,
+              "fps": 120.67260138476756
+            },
+            {
+              "elapsed": 1010.7999999523163,
+              "fps": 122.69938651464628
+            },
+            {
+              "elapsed": 1512,
+              "fps": 123.70311251815917
+            },
+            {
+              "elapsed": 2019.5,
+              "fps": 124.13793103448276
+            },
+            {
+              "elapsed": 2523.7000000476837,
+              "fps": 124.9504164895714
+            },
+            {
+              "elapsed": 3028.7000000476837,
+              "fps": 124.75247524752476
+            },
+            {
+              "elapsed": 3529,
+              "fps": 123.92564462504345
+            },
+            {
+              "elapsed": 4030.9000000953674,
+              "fps": 123.53058375815742
+            },
+            {
+              "elapsed": 4539.100000143051,
+              "fps": 123.96694213712868
+            },
+            {
+              "elapsed": 5047,
+              "fps": 124.04016542182336
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.309691627645282,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2829174704,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 3113653296,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 5,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "818",
+          "rowNodes": 402,
+          "expressionLength": 1951,
+          "expansionMs": 2.200000047683716,
+          "firstFrameMs": 46.200000047683716,
+          "sourceLength": 9276,
+          "compileMs": 18.700000047683716,
+          "frames": 681,
+          "fps": 123.76417563030621,
+          "windows": [
+            {
+              "elapsed": 508.90000009536743,
+              "fps": 121.8314010382811
+            },
+            {
+              "elapsed": 1016.4000000953674,
+              "fps": 124.13793103448276
+            },
+            {
+              "elapsed": 1523.2000000476837,
+              "fps": 124.30939227688937
+            },
+            {
+              "elapsed": 2026.2999999523163,
+              "fps": 125.22361361944395
+            },
+            {
+              "elapsed": 2526.4000000953674,
+              "fps": 123.9752049235457
+            },
+            {
+              "elapsed": 3033.5,
+              "fps": 124.23585094034324
+            },
+            {
+              "elapsed": 3535.2999999523163,
+              "fps": 123.5552012871494
+            },
+            {
+              "elapsed": 4039.2000000476837,
+              "fps": 123.04028574769987
+            },
+            {
+              "elapsed": 4545.799999952316,
+              "fps": 124.35846824291305
+            },
+            {
+              "elapsed": 5048.600000143051,
+              "fps": 123.30946693810776
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.278707784353024,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3651015712,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 835592704,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 6,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "1650",
+          "rowNodes": 818,
+          "expressionLength": 3935,
+          "expansionMs": 3.5,
+          "firstFrameMs": 57.799999952316284,
+          "sourceLength": 11260,
+          "compileMs": 20.299999952316284,
+          "frames": 676,
+          "fps": 122.78184426941993,
+          "windows": [
+            {
+              "elapsed": 502.30000019073486,
+              "fps": 119.45052752780533
+            },
+            {
+              "elapsed": 1006.6000001430511,
+              "fps": 122.94269285318732
+            },
+            {
+              "elapsed": 1509.7000000476837,
+              "fps": 123.23593721278611
+            },
+            {
+              "elapsed": 2011.9000000953674,
+              "fps": 123.4567901117346
+            },
+            {
+              "elapsed": 2512.100000143051,
+              "fps": 123.95041982025107
+            },
+            {
+              "elapsed": 3019.800000190735,
+              "fps": 122.11936181638151
+            },
+            {
+              "elapsed": 3526.2000000476837,
+              "fps": 122.43285943426967
+            },
+            {
+              "elapsed": 4028.600000143051,
+              "fps": 123.40764328867621
+            },
+            {
+              "elapsed": 4533.5,
+              "fps": 122.79659341962011
+            },
+            {
+              "elapsed": 5035.5,
+              "fps": 123.50597609561753
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.3739644930912895,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2401560976,
+              "min": 20,
+              "max": 220
+            },
+            {
+              "hash": 805051088,
+              "min": 20,
+              "max": 220
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 7,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "3314",
+          "rowNodes": 1650,
+          "expressionLength": 7903,
+          "expansionMs": 5.199999809265137,
+          "firstFrameMs": 71.5,
+          "sourceLength": 15228,
+          "compileMs": 19.700000047683716,
+          "frames": 679,
+          "fps": 123.35361976564629,
+          "windows": [
+            {
+              "elapsed": 505.89999985694885,
+              "fps": 120.57718920191482
+            },
+            {
+              "elapsed": 1013,
+              "fps": 124.2358508819324
+            },
+            {
+              "elapsed": 1519.7999999523163,
+              "fps": 124.30939227688937
+            },
+            {
+              "elapsed": 2023.5,
+              "fps": 123.08914034967371
+            },
+            {
+              "elapsed": 2527.7999999523163,
+              "fps": 122.94269285318732
+            },
+            {
+              "elapsed": 3030.5,
+              "fps": 123.33399640763672
+            },
+            {
+              "elapsed": 3534.699999809265,
+              "fps": 124.9504165486561
+            },
+            {
+              "elapsed": 4042.699999809265,
+              "fps": 122.04724409448819
+            },
+            {
+              "elapsed": 4549.899999856949,
+              "fps": 124.21135645519941
+            },
+            {
+              "elapsed": 5053.099999904633,
+              "fps": 123.21144672918287
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.335493372536548,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1921002704,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 660493984,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 8,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "6642",
+          "rowNodes": 3314,
+          "expressionLength": 15839,
+          "expansionMs": 9.5,
+          "firstFrameMs": 98.5,
+          "sourceLength": 23164,
+          "compileMs": 20,
+          "frames": 681,
+          "fps": 123.71920645087589,
+          "windows": [
+            {
+              "elapsed": 502.40000009536743,
+              "fps": 119.42675156968666
+            },
+            {
+              "elapsed": 1004.7999999523163,
+              "fps": 123.40764334724045
+            },
+            {
+              "elapsed": 1505.6000001430511,
+              "fps": 123.8019168857561
+            },
+            {
+              "elapsed": 2011.4000000953674,
+              "fps": 124.55516015409106
+            },
+            {
+              "elapsed": 2517.2000000476837,
+              "fps": 124.55516015409106
+            },
+            {
+              "elapsed": 3022.7999999523163,
+              "fps": 124.60443040325
+            },
+            {
+              "elapsed": 3527.7000000476837,
+              "fps": 124.77718357714463
+            },
+            {
+              "elapsed": 4034.100000143051,
+              "fps": 124.40758291495965
+            },
+            {
+              "elapsed": 4536.5,
+              "fps": 123.40764334724045
+            },
+            {
+              "elapsed": 5038.5,
+              "fps": 123.50597609561753
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.322466951459865,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3332601200,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 1045662992,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 9,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "13298",
+          "rowNodes": 6642,
+          "expressionLength": 31711,
+          "expansionMs": 15.900000095367432,
+          "firstFrameMs": 49.700000047683716,
+          "sourceLength": 39036,
+          "compileMs": 17.40000009536743,
+          "frames": 680,
+          "fps": 123.48817782511473,
+          "windows": [
+            {
+              "elapsed": 506.89999985694885,
+              "fps": 120.33931745357009
+            },
+            {
+              "elapsed": 1012.8999998569489,
+              "fps": 124.50592885375494
+            },
+            {
+              "elapsed": 1520.2000000476837,
+              "fps": 124.18687162687411
+            },
+            {
+              "elapsed": 2022.0999999046326,
+              "fps": 123.5305838168384
+            },
+            {
+              "elapsed": 2526.5,
+              "fps": 124.9008722999376
+            },
+            {
+              "elapsed": 3031.7000000476837,
+              "fps": 122.72367378097402
+            },
+            {
+              "elapsed": 3533.399999856949,
+              "fps": 123.57982862980064
+            },
+            {
+              "elapsed": 4040.5999999046326,
+              "fps": 124.21135645519941
+            },
+            {
+              "elapsed": 4548.299999952316,
+              "fps": 122.11936181638151
+            },
+            {
+              "elapsed": 5054.899999856949,
+              "fps": 124.35846824291305
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.312647065344978,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1196451344,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 448365744,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 10,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "26610",
+          "rowNodes": 13298,
+          "expressionLength": 63455,
+          "expansionMs": 30.5,
+          "firstFrameMs": 83.40000009536743,
+          "sourceLength": 70780,
+          "compileMs": 38.10000014305115,
+          "frames": 674,
+          "fps": 122.4563953488372,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 120
+            },
+            {
+              "elapsed": 1000.5999999046326,
+              "fps": 121.85377549265058
+            },
+            {
+              "elapsed": 1506.0999999046326,
+              "fps": 122.65084075173095
+            },
+            {
+              "elapsed": 2011.7000000476837,
+              "fps": 122.62658224378585
+            },
+            {
+              "elapsed": 2513.2999999523163,
+              "fps": 121.61084531817725
+            },
+            {
+              "elapsed": 3013.5999999046326,
+              "fps": 121.92684390528468
+            },
+            {
+              "elapsed": 3515.0999999046326,
+              "fps": 123.62911266201395
+            },
+            {
+              "elapsed": 4020.0999999046326,
+              "fps": 122.77227722772277
+            },
+            {
+              "elapsed": 4525.399999856949,
+              "fps": 122.69938651464628
+            },
+            {
+              "elapsed": 5032.099999904633,
+              "fps": 124.33392538794413
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.385014839978883,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1525305296,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 2825827296,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 11,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "53234",
+          "rowNodes": 26610,
+          "expressionLength": 126943,
+          "expansionMs": 57.19999980926514,
+          "firstFrameMs": 137,
+          "sourceLength": 134268,
+          "compileMs": 68.29999995231628,
+          "frames": 678,
+          "fps": 123.14063096271552,
+          "windows": [
+            {
+              "elapsed": 504.39999985694885,
+              "fps": 120.93576529996035
+            },
+            {
+              "elapsed": 1007.3999998569489,
+              "fps": 123.26043737574552
+            },
+            {
+              "elapsed": 1507.8999998569489,
+              "fps": 123.87612387612387
+            },
+            {
+              "elapsed": 2010.0999999046326,
+              "fps": 123.4567901117346
+            },
+            {
+              "elapsed": 2514.5,
+              "fps": 122.91831877136715
+            },
+            {
+              "elapsed": 3017.5,
+              "fps": 123.26043737574552
+            },
+            {
+              "elapsed": 3519.2999999523163,
+              "fps": 123.5552012871494
+            },
+            {
+              "elapsed": 4022.7999999523163,
+              "fps": 123.13803376365442
+            },
+            {
+              "elapsed": 4527.599999904633,
+              "fps": 122.82091918751298
+            },
+            {
+              "elapsed": 5030,
+              "fps": 123.40764328867621
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.349557518959045,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1089604448,
+              "min": 20,
+              "max": 247
+            },
+            {
+              "hash": 2053590944,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "mandelbrot",
+          "depth": 12,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "106482",
+          "rowNodes": 53234,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 2053590944,
+              "min": 20,
+              "max": 247
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 1,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "126",
+          "rowNodes": 44,
+          "expressionLength": 234,
+          "expansionMs": 1.3999998569488525,
+          "firstFrameMs": 40.200000047683716,
+          "sourceLength": 7559,
+          "compileMs": 20.40000009536743,
+          "frames": 686,
+          "fps": 124.5687307063737,
+          "windows": [
+            {
+              "elapsed": 500.40000009536743,
+              "fps": 121.90247799435346
+            },
+            {
+              "elapsed": 1001.7000000476837,
+              "fps": 123.67843607799212
+            },
+            {
+              "elapsed": 1508.9000000953674,
+              "fps": 124.21135645519941
+            },
+            {
+              "elapsed": 2015.4000000953674,
+              "fps": 124.38302073050346
+            },
+            {
+              "elapsed": 2516.300000190735,
+              "fps": 125.77360748254202
+            },
+            {
+              "elapsed": 3019,
+              "fps": 123.33399646613108
+            },
+            {
+              "elapsed": 3522.7000000476837,
+              "fps": 125.07444906499104
+            },
+            {
+              "elapsed": 4026.7000000476837,
+              "fps": 125
+            },
+            {
+              "elapsed": 4530.700000047684,
+              "fps": 125
+            },
+            {
+              "elapsed": 5031.600000143051,
+              "fps": 125.77360748254202
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.235568518888846,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 108318480,
+              "min": 166,
+              "max": 186
+            },
+            {
+              "hash": 1252896976,
+              "min": 166,
+              "max": 186
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 2,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "290",
+          "rowNodes": 126,
+          "expressionLength": 638,
+          "expansionMs": 1.5,
+          "firstFrameMs": 42.10000014305115,
+          "sourceLength": 7963,
+          "compileMs": 20.600000143051147,
+          "frames": 680,
+          "fps": 123.6251249886374,
+          "windows": [
+            {
+              "elapsed": 508.59999990463257,
+              "fps": 119.93708220888338
+            },
+            {
+              "elapsed": 1014.3999998569489,
+              "fps": 124.55516015409106
+            },
+            {
+              "elapsed": 1518.8999998569489,
+              "fps": 124.87611496531218
+            },
+            {
+              "elapsed": 2020.8999998569489,
+              "fps": 123.50597609561753
+            },
+            {
+              "elapsed": 2525.5999999046326,
+              "fps": 122.84525459509071
+            },
+            {
+              "elapsed": 3026.699999809265,
+              "fps": 123.72779886609379
+            },
+            {
+              "elapsed": 3530.699999809265,
+              "fps": 123.01587301587301
+            },
+            {
+              "elapsed": 4039.5999999046326,
+              "fps": 123.79642363567274
+            },
+            {
+              "elapsed": 4545.699999809265,
+              "fps": 124.48132782428664
+            },
+            {
+              "elapsed": 5052.199999809265,
+              "fps": 124.38302073050346
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.300147057280821,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1996414592,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 3349063088,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 3,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "618",
+          "rowNodes": 290,
+          "expressionLength": 1590,
+          "expansionMs": 2.5,
+          "firstFrameMs": 43.200000047683716,
+          "sourceLength": 8915,
+          "compileMs": 20.600000143051147,
+          "frames": 687,
+          "fps": 124.87276428891755,
+          "windows": [
+            {
+              "elapsed": 501.2000000476837,
+              "fps": 121.7079010259308
+            },
+            {
+              "elapsed": 1001.7000000476837,
+              "fps": 123.87612387612387
+            },
+            {
+              "elapsed": 1508.7000000476837,
+              "fps": 124.2603550295858
+            },
+            {
+              "elapsed": 2015.2999999523163,
+              "fps": 124.35846824291305
+            },
+            {
+              "elapsed": 2516.0999999046326,
+              "fps": 123.80191694469517
+            },
+            {
+              "elapsed": 3018.5,
+              "fps": 125.398089148171
+            },
+            {
+              "elapsed": 3518.7999999523163,
+              "fps": 125.92444534480221
+            },
+            {
+              "elapsed": 4024.7999999523163,
+              "fps": 126.48221343873517
+            },
+            {
+              "elapsed": 4529.099999904633,
+              "fps": 126.90858617103207
+            },
+            {
+              "elapsed": 5033.5,
+              "fps": 124.9008722999376
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.233624452066214,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3449462592,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 583832192,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 4,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "1274",
+          "rowNodes": 618,
+          "expressionLength": 3782,
+          "expansionMs": 3.5999999046325684,
+          "firstFrameMs": 46.90000009536743,
+          "sourceLength": 11107,
+          "compileMs": 20.5,
+          "frames": 682,
+          "fps": 123.88737511353315,
+          "windows": [
+            {
+              "elapsed": 510.10000014305115,
+              "fps": 121.54479510412249
+            },
+            {
+              "elapsed": 1012.5,
+              "fps": 123.40764334724045
+            },
+            {
+              "elapsed": 1515.3000001907349,
+              "fps": 123.30946693810776
+            },
+            {
+              "elapsed": 2019.8000001907349,
+              "fps": 122.89395441030723
+            },
+            {
+              "elapsed": 2522.100000143051,
+              "fps": 125.42305396372812
+            },
+            {
+              "elapsed": 3029.100000143051,
+              "fps": 122.2879684418146
+            },
+            {
+              "elapsed": 3533.300000190735,
+              "fps": 124.9504164895714
+            },
+            {
+              "elapsed": 4040.4000000953674,
+              "fps": 124.23585094034324
+            },
+            {
+              "elapsed": 4542.400000095367,
+              "fps": 125.4980079681275
+            },
+            {
+              "elapsed": 5048.400000095367,
+              "fps": 124.50592885375494
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.301319643199618,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3640263792,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 780114992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 5,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "2586",
+          "rowNodes": 1274,
+          "expressionLength": 8742,
+          "expansionMs": 5.599999904632568,
+          "firstFrameMs": 52.799999952316284,
+          "sourceLength": 16067,
+          "compileMs": 19.800000190734863,
+          "frames": 677,
+          "fps": 123.06629582854251,
+          "windows": [
+            {
+              "elapsed": 503.40000009536743,
+              "fps": 121.17600315543058
+            },
+            {
+              "elapsed": 1009.5,
+              "fps": 124.48132782428664
+            },
+            {
+              "elapsed": 1511.8000001907349,
+              "fps": 123.43221177873218
+            },
+            {
+              "elapsed": 2018.5,
+              "fps": 122.3603710742814
+            },
+            {
+              "elapsed": 2519.300000190735,
+              "fps": 125.7987219968167
+            },
+            {
+              "elapsed": 3020.800000190735,
+              "fps": 123.62911266201395
+            },
+            {
+              "elapsed": 3526.7000000476837,
+              "fps": 122.55386443473309
+            },
+            {
+              "elapsed": 4033.2000000476837,
+              "fps": 122.40868706811452
+            },
+            {
+              "elapsed": 4533.600000143051,
+              "fps": 123.90087927294942
+            },
+            {
+              "elapsed": 5040.700000047684,
+              "fps": 122.26385330636953
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.34638109129676,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3658742192,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 805304992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 6,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "5210",
+          "rowNodes": 2586,
+          "expressionLength": 19814,
+          "expansionMs": 9.700000047683716,
+          "firstFrameMs": 66.70000004768372,
+          "sourceLength": 27139,
+          "compileMs": 20.300000190734863,
+          "frames": 672,
+          "fps": 122.13962449123973,
+          "windows": [
+            {
+              "elapsed": 501.2999999523163,
+              "fps": 117.6939956226054
+            },
+            {
+              "elapsed": 1005.5,
+              "fps": 122.96707654529249
+            },
+            {
+              "elapsed": 1507.9000000953674,
+              "fps": 121.41719742918144
+            },
+            {
+              "elapsed": 2014.6000001430511,
+              "fps": 120.38681664546972
+            },
+            {
+              "elapsed": 2515.5,
+              "fps": 123.77720107348068
+            },
+            {
+              "elapsed": 3020.4000000953674,
+              "fps": 120.81600314612416
+            },
+            {
+              "elapsed": 3521.4000000953674,
+              "fps": 123.75249500998004
+            },
+            {
+              "elapsed": 4024.2999999523163,
+              "fps": 125.27341423328794
+            },
+            {
+              "elapsed": 4530.100000143051,
+              "fps": 122.57809406211958
+            },
+            {
+              "elapsed": 5032.100000143051,
+              "fps": 121.51394422310757
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.401339286140034,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3666649392,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 803976992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 7,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "10458",
+          "rowNodes": 5210,
+          "expressionLength": 44262,
+          "expansionMs": 17.5,
+          "firstFrameMs": 64.40000009536743,
+          "sourceLength": 51587,
+          "compileMs": 30.200000047683716,
+          "frames": 653,
+          "fps": 118.58497076441164,
+          "windows": [
+            {
+              "elapsed": 507.39999985694885,
+              "fps": 118.24990149175362
+            },
+            {
+              "elapsed": 1010.2999999523163,
+              "fps": 121.29648039059906
+            },
+            {
+              "elapsed": 1516.6999998092651,
+              "fps": 114.53396527722002
+            },
+            {
+              "elapsed": 2018.5,
+              "fps": 121.56237540217978
+            },
+            {
+              "elapsed": 2522.7999999523163,
+              "fps": 116.99385287642019
+            },
+            {
+              "elapsed": 3028.699999809265,
+              "fps": 120.57718920191482
+            },
+            {
+              "elapsed": 3533.899999856949,
+              "fps": 122.72367378097402
+            },
+            {
+              "elapsed": 4038.2999999523163,
+              "fps": 116.97065818565585
+            },
+            {
+              "elapsed": 4540.699999809265,
+              "fps": 115.445859905483
+            },
+            {
+              "elapsed": 5043.299999952316,
+              "fps": 115.3999203810026
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 6.682082692842936,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3668690992,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 822012992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 8,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "20954",
+          "rowNodes": 10458,
+          "expressionLength": 97766,
+          "expansionMs": 34,
+          "firstFrameMs": 111.29999995231628,
+          "sourceLength": 105091,
+          "compileMs": 59.09999990463257,
+          "frames": 460,
+          "fps": 83.47245408726117,
+          "windows": [
+            {
+              "elapsed": 503.80000019073486,
+              "fps": 95.27590310009441
+            },
+            {
+              "elapsed": 1008.3000001907349,
+              "fps": 73.33994053518335
+            },
+            {
+              "elapsed": 1519.6000001430511,
+              "fps": 72.3645609298858
+            },
+            {
+              "elapsed": 2024.8000001907349,
+              "fps": 87.09422010262674
+            },
+            {
+              "elapsed": 2537.4000000953674,
+              "fps": 81.93523216506819
+            },
+            {
+              "elapsed": 3040.4000000953674,
+              "fps": 91.45129224652088
+            },
+            {
+              "elapsed": 3545.100000143051,
+              "fps": 79.25500296457466
+            },
+            {
+              "elapsed": 4053.300000190735,
+              "fps": 96.4187327733223
+            },
+            {
+              "elapsed": 4562.5,
+              "fps": 98.19324434157281
+            },
+            {
+              "elapsed": 5072.400000095367,
+              "fps": 70.60207882578321
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 10.20239131036012,
+          "batchCount": 10,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3669124592,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 812629392,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 9,
+          "width": 960,
+          "height": 600,
+          "uncappedNodes": "41946",
+          "rowNodes": 20954,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 812629392,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chrome-1920",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "results": [
+        {
+          "family": "branch",
+          "depth": 1,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "126",
+          "rowNodes": 44,
+          "expressionLength": 234,
+          "expansionMs": 1.5,
+          "firstFrameMs": 61.799999952316284,
+          "sourceLength": 7559,
+          "compileMs": 20.299999952316284,
+          "frames": 199,
+          "fps": 36.17524086529722,
+          "windows": [
+            {
+              "elapsed": 508.09999990463257,
+              "fps": 37.394213744471934
+            },
+            {
+              "elapsed": 1019.5,
+              "fps": 37.152913563662146
+            },
+            {
+              "elapsed": 1530.0999999046326,
+              "fps": 37.21112417459602
+            },
+            {
+              "elapsed": 2042.2999999523163,
+              "fps": 35.1425224488955
+            },
+            {
+              "elapsed": 2560.7000000476837,
+              "fps": 36.651234561158695
+            },
+            {
+              "elapsed": 3063.7000000476837,
+              "fps": 35.785288270377734
+            },
+            {
+              "elapsed": 3568.0999999046326,
+              "fps": 35.68596353113584
+            },
+            {
+              "elapsed": 4071.899999856949,
+              "fps": 35.728463679443564
+            },
+            {
+              "elapsed": 4573.399999856949,
+              "fps": 35.89232303090728
+            },
+            {
+              "elapsed": 5077.799999952316,
+              "fps": 35.68596351426788
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 23.707035166534347,
+          "batchCount": 39,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2791817088,
+              "min": 166,
+              "max": 186
+            },
+            {
+              "hash": 1951574240,
+              "min": 166,
+              "max": 186
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 2,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "290",
+          "rowNodes": 126,
+          "expressionLength": 638,
+          "expansionMs": 1.6999998092651367,
+          "firstFrameMs": 68.5,
+          "sourceLength": 7963,
+          "compileMs": 20.5,
+          "frames": 196,
+          "fps": 35.58912715880686,
+          "windows": [
+            {
+              "elapsed": 507.7000000476837,
+              "fps": 35.45400826927205
+            },
+            {
+              "elapsed": 1012.0999999046326,
+              "fps": 35.68596353113584
+            },
+            {
+              "elapsed": 1517.5999999046326,
+              "fps": 35.60830860534124
+            },
+            {
+              "elapsed": 2026.3999998569489,
+              "fps": 35.37735849388153
+            },
+            {
+              "elapsed": 2533.5999999046326,
+              "fps": 35.48895898719983
+            },
+            {
+              "elapsed": 3042.2000000476837,
+              "fps": 35.39127014340786
+            },
+            {
+              "elapsed": 3546,
+              "fps": 35.728463679443564
+            },
+            {
+              "elapsed": 4051.2000000476837,
+              "fps": 35.629453678347296
+            },
+            {
+              "elapsed": 4556,
+              "fps": 35.657686215729576
+            },
+            {
+              "elapsed": 5062,
+              "fps": 35.573122529644266
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 23.89642857653754,
+          "batchCount": 38,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2377964208,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 1605197664,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 3,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "618",
+          "rowNodes": 290,
+          "expressionLength": 1590,
+          "expansionMs": 2.5,
+          "firstFrameMs": 65.19999980926514,
+          "sourceLength": 8915,
+          "compileMs": 20.5,
+          "frames": 194,
+          "fps": 35.19721325035137,
+          "windows": [
+            {
+              "elapsed": 517.2000000476837,
+              "fps": 34.802784219529144
+            },
+            {
+              "elapsed": 1032.7000000476837,
+              "fps": 34.917555771096026
+            },
+            {
+              "elapsed": 1542.4000000953674,
+              "fps": 35.31489110911527
+            },
+            {
+              "elapsed": 2053.5,
+              "fps": 35.21815692302615
+            },
+            {
+              "elapsed": 2562.2000000476837,
+              "fps": 35.38431295127333
+            },
+            {
+              "elapsed": 3068.800000190735,
+              "fps": 35.530990909824816
+            },
+            {
+              "elapsed": 3579.9000000953674,
+              "fps": 35.21815692302615
+            },
+            {
+              "elapsed": 4087,
+              "fps": 35.49595741152664
+            },
+            {
+              "elapsed": 4598.5,
+              "fps": 35.19061583577712
+            },
+            {
+              "elapsed": 5101.300000190735,
+              "fps": 35.799522659450645
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 24.163402057185614,
+          "batchCount": 38,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3917028928,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 411460688,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 4,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "1274",
+          "rowNodes": 618,
+          "expressionLength": 3782,
+          "expansionMs": 3.799999952316284,
+          "firstFrameMs": 65.60000014305115,
+          "sourceLength": 11107,
+          "compileMs": 20.40000009536743,
+          "frames": 195,
+          "fps": 35.43071024916157,
+          "windows": [
+            {
+              "elapsed": 509.2999999523163,
+              "fps": 35.34262713859271
+            },
+            {
+              "elapsed": 1025.7999999523163,
+              "fps": 34.84995159728945
+            },
+            {
+              "elapsed": 1552.2000000476837,
+              "fps": 36.094224917473
+            },
+            {
+              "elapsed": 2060.600000143051,
+              "fps": 35.40519275496361
+            },
+            {
+              "elapsed": 2565.4000000953674,
+              "fps": 35.657686215729576
+            },
+            {
+              "elapsed": 3066.2000000476837,
+              "fps": 35.94249201620182
+            },
+            {
+              "elapsed": 3574.2000000476837,
+              "fps": 35.43307086614173
+            },
+            {
+              "elapsed": 4092.2999999523163,
+              "fps": 34.74232774235338
+            },
+            {
+              "elapsed": 4597.600000143051,
+              "fps": 35.62240251970229
+            },
+            {
+              "elapsed": 5109.5,
+              "fps": 35.163117806270996
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 24.022564106721145,
+          "batchCount": 38,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2597954432,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 3055611888,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 5,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "2586",
+          "rowNodes": 1274,
+          "expressionLength": 8742,
+          "expansionMs": 5.599999904632568,
+          "firstFrameMs": 71.20000004768372,
+          "sourceLength": 16067,
+          "compileMs": 19.200000047683716,
+          "frames": 195,
+          "fps": 35.29284007940556,
+          "windows": [
+            {
+              "elapsed": 511.69999980926514,
+              "fps": 35.1768614553634
+            },
+            {
+              "elapsed": 1023.5,
+              "fps": 35.16998826356361
+            },
+            {
+              "elapsed": 1538.2999999523163,
+              "fps": 34.96503496827363
+            },
+            {
+              "elapsed": 2042.5999999046326,
+              "fps": 35.69303986060277
+            },
+            {
+              "elapsed": 2554,
+              "fps": 35.197497060311505
+            },
+            {
+              "elapsed": 3058.699999809265,
+              "fps": 35.6647513509065
+            },
+            {
+              "elapsed": 3568.0999999046326,
+              "fps": 35.33568903932102
+            },
+            {
+              "elapsed": 4075.2999999523163,
+              "fps": 35.48895898719983
+            },
+            {
+              "elapsed": 4584.599999904633,
+              "fps": 35.34262713859271
+            },
+            {
+              "elapsed": 5094.299999952316,
+              "fps": 35.31489110911527
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 24.110769232725485,
+          "batchCount": 38,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3014273632,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 45968992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 6,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "5210",
+          "rowNodes": 2586,
+          "expressionLength": 19814,
+          "expansionMs": 9.100000143051147,
+          "firstFrameMs": 88.39999985694885,
+          "sourceLength": 27139,
+          "compileMs": 20.5,
+          "frames": 196,
+          "fps": 35.466126229845415,
+          "windows": [
+            {
+              "elapsed": 506,
+              "fps": 35.573122529644266
+            },
+            {
+              "elapsed": 1027.3000001907349,
+              "fps": 34.529061947849804
+            },
+            {
+              "elapsed": 1544.4000000953674,
+              "fps": 34.80951460707734
+            },
+            {
+              "elapsed": 2056.800000190735,
+              "fps": 35.12880561407076
+            },
+            {
+              "elapsed": 2570.300000190735,
+              "fps": 35.05355404089581
+            },
+            {
+              "elapsed": 3078,
+              "fps": 35.45400828592144
+            },
+            {
+              "elapsed": 3586.7000000476837,
+              "fps": 35.38431295127333
+            },
+            {
+              "elapsed": 4107.200000047684,
+              "fps": 36.50336215177714
+            },
+            {
+              "elapsed": 4616.5,
+              "fps": 35.34262713859271
+            },
+            {
+              "elapsed": 5144.400000095367,
+              "fps": 35.991665081582816
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 24.04234693488296,
+          "batchCount": 38,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2975675232,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 124434192,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 7,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "10458",
+          "rowNodes": 5210,
+          "expressionLength": 44262,
+          "expansionMs": 17.899999856948853,
+          "firstFrameMs": 75.40000009536743,
+          "sourceLength": 51587,
+          "compileMs": 20,
+          "frames": 184,
+          "fps": 33.441776776719664,
+          "windows": [
+            {
+              "elapsed": 509.7999999523163,
+              "fps": 33.34641036012177
+            },
+            {
+              "elapsed": 1031.0999999046326,
+              "fps": 32.610780743439484
+            },
+            {
+              "elapsed": 1535,
+              "fps": 31.75233180585803
+            },
+            {
+              "elapsed": 2058.5,
+              "fps": 34.383954154727796
+            },
+            {
+              "elapsed": 2579.7000000476837,
+              "fps": 32.61703760254163
+            },
+            {
+              "elapsed": 3096.7000000476837,
+              "fps": 34.81624758220503
+            },
+            {
+              "elapsed": 3620.4000000953674,
+              "fps": 34.37082298713208
+            },
+            {
+              "elapsed": 4129.099999904633,
+              "fps": 35.384312967857326
+            },
+            {
+              "elapsed": 4638.400000095367,
+              "fps": 35.342627122047766
+            },
+            {
+              "elapsed": 5151.5,
+              "fps": 31.183005267927975
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 25.920652174431346,
+          "batchCount": 38,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3009012432,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 3239709888,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 8,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "20954",
+          "rowNodes": 10458,
+          "expressionLength": 97766,
+          "expansionMs": 34.60000014305115,
+          "firstFrameMs": 137.20000004768372,
+          "sourceLength": 105091,
+          "compileMs": 48.5,
+          "frames": 146,
+          "fps": 26.374738059562702,
+          "windows": [
+            {
+              "elapsed": 532,
+              "fps": 28.195488721804512
+            },
+            {
+              "elapsed": 1040.5999999046326,
+              "fps": 19.661816755554653
+            },
+            {
+              "elapsed": 1552.7999999523163,
+              "fps": 29.285435374079583
+            },
+            {
+              "elapsed": 2058.7999999523163,
+              "fps": 31.620553359683793
+            },
+            {
+              "elapsed": 2583.5999999046326,
+              "fps": 22.865853660614192
+            },
+            {
+              "elapsed": 3108,
+              "fps": 32.41800151965747
+            },
+            {
+              "elapsed": 3608.399999856949,
+              "fps": 21.982414075029197
+            },
+            {
+              "elapsed": 4130.599999904633,
+              "fps": 24.89467636693399
+            },
+            {
+              "elapsed": 4663.5,
+              "fps": 22.518296111564062
+            },
+            {
+              "elapsed": 5190.799999952316,
+              "fps": 28.446804478203013
+            }
+          ],
+          "sustainedBelow15": false,
+          "longestBelow15Ms": 0,
+          "drawMs": 33.9376712269979,
+          "batchCount": 38,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3009012432,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 3726702288,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 9,
+          "width": 1920,
+          "height": 1200,
+          "uncappedNodes": "41946",
+          "rowNodes": 20954,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 3726702288,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chrome-3840",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "results": [
+        {
+          "family": "branch",
+          "depth": 1,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "126",
+          "rowNodes": 44,
+          "expressionLength": 234,
+          "expansionMs": 1.2999999523162842,
+          "firstFrameMs": 137.10000014305115,
+          "sourceLength": 7559,
+          "compileMs": 20.40000009536743,
+          "frames": 58,
+          "fps": 10.451580350849328,
+          "windows": [
+            {
+              "elapsed": 580.2999999523163,
+              "fps": 10.339479580377434
+            },
+            {
+              "elapsed": 1157.1000001430511,
+              "fps": 10.402219136643437
+            },
+            {
+              "elapsed": 1736.2999999523163,
+              "fps": 10.359116025510781
+            },
+            {
+              "elapsed": 2313.100000143051,
+              "fps": 10.402219136643437
+            },
+            {
+              "elapsed": 2888.4000000953674,
+              "fps": 10.429341214144463
+            },
+            {
+              "elapsed": 3458.600000143051,
+              "fps": 10.522623639947811
+            },
+            {
+              "elapsed": 4018.5,
+              "fps": 10.716199324045302
+            },
+            {
+              "elapsed": 4579.600000143051,
+              "fps": 10.69328105234417
+            },
+            {
+              "elapsed": 5154.700000047684,
+              "fps": 10.432968181177126
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5154.700000047684,
+          "drawMs": 85.10517240803817,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 543088512,
+              "min": 166,
+              "max": 186
+            },
+            {
+              "hash": 1817961616,
+              "min": 166,
+              "max": 186
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 2,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "290",
+          "rowNodes": 126,
+          "expressionLength": 638,
+          "expansionMs": 1.6000001430511475,
+          "firstFrameMs": 136.70000004768372,
+          "sourceLength": 7963,
+          "compileMs": 20.5,
+          "frames": 56,
+          "fps": 10.0647016534867,
+          "windows": [
+            {
+              "elapsed": 500,
+              "fps": 10
+            },
+            {
+              "elapsed": 1096.2999999523163,
+              "fps": 10.062049304846212
+            },
+            {
+              "elapsed": 1682.7999999523163,
+              "fps": 10.230179028132993
+            },
+            {
+              "elapsed": 2270.0999999046326,
+              "fps": 10.216243828515491
+            },
+            {
+              "elapsed": 2864.0999999046326,
+              "fps": 10.1010101010101
+            },
+            {
+              "elapsed": 3449.2999999523163,
+              "fps": 10.25290498891166
+            },
+            {
+              "elapsed": 4038.5,
+              "fps": 10.183299388177906
+            },
+            {
+              "elapsed": 4543.200000047684,
+              "fps": 9.906875370571832
+            },
+            {
+              "elapsed": 5045.799999952316,
+              "fps": 9.948269003081458
+            },
+            {
+              "elapsed": 5564,
+              "fps": 9.648784252296236
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5564,
+          "drawMs": 87.81250001277242,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 2591438320,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 389164992,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 3,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "618",
+          "rowNodes": 290,
+          "expressionLength": 1590,
+          "expansionMs": 2.5,
+          "firstFrameMs": 137.59999990463257,
+          "sourceLength": 8915,
+          "compileMs": 19,
+          "frames": 56,
+          "fps": 10.03152765861189,
+          "windows": [
+            {
+              "elapsed": 506.39999985694885,
+              "fps": 9.87361769631207
+            },
+            {
+              "elapsed": 1008,
+              "fps": 9.96810207052243
+            },
+            {
+              "elapsed": 1603.2999999523163,
+              "fps": 10.07895178982127
+            },
+            {
+              "elapsed": 2106.399999856949,
+              "fps": 9.938382033289203
+            },
+            {
+              "elapsed": 2606.5,
+              "fps": 9.998000397060137
+            },
+            {
+              "elapsed": 3109.0999999046326,
+              "fps": 9.948269003081458
+            },
+            {
+              "elapsed": 3703,
+              "fps": 10.102710892467638
+            },
+            {
+              "elapsed": 4295,
+              "fps": 10.135135135135135
+            },
+            {
+              "elapsed": 4888.700000047684,
+              "fps": 10.106114198278766
+            },
+            {
+              "elapsed": 5485,
+              "fps": 10.062049304846212
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5485,
+          "drawMs": 86.28392858590398,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1157432064,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 2945768464,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 4,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "1274",
+          "rowNodes": 618,
+          "expressionLength": 3782,
+          "expansionMs": 3.9000000953674316,
+          "firstFrameMs": 142.5,
+          "sourceLength": 11107,
+          "compileMs": 20.40000009536743,
+          "frames": 55,
+          "fps": 9.895823962118113,
+          "windows": [
+            {
+              "elapsed": 508,
+              "fps": 9.84251968503937
+            },
+            {
+              "elapsed": 1014.4000000953674,
+              "fps": 9.873617691663464
+            },
+            {
+              "elapsed": 1614.7999999523163,
+              "fps": 9.993337777197798
+            },
+            {
+              "elapsed": 2118.2000000476837,
+              "fps": 9.932459275035294
+            },
+            {
+              "elapsed": 2633.2999999523163,
+              "fps": 9.706853040042162
+            },
+            {
+              "elapsed": 3144,
+              "fps": 9.790483648978174
+            },
+            {
+              "elapsed": 3644.600000143051,
+              "fps": 9.988014379886542
+            },
+            {
+              "elapsed": 4147.600000143051,
+              "fps": 9.940357852882704
+            },
+            {
+              "elapsed": 4647.799999952316,
+              "fps": 9.996001603171903
+            },
+            {
+              "elapsed": 5152.200000047684,
+              "fps": 9.91276764285219
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5152.200000047684,
+          "drawMs": 87.63272728053006,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 3907755904,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 1105083792,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 5,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "2586",
+          "rowNodes": 1274,
+          "expressionLength": 8742,
+          "expansionMs": 5.300000190734863,
+          "firstFrameMs": 151,
+          "sourceLength": 16067,
+          "compileMs": 20.600000143051147,
+          "frames": 55,
+          "fps": 9.915269515053183,
+          "windows": [
+            {
+              "elapsed": 511.7000000476837,
+              "fps": 9.771350399714805
+            },
+            {
+              "elapsed": 1012.2999999523163,
+              "fps": 9.98801438464349
+            },
+            {
+              "elapsed": 1514,
+              "fps": 9.966115207344586
+            },
+            {
+              "elapsed": 2111.5,
+              "fps": 10.0418410041841
+            },
+            {
+              "elapsed": 2624.2000000476837,
+              "fps": 9.752291787663301
+            },
+            {
+              "elapsed": 3143.9000000953674,
+              "fps": 9.620935154014312
+            },
+            {
+              "elapsed": 3747.4000000953674,
+              "fps": 9.942004971002486
+            },
+            {
+              "elapsed": 4343.599999904633,
+              "fps": 10.06373700422594
+            },
+            {
+              "elapsed": 4843.599999904633,
+              "fps": 10
+            },
+            {
+              "elapsed": 5344.799999952316,
+              "fps": 9.976057461141869
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5344.799999952316,
+          "drawMs": 87.59454545541243,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1203085312,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 223491392,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 6,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "5210",
+          "rowNodes": 2586,
+          "expressionLength": 19814,
+          "expansionMs": 9.5,
+          "firstFrameMs": 164.19999980926514,
+          "sourceLength": 27139,
+          "compileMs": 20.5,
+          "frames": 54,
+          "fps": 9.658725048376004,
+          "windows": [
+            {
+              "elapsed": 529.0999999046326,
+              "fps": 9.450009451712763
+            },
+            {
+              "elapsed": 1044.5999999046326,
+              "fps": 9.699321047526674
+            },
+            {
+              "elapsed": 1555.5999999046326,
+              "fps": 9.784735812133073
+            },
+            {
+              "elapsed": 2065,
+              "fps": 9.815469177589172
+            },
+            {
+              "elapsed": 2585.899999856949,
+              "fps": 9.598771359902313
+            },
+            {
+              "elapsed": 3099.7999999523163,
+              "fps": 9.729519359937965
+            },
+            {
+              "elapsed": 3634.899999856949,
+              "fps": 9.344047843190278
+            },
+            {
+              "elapsed": 4145,
+              "fps": 9.801999605171169
+            },
+            {
+              "elapsed": 4736,
+              "fps": 10.152284263959391
+            },
+            {
+              "elapsed": 5265.599999904633,
+              "fps": 9.44108761499315
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5265.599999904633,
+          "drawMs": 90.32592591532955,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1577816912,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 152116816,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 7,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "10458",
+          "rowNodes": 5210,
+          "expressionLength": 44262,
+          "expansionMs": 17.5,
+          "firstFrameMs": 174.5,
+          "sourceLength": 51587,
+          "compileMs": 30.700000047683716,
+          "frames": 50,
+          "fps": 8.997822527180109,
+          "windows": [
+            {
+              "elapsed": 578.8999998569489,
+              "fps": 8.637070307886583
+            },
+            {
+              "elapsed": 1130.2999999523163,
+              "fps": 9.067827346998957
+            },
+            {
+              "elapsed": 1737.3999998569489,
+              "fps": 8.235875474856588
+            },
+            {
+              "elapsed": 2285.399999856949,
+              "fps": 9.124087591240876
+            },
+            {
+              "elapsed": 2826.899999856949,
+              "fps": 9.233610341643583
+            },
+            {
+              "elapsed": 3419.7000000476837,
+              "fps": 8.434547905518283
+            },
+            {
+              "elapsed": 3932.899999856949,
+              "fps": 9.742790338772974
+            },
+            {
+              "elapsed": 4472.200000047684,
+              "fps": 9.271277578771823
+            },
+            {
+              "elapsed": 5002.799999952316,
+              "fps": 9.423294385410244
+            },
+            {
+              "elapsed": 5556.899999856949,
+              "fps": 9.023641943440825
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5556.899999856949,
+          "drawMs": 97.80999997138977,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1784710112,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 2068836496,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 8,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "20954",
+          "rowNodes": 10458,
+          "expressionLength": 97766,
+          "expansionMs": 34.09999990463257,
+          "firstFrameMs": 254.70000004768372,
+          "sourceLength": 105091,
+          "compileMs": 48.09999990463257,
+          "frames": 40,
+          "fps": 7.053305355340702,
+          "windows": [
+            {
+              "elapsed": 547.7000000476837,
+              "fps": 7.30326821188927
+            },
+            {
+              "elapsed": 1199.0999999046326,
+              "fps": 6.1406202039889815
+            },
+            {
+              "elapsed": 1791,
+              "fps": 5.068423719406382
+            },
+            {
+              "elapsed": 2302.5999999046326,
+              "fps": 7.818608289182253
+            },
+            {
+              "elapsed": 2877.2999999523163,
+              "fps": 6.96015312279122
+            },
+            {
+              "elapsed": 3383.5999999046326,
+              "fps": 7.900454276864948
+            },
+            {
+              "elapsed": 3908.2999999523163,
+              "fps": 7.623403849126144
+            },
+            {
+              "elapsed": 4608.299999952316,
+              "fps": 7.142857142857143
+            },
+            {
+              "elapsed": 5151.700000047684,
+              "fps": 7.361059991347064
+            },
+            {
+              "elapsed": 5671.099999904633,
+              "fps": 7.7011936871422115
+            }
+          ],
+          "sustainedBelow15": true,
+          "longestBelow15Ms": 5671.099999904633,
+          "drawMs": 128.77999999523163,
+          "batchCount": 141,
+          "buildCount": 1,
+          "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "pixels": [
+            {
+              "hash": 1825888112,
+              "min": 169,
+              "max": 187
+            },
+            {
+              "hash": 1736471216,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        },
+        {
+          "family": "branch",
+          "depth": 9,
+          "width": 3840,
+          "height": 2400,
+          "uncappedNodes": "41946",
+          "rowNodes": 20954,
+          "error": "Expanded expression is too large",
+          "pixels": [
+            {
+              "hash": 1736471216,
+              "min": 169,
+              "max": 187
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

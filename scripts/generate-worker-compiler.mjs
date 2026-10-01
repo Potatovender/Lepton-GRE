@@ -16,7 +16,7 @@ for (const statement of file.statements) {
   }
 }
 const byName = new Map([...declarations.values()].map((item) => [item.name, item]));
-const seeds = ["validateSceneSync", "buildFragmentShader", "webGlShaderCacheKey", "sceneViewport", "displayViewportForSize", "resolveBackgroundColor", "drawPointsOverlay", "compileExpression", "buildRuntimeEnv", "sceneFunctionEnv", "evaluateScalarSetting", "timeVariableEntries", "timeUniformBindings", "expressionDependsOnCoordinates", "isValidViewport"];
+const seeds = ["validateSceneSync", "buildFragmentShader", "applyShaderIssues", "webGlShaderCacheKey", "sceneViewport", "displayViewportForSize", "resolveBackgroundColor", "drawPointsOverlay", "compileExpression", "buildRuntimeEnv", "sceneFunctionEnv", "evaluateScalarSetting", "timeVariableEntries", "timeUniformBindings", "expressionDependsOnCoordinates", "isValidViewport"];
 const excluded = new Set(["scene", "latestDiagnostics", "viewport", "root"]);
 const reached = new Set();
 function visit(declaration) {

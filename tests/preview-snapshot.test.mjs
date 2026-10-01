@@ -10,10 +10,10 @@ async function fixture(t) {
   const validate = runtime.validateScene, build = runtime.buildFragmentShader;
   runtime.validateScene = (...args) => { calls.validations++; return validate(...args); };
   runtime.buildFragmentShader = (...args) => { calls.builds++; return build(...args); };
-  t.mock.module(new URL("../src/compiler/scene-runtime.js?v=20260929-video-timestamps", import.meta.url), {
+  t.mock.module(new URL("../src/compiler/scene-runtime.js?v=20261001-recursion-diagnostics", import.meta.url), {
     exports: { createSceneRuntime: () => runtime }
   });
-  t.mock.module(new URL("../packages/renderer/src/index.js?v=20260929-video-timestamps", import.meta.url), {
+  t.mock.module(new URL("../packages/renderer/src/index.js?v=20261001-recursion-diagnostics", import.meta.url), {
     exports: {
       renderFrameAsync: async (canvas, options, controls) => {
         calls.renders.push({ canvas, options, controls });
@@ -59,6 +59,28 @@ test("snapshot retains its private canvases and reuses source and diagnostics fo
   assert.equal(second.buildCount, 1); assert.equal(second.sourceLength, f.calls.renders[0].options.fragmentSource.length);
   assert.deepEqual(phases, ["validating", "compiling", "rendering"]);
   assert.equal(f.calls.renders[0].canvas, f.calls.renders[1].canvas);
+});
+
+test("oversized layers report blue compile failures without hiding independent layers or losing cached issues", async (t) => {
+  const f = await fixture(t);
+  f.scene.settings.maxRecursion = 14;
+  f.scene.functions.push({ id: "balloon", kind: "variable", expression: "sin(balloon)+cos(balloon)+x" });
+  f.scene.draws.push({ type: "comment", text: "A comment must not offset the diagnostic index" },
+    { equationId: "balloon", components: [] });
+  const first = await f.render();
+  assert.equal(first.diagnostics.hasErrors, false);
+  assert.equal(first.diagnostics.draws[0].status, "valid");
+  assert.equal(first.diagnostics.draws[2].status, "info");
+  assert.match(first.diagnostics.draws[2].message, /200,000-character compiler budget/);
+  assert.equal(first.diagnostics.renderIssues.length, 1);
+  assert.match(f.calls.renders[0].options.fragmentSource, /sin\(.*u_time_0/);
+  const again = await f.render();
+  assert.deepEqual(again.diagnostics.renderIssues, first.diagnostics.renderIssues);
+  assert.equal(f.calls.builds, 1);
+  f.scene.functions[2].expression = "x+1";
+  const repaired = await f.render();
+  assert.equal(repaired.diagnostics.renderIssues, undefined);
+  assert.equal(repaired.diagnostics.draws[2].status, "valid");
 });
 
 test("interactive snapshots request cooperative GPU batches without changing output dimensions", async (t) => {

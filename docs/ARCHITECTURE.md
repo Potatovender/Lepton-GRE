@@ -183,6 +183,22 @@ The CPU fallback should not be used as the performance reference for WebGL scene
 
 `validateScene` returns per-collection diagnostics and a scene summary. Red prevents affected output, yellow reports a recoverable concern, and blue reports potentially expensive recursion. A broken layer should not suppress unrelated valid layers.
 
+`buildFragmentShader(issues)` additionally reports per-draw generation failures.
+`SnapshotRenderer` caches these issues with the generated source and merges them
+into a fresh diagnostic view on cache hits. Resource limits remain blue; ordinary
+compile errors are red. Failed collection layers discard their partial helpers.
+Photo/video workers reject `renderIssues` before returning output. Do not restore
+a catch-and-ignore path: successful validation does not guarantee successful GLSL
+expansion or native shader compilation.
+
+`src/animation/frame-performance.js` measures completed preview frames in 500 ms
+windows. More than two consecutive seconds below 15 FPS triggers an advisory;
+two seconds at or above 15 clears it. Compilation, hidden tabs, edits, and pauses
+reset the window. This is whole-graph performance, not attribution to an individual
+expression. The scalar size estimate remains a separate token-based preflight
+warning above 16,384, with the old 4,096 validation-work budget retained internally.
+See [recursion measurements](RECURSION_PERFORMANCE.md).
+
 Rows, colour channels, and grid settings share `statusIndicator` buttons. Clicking
 or pressing Enter/Space pins the current diagnostic in the viewport-clamped help
 layer; a second activation, Escape, or outside click dismisses it. Scrolling
