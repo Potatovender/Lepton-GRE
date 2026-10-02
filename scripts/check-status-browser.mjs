@@ -29,7 +29,9 @@ point p = [missing,0]
 list values = [missing,1]
 draw(broken)
 folder Problems = {
-  expression child = missing
+  folder Nested = {
+    expression child = missing
+  }
 }`;
   await page.goto(`${base}app.html?scene=${encodeURIComponent(source)}`);
   await page.locator('.mathquill-field .mq-root-block').first().waitFor();
@@ -38,6 +40,8 @@ folder Problems = {
   const flags = page.locator('.expression-row > .entry-row-grip > [data-status-message]');
   await flags.and(page.locator('.invalid')).first().waitFor();
   assert.equal(await flags.count(), 13, "Missing row flags (closed folder contents should stay hidden)");
+  const folderMessage = await page.locator('.expression-row-folder .entry-status').getAttribute('data-status-message');
+  assert.equal(folderMessage, "Folder contains: Unknown variable: missing", "Nested folder repeated its diagnostic prefix");
   for (const state of ["invalid", "warning", "info", "valid"]) {
     assert(await flags.and(page.locator(`.${state}`)).count() > 0, `No ${state} fixture`);
   }

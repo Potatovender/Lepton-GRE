@@ -1,4 +1,4 @@
-import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20261001-piecewise-calls";
+import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20261002-text-layout-flags";
 
 // Documentation is checked against the callable registry during every build.
 // Each example is also evaluated by the CPU and GPU regression suites.

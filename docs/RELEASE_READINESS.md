@@ -1,6 +1,6 @@
 # Release Readiness
 
-Updated on 2026-10-01 for `20261001-piecewise-calls`. The focused compiler, recursion,
+Updated on 2026-10-02 for `20261002-text-layout-flags`. The focused compiler, recursion,
 and video-export checks below supplement the 2026-09-16 baseline audit. This is a bounded
 validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
@@ -16,6 +16,30 @@ The Pages workflow now installs locked dependencies and runs verification before
 uploading an explicit 63-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
+
+## Text Layout and Folder Diagnostics (2026-10-02)
+
+- Reproduced the Apply confirmation taking a 259-pixel grid row that belonged
+  to the editor. The Text panel now gives only the editor flexible height;
+  Apply/Reload notices and unapplied-draft warnings stay compact. Long notices
+  wrap and scroll instead of displacing the editor or overflowing its sidebar.
+- Reproduced `Folder contains: Folder contains:` in nested folders. Folder-name
+  diagnostics now stay separate from aggregated child diagnostics, so repeated
+  compilation/FPS updates neither duplicate the prefix nor retain stale child
+  errors. Red/yellow/blue priority and own-name errors are preserved.
+- Regression coverage includes Apply, Reload, long import notices, and draft
+  warnings at desktop and phone sizes; nested folders, repeated aggregation,
+  child recovery, and own-name errors are checked in the runtime and browser.
+- The previously reported GPU stress failures did not recur in two isolated
+  Chrome 154.0.8037.93 runs on this M4 Max. Both phases retained all 96 key edits,
+  observed background compilation, and reported no runtime error or main-thread
+  long task. Input-delay p95 was 0.2-0.5 ms; DOM mutation p95 was 1.5-1.6 ms.
+  Presentation-inclusive Event Timing p95 during compilation remained 272-280 ms,
+  above the optional 50 ms target. Passing correctness is not a claim that this
+  presentation target or every GPU is covered. No renderer limits were relaxed.
+- Build/model checks, 17 syntax tests, 52 renderer tests, 185 runtime tests,
+  TypeScript, and all nine browser suites passed locally. The patched build also
+  passed a third GPU editing stress run with no timeout or correctness failure.
 
 ## Piecewise Function Composition (2026-10-01)
 
@@ -34,7 +58,7 @@ screenshots, and unrelated ItGE experiments are not deployed.
   status, collection, reference/gallery, snapshot, cooperative-renderer and both
   video browser checks passed. Reference/gallery required ANGLE Metal on this Mac;
   the default software renderer timed out waiting for a gallery preview.
-- The preview-latency stress check remains a local limitation: the software
+- In that audit, the preview-latency stress check was a local limitation: the software
   renderer hit a GPU fence timeout. Metal rendered the fixture without a runtime
   error, but the editing phase did not observe background compilation and failed
   that assertion. This is not recorded as a clean full browser-suite run.

@@ -94,6 +94,33 @@ try {
     await context.close();
   }
 
+  // Notices are optional siblings: none may take the flexible editor's height.
+  for (const [width, height] of [[1440, 900], [1920, 1200], [390, 844], [320, 568]]) {
+    const page = activePage = await browser.newPage({ viewport: { width, height } });
+    page.on("dialog", (dialog) => dialog.accept());
+    await page.goto(`${base}app.html`);
+    await page.locator('[data-display-mode="text"]').click();
+    const initial = await assertTextLayout(page, "initial");
+    await page.locator('[data-scene-text]').fill("expression eq = x\ndraw(eq)");
+    await page.locator('[data-action="apply-text"]').click();
+    assert.equal(await page.locator('.text-apply-notice').textContent(), "Applied to graph.");
+    const applied = await assertTextLayout(page, "applied");
+    assert(initial.editor.height - applied.editor.height < 70, "Apply notice stole the editor height");
+    await page.screenshot({ path: `${output}/text-applied-${width}-${height}.png` });
+    await page.locator('[data-action="refresh-text"]').click();
+    await assertTextLayout(page, "reloaded");
+    await page.locator('[data-scene-text]').fill(`expression eq = x\nunknown ${"long_unrecognized_text".repeat(20)}`);
+    await page.locator('[data-action="apply-text"]').click();
+    assert.match(await page.locator('.text-apply-notice').textContent(), /not recognized/);
+    await assertTextLayout(page, "long import warning");
+    await page.locator('[data-scene-text]').fill("expression eq = x+2");
+    await page.locator('[data-display-mode="standard"]').click();
+    assert(await page.locator('.text-draft-warning').isVisible());
+    await assertTextLayout(page, "unapplied draft warning");
+    await page.close();
+    console.log(`ok - Text editor keeps its space after Apply, Reload and warnings at ${width}x${height}`);
+  }
+
   const page = activePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const sessionErrors = [];
   page.on("pageerror", (error) => sessionErrors.push(error.message));
@@ -359,6 +386,37 @@ expression tail = 1`)}`);
 
 async function settle(page) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function assertTextLayout(page, label) {
+  const layout = await page.locator('.text-mode-panel').evaluate((panel) => {
+    const box = (element) => {
+      const { x, y, width, height, bottom, right } = element.getBoundingClientRect();
+      return { x, y, width, height, bottom, right };
+    };
+    const notice = panel.querySelector('.text-apply-notice');
+    let noticeStart = null;
+    if (notice?.firstChild) {
+      const range = document.createRange();
+      range.setStart(notice.firstChild, 0);
+      range.setEnd(notice.firstChild, 1);
+      noticeStart = range.getBoundingClientRect().top - notice.getBoundingClientRect().top;
+    }
+    return { panel: box(panel), editor: box(panel.querySelector('.scene-text-editor')),
+      noticeStart,
+      rows: [...panel.children].map((element) => ({ name: element.className, ...box(element) })),
+      buttons: [...panel.querySelectorAll('.text-mode-actions button')].map(box) };
+  });
+  assert(layout.noticeStart === null || layout.noticeStart >= 0, `${label}: start of notice is clipped`);
+  for (const row of layout.rows.filter((row) => row.height)) {
+    assert(row.y >= layout.panel.y && row.bottom <= layout.panel.bottom + 1, `${label}: ${row.name} escaped panel`);
+    assert(row.right <= layout.panel.right + 1, `${label}: ${row.name} overflowed horizontally`);
+    if (/notice|warning/.test(row.name)) assert(row.height <= 96, `${label}: oversized notice`);
+  }
+  for (const button of layout.buttons) assert(button.height <= 44, `${label}: oversized action button`);
+  assert(layout.editor.height > 40, `${label}: editor collapsed`);
+  if (page.viewportSize().width > 760) assert(layout.editor.height > layout.panel.height * 0.65, `${label}: editor no longer fills panel`);
+  return layout;
 }
 
 async function geometry(field) {

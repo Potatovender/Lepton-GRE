@@ -1,13 +1,13 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261001-piecewise-calls";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261001-piecewise-calls";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261001-piecewise-calls";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261001-piecewise-calls";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261001-piecewise-calls";
-import { PreviewClient } from "./compiler/preview-client.js?v=20261001-piecewise-calls";
-import { openVideoPanel } from "./video/panel.js?v=20261001-piecewise-calls";
-import { createAstCache } from "./math/ast-cache.js?v=20261001-piecewise-calls";
-import { exportPhoto } from "./compiler/photo-client.js?v=20261001-piecewise-calls";
-import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261001-piecewise-calls";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261002-text-layout-flags";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261002-text-layout-flags";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261002-text-layout-flags";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261002-text-layout-flags";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261002-text-layout-flags";
+import { PreviewClient } from "./compiler/preview-client.js?v=20261002-text-layout-flags";
+import { openVideoPanel } from "./video/panel.js?v=20261002-text-layout-flags";
+import { createAstCache } from "./math/ast-cache.js?v=20261002-text-layout-flags";
+import { exportPhoto } from "./compiler/photo-client.js?v=20261002-text-layout-flags";
+import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261002-text-layout-flags";
 
 const cachedSyntax = createAstCache();
 
@@ -56,7 +56,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20261001-piecewise-calls";
+const APP_VERSION = "20261002-text-layout-flags";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -6198,7 +6198,8 @@ function validateSceneSync() {
         ? affected
       : { status: "valid", message: "Draw layer is valid" };
   });
-  diagnostics.folders = (scene.folders ?? []).map((entry) => combineDiagnostics([
+  // Keep own-name errors separate so later render/FPS aggregation is idempotent.
+  diagnostics.folderNames = (scene.folders ?? []).map((entry) => combineDiagnostics([
     duplicateIdDiagnostic(entry.id ?? "", "Folder", duplicateIds.folders),
     crossClassNameDiagnostic(entry.id ?? "", "folder", objectNameClasses),
     validateFolderName(entry.id ?? "")
@@ -6275,7 +6276,7 @@ function aggregateFolderDiagnostics(diagnostics) {
     visiting.add(index);
     const folder = scene.folders[index];
     const uid = ensureEntryUid(folder, "folders");
-    const candidates = [diagnostics.folders[index]];
+    const candidates = [diagnostics.folderNames?.[index] ?? diagnostics.folders[index]];
     for (const ref of scene.dataOrder ?? []) {
       if (ref.parentUid !== uid) continue;
       const childIndex = scene[ref.kind]?.findIndex((entry) => ensureEntryUid(entry, ref.kind) === ref.uid) ?? -1;
@@ -6284,7 +6285,8 @@ function aggregateFolderDiagnostics(diagnostics) {
     }
     visiting.delete(index);
     const result = candidates.filter(Boolean).reduce((best, item) => (DIAGNOSTIC_PRIORITY[item.status] > DIAGNOSTIC_PRIORITY[best.status] ? item : best), { status: "valid", message: "Folder and contents are valid" });
-    const wrapped = result.status === "valid" ? result : { status: result.status, message: `Folder contains: ${result.message}` };
+    const wrapped = result.status === "valid" || result.message.startsWith("Folder contains: ")
+      ? result : { status: result.status, message: `Folder contains: ${result.message}` };
     memo.set(index, wrapped);
     return wrapped;
   };

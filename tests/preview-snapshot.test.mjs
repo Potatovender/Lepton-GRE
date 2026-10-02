@@ -10,10 +10,10 @@ async function fixture(t) {
   const validate = runtime.validateScene, build = runtime.buildFragmentShader;
   runtime.validateScene = (...args) => { calls.validations++; return validate(...args); };
   runtime.buildFragmentShader = (...args) => { calls.builds++; return build(...args); };
-  t.mock.module(new URL("../src/compiler/scene-runtime.js?v=20261001-piecewise-calls", import.meta.url), {
+  t.mock.module(new URL("../src/compiler/scene-runtime.js?v=20261002-text-layout-flags", import.meta.url), {
     exports: { createSceneRuntime: () => runtime }
   });
-  t.mock.module(new URL("../packages/renderer/src/index.js?v=20261001-piecewise-calls", import.meta.url), {
+  t.mock.module(new URL("../packages/renderer/src/index.js?v=20261002-text-layout-flags", import.meta.url), {
     exports: {
       renderFrameAsync: async (canvas, options, controls) => {
         calls.renders.push({ canvas, options, controls });

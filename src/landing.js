@@ -1,4 +1,4 @@
-const APP_VERSION = "20261001-piecewise-calls";
+const APP_VERSION = "20261002-text-layout-flags";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

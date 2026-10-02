@@ -3,7 +3,7 @@ let activeExport = null;
 export function exportPhoto(scene, name) {
   if (activeExport) return activeExport;
   const job = new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("./photo-worker.js?v=20261001-piecewise-calls", import.meta.url), { type: "module" });
+    const worker = new Worker(new URL("./photo-worker.js?v=20261002-text-layout-flags", import.meta.url), { type: "module" });
     const finish = (error) => { clearTimeout(timer); worker.terminate(); error ? reject(error) : resolve(); };
     const timer = setTimeout(() => finish(new Error("Photo export took too long. Try simplifying the graph.")), 120_000);
     worker.onerror = (event) => finish(new Error(event.message || "Photo export worker failed"));

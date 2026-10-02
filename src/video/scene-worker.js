@@ -1,6 +1,6 @@
-import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20261001-piecewise-calls";
-import { createSceneClock } from "../animation/scene-clock.js?v=20261001-piecewise-calls";
-import { createVideoExporter } from "./exporter.js?v=20261001-piecewise-calls";
+import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20261002-text-layout-flags";
+import { createSceneClock } from "../animation/scene-clock.js?v=20261002-text-layout-flags";
+import { createVideoExporter } from "./exporter.js?v=20261002-text-layout-flags";
 import * as mediabunny from "../libs/mediabunny/mediabunny.mjs";
 
 const exporter = createVideoExporter(mediabunny);
