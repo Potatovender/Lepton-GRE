@@ -402,7 +402,14 @@ async function assertTextLayout(page, label) {
       range.setEnd(notice.firstChild, 1);
       noticeStart = range.getBoundingClientRect().top - notice.getBoundingClientRect().top;
     }
-    return { panel: box(panel), editor: box(panel.querySelector('.scene-text-editor')),
+    // Font metrics change control heights across platforms; measure the free space.
+    const style = getComputedStyle(panel);
+    const rows = [...panel.children].filter((element) => element.getBoundingClientRect().height > 0);
+    const reserved = rows.filter((element) => !element.classList.contains('scene-text-editor'))
+      .reduce((height, element) => height + element.getBoundingClientRect().height, 0);
+    const available = panel.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      - Math.max(0, rows.length - 1) * parseFloat(style.rowGap) - reserved;
+    return { panel: box(panel), editor: box(panel.querySelector('.scene-text-editor')), available,
       noticeStart,
       rows: [...panel.children].map((element) => ({ name: element.className, ...box(element) })),
       buttons: [...panel.querySelectorAll('.text-mode-actions button')].map(box) };
@@ -415,7 +422,7 @@ async function assertTextLayout(page, label) {
   }
   for (const button of layout.buttons) assert(button.height <= 44, `${label}: oversized action button`);
   assert(layout.editor.height > 40, `${label}: editor collapsed`);
-  if (page.viewportSize().width > 760) assert(layout.editor.height > layout.panel.height * 0.65, `${label}: editor no longer fills panel`);
+  assert(Math.abs(layout.editor.height - layout.available) < 2, `${label}: editor does not fill remaining space: ${JSON.stringify(layout)}`);
   return layout;
 }
 
