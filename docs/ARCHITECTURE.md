@@ -81,6 +81,10 @@ but retains folder names, membership and declaration order. A fold rebuilds the
 sidebar using cached flags and preserves both graph canvases without requesting
 another worker render. Imports, saved-graph loads and Apply close all folders;
 new folders made during editing remain open.
+All unfiltered sort modes keep the folder hierarchy and sort siblings only.
+New, Load and Apply reset temporary search, type and dependency filters to the
+unfiltered in-order view. An explicit search/type filter can still find entries
+inside closed folders, without changing their saved membership or open state.
 
 Each snapshot renderer retains at most three shader sources. The GPU driver retains
 four linked programs per context and one pending compilation. Its async path polls

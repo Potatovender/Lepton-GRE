@@ -1,6 +1,6 @@
 /** One in-flight job and one newest replacement; never an unbounded edit queue. */
 export class PreviewClient {
-  constructor({ onFrame, onStatus, onError, onDiagnostics, workerFactory = () => new Worker(new URL("./preview-worker.js?v=20261003-unary-points-folders", import.meta.url), { type: "module" }) }) {
+  constructor({ onFrame, onStatus, onError, onDiagnostics, workerFactory = () => new Worker(new URL("./preview-worker.js?v=20261003-folder-apply-view", import.meta.url), { type: "module" }) }) {
     Object.assign(this, { onFrame, onStatus, onError, onDiagnostics, workerFactory });
     this.revision = 0;
     this.pending = null;

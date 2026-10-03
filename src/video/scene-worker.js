@@ -1,6 +1,6 @@
-import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20261003-unary-points-folders";
-import { createSceneClock } from "../animation/scene-clock.js?v=20261003-unary-points-folders";
-import { createVideoExporter } from "./exporter.js?v=20261003-unary-points-folders";
+import { SnapshotRenderer } from "../compiler/snapshot-renderer.js?v=20261003-folder-apply-view";
+import { createSceneClock } from "../animation/scene-clock.js?v=20261003-folder-apply-view";
+import { createVideoExporter } from "./exporter.js?v=20261003-folder-apply-view";
 import * as mediabunny from "../libs/mediabunny/mediabunny.mjs";
 
 const exporter = createVideoExporter(mediabunny);

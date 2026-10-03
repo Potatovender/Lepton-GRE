@@ -1,6 +1,6 @@
 # Release Readiness
 
-Updated on 2026-10-03 for `20261003-unary-points-folders`. The focused compiler, recursion,
+Updated on 2026-10-03 for `20261003-folder-apply-view`. The focused compiler, recursion,
 and video-export checks below supplement the 2026-09-16 baseline audit. This is a bounded
 validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
@@ -16,6 +16,23 @@ The Pages workflow now installs locked dependencies and runs verification before
 uploading an explicit 63-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
+
+## Applying Folders in Sorted Views (2026-10-03)
+
+- Follow-up reproduction used actual clipboard paste into a blank graph on the
+  public site. In-order view hid children, but alphabetical and grouped views
+  flattened the tree even though every folder was marked collapsed. The earlier
+  closed-folder checks missed those view modes.
+- All unfiltered sorts now retain folder structure and order siblings only.
+  New, Load and either Apply action reset temporary view filters and dependency
+  selections to the unfiltered in-order view. Source and saved order are unchanged.
+- Regression coverage checks visible rows, not only the collapsed property:
+  real paste, New after stale filters, both Apply buttons, every sort, nested
+  expansion, comments and source round trips. Saved-graph Load is also checked
+  after stale sorting and filters.
+- Build/model checks, 297 unit tests, TypeScript, and the editor, collection and
+  status browser suites passed locally in native Chrome. The deployment workflow
+  runs all nine browser suites before publishing.
 
 ## Unary Signs, Points and Folder Presentation (2026-10-03)
 

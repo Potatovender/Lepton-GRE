@@ -1,14 +1,14 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261003-unary-points-folders";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261003-unary-points-folders";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261003-unary-points-folders";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261003-unary-points-folders";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261003-unary-points-folders";
-import { PreviewClient } from "./compiler/preview-client.js?v=20261003-unary-points-folders";
-import { openVideoPanel } from "./video/panel.js?v=20261003-unary-points-folders";
-import { createAstCache } from "./math/ast-cache.js?v=20261003-unary-points-folders";
-import { exportPhoto } from "./compiler/photo-client.js?v=20261003-unary-points-folders";
-import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261003-unary-points-folders";
-import { sceneDiagnosticKey } from "./compiler/scene-keys.js?v=20261003-unary-points-folders";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261003-folder-apply-view";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261003-folder-apply-view";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261003-folder-apply-view";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261003-folder-apply-view";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261003-folder-apply-view";
+import { PreviewClient } from "./compiler/preview-client.js?v=20261003-folder-apply-view";
+import { openVideoPanel } from "./video/panel.js?v=20261003-folder-apply-view";
+import { createAstCache } from "./math/ast-cache.js?v=20261003-folder-apply-view";
+import { exportPhoto } from "./compiler/photo-client.js?v=20261003-folder-apply-view";
+import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261003-folder-apply-view";
+import { sceneDiagnosticKey } from "./compiler/scene-keys.js?v=20261003-folder-apply-view";
 
 const cachedSyntax = createAstCache();
 
@@ -57,7 +57,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20261003-unary-points-folders";
+const APP_VERSION = "20261003-folder-apply-view";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -525,6 +525,7 @@ function resetToNewGraph() {
   markUnsavedChange();
   activeTab = "functions";
   displayMode = "standard";
+  resetDataView();
   renderApp();
 }
 
@@ -980,6 +981,7 @@ function applyTextDraft(switchToStandard = false) {
     : "Applied to graph.";
   recordSceneHistory(before);
   if (switchToStandard) displayMode = "standard";
+  resetDataView();
   renderApp();
 }
 
@@ -1678,6 +1680,11 @@ function listControlBar(kind, label) {
   `;
 }
 
+function resetDataView() {
+  listControls.data = { query: "", sort: "custom", type: "all" };
+  selectedDependencyEntry = null;
+}
+
 function visibleDataEntries() {
   const state = listControls.data ?? { query: "", sort: "custom", type: "all" };
   const query = state.query.trim().toLowerCase();
@@ -1699,7 +1706,7 @@ function visibleDataEntries() {
   } else if (state.sort === "group") {
     const groups = { variable: 0, slider: 1, function: 2, colors: 3, colourhsv: 3, restrictions: 4, transparencies: 5, draws: 6, folder: 7, comment: 8 };
     indexed.sort((left, right) => (groups[dataSubtype(left.entry, left.kind)] ?? 9) - (groups[dataSubtype(right.entry, right.kind)] ?? 9));
-  } else if (state.sort !== "custom") {
+  } else if (state.sort === "az" || state.sort === "za") {
     indexed.sort((left, right) => {
       if (isCommentEntry(left.entry) && isCommentEntry(right.entry)) return 0;
       if (isCommentEntry(left.entry)) return 1;
@@ -1708,7 +1715,8 @@ function visibleDataEntries() {
       return state.sort === "az" ? order : -order;
     });
   }
-  if ((state.sort === "custom" || state.sort === "dependencies") && !query && type === "all") indexed = nestOrderedEntries(indexed);
+  // Sorting changes sibling order, not membership or folder visibility.
+  if (!query && type === "all") indexed = nestOrderedEntries(indexed);
   return indexed;
 }
 
@@ -2329,6 +2337,7 @@ function bindEvents() {
       activeTab = "functions";
       saveDialogOpen = false;
       libraryDialogOpen = false;
+      resetDataView();
       renderApp();
     });
   });

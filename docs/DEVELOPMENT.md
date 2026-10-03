@@ -88,6 +88,7 @@ Before release, verify:
 - favicon on landing, blank, URL scene, and all sample links;
 - Standard/Text/Standard round trip with folders, standalone and inline comments, fractions, exponents, piecewise expressions, and custom functions;
 - repeated Apply to graph closes all nested folders without changing source;
+- actual clipboard paste into a blank project, both Apply buttons, and non-default sorts/filters show only closed root folders after applying;
 - opening/closing folders preserves rendered pixels and flags without requesting compilation;
 - nested negation/subtraction, named point arguments and nested selectors agree through text/LaTeX round trips and CPU/GPU evaluation;
 - expression, slider, time slider, parameterized function, colour, boundary, transparency, point, folder, comment, and draw rows;

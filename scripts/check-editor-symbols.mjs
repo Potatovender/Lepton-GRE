@@ -14,7 +14,7 @@ const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20261003-unary-points-folders";
+const cacheVersion = "20261003-folder-apply-view";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -1417,6 +1417,43 @@ check("folder comments round-trip on the folder declaration", () => {
   sandbox.__debugSetScene(imported);
   assert(imported.folders[0].comment === "group note", JSON.stringify(imported.folders[0]));
   assert(sandbox.exportScene().includes("folder notes = { // group note"), sandbox.exportScene());
+});
+
+check("all sorts respect closed folders and keep the saved data order", () => {
+  const imported = sandbox.importLoadedScene(`folder Zebra = {
+  expression zed = 1
+  folder Nested = {
+    expression hidden = 2
+  }
+  expression alpha = 3
+}
+folder Apple = {
+  colour ink = 20~30~40
+}
+expression outside = 4`);
+  sandbox.__debugSetScene(imported);
+  const canonical = sandbox.exportScene();
+  try {
+    for (const sort of ["custom", "az", "za", "group", "dependencies"]) {
+      sandbox.resetDataView();
+      vm.runInContext(`listControls.data.sort = ${JSON.stringify(sort)}`, sandbox);
+      imported.folders[0].collapsed = true;
+      assert(sandbox.visibleDataEntries().length === 3, `${sort} exposed closed-folder children`);
+      assert(sandbox.visibleDataEntries().every((item) => !item.parentUid), `${sort} flattened folders`);
+      imported.folders[0].collapsed = false;
+      const rows = sandbox.visibleDataEntries();
+      assert(rows.length === 6, `${sort} did not expand only the selected folder`);
+      assert(!rows.some(({ entry }) => entry.id === "hidden"), `${sort} exposed a closed nested folder`);
+      assert(rows.filter((item) => item.parentUid).every((item) => item.depth === 1), `${sort} lost nesting depth`);
+      if (sort === "az") assert(rows.filter((item) => item.parentUid).map(({ entry }) => entry.id).join() === "alpha,Nested,zed", "A-Z did not sort within the folder");
+      assert(sandbox.exportScene() === canonical, `${sort} changed saved order or source`);
+    }
+    vm.runInContext('listControls.data = { query: "hidden", type: "functions", sort: "dependencies" }; selectedDependencyEntry = { kind: "functions", uid: "stale" };', sandbox);
+    sandbox.resetDataView();
+    assert(vm.runInContext('listControls.data.query === "" && listControls.data.type === "all" && listControls.data.sort === "custom" && selectedDependencyEntry === null', sandbox), "Project view reset retained filters or dependency selection");
+  } finally {
+    sandbox.resetDataView();
+  }
 });
 
 check("folder names allow spaces but reject grammar delimiters", () => {

@@ -395,6 +395,82 @@ draw(root)`)}`);
   console.log("ok - loaded/applied folders start closed; folding preserves flags and pixels without rendering; real edits still render");
   console.log("ok - Enter inserts and focuses the next expression inside the current folder");
 
+  const pastedFolders = `folder Zebra = { // keep this comment
+  expression zed = x
+  folder Inner = {
+    expression hidden = y
+  }
+  expression alpha = 2
+}
+folder Apple = {
+  colour ink = 20~30~40
+}`;
+  await page.goto(`${base}app.html`);
+  const chooseSort = async (sort) => {
+    await page.locator('.sort-menu > summary').click();
+    await page.locator(`[data-set-entry-sort="data"][data-sort-value="${sort}"]`).click();
+  };
+  const assertClosedRows = async (label) => {
+    assert.equal(await page.locator('.expression-row[data-entry-kind]').count(), 2, `${label}: folder contents are visible`);
+    assert.equal(await page.locator('[data-toggle-folder]').count(), 2, `${label}: nested folder is visible`);
+    assert.deepEqual(await page.locator('[data-toggle-folder]').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-expanded'))), ['false', 'false'], label);
+    assert(await page.evaluate(() => window.__leptonDebug.scene().folders.every((folder) => folder.collapsed)), label);
+  };
+  const assertCleanView = async () => {
+    assert.equal(await page.locator('[data-entry-search="data"]').inputValue(), '');
+    assert.equal(await page.locator('[data-entry-type-filter="data"]').inputValue(), 'all');
+    assert.equal(await page.locator('[data-entry-sort="data"]').textContent(), 'In order');
+  };
+  if (engine === chromium) await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  let appliedSource;
+  for (const sort of ['custom', 'az', 'za', 'group', 'dependencies']) {
+    await chooseSort(sort);
+    await page.locator('[data-entry-type-filter="data"]').selectOption('values');
+    await page.locator('[data-entry-search="data"]').fill('old filter');
+    await page.locator('.graph-actions-trigger').hover();
+    await page.locator('[data-action="new-graph"]').click();
+    if (await page.locator('[data-action="confirm-new-graph"]').count()) await page.locator('[data-action="confirm-new-graph"]').click();
+    await assertCleanView();
+    for (const viaWarning of [false, true]) {
+      await chooseSort(sort);
+      await page.locator('[data-entry-type-filter="data"]').selectOption('values');
+      await page.locator('[data-entry-search="data"]').fill('old filter');
+      await page.locator('[data-display-mode="text"]').click();
+      await page.locator('[data-scene-text]').click();
+      await page.keyboard.press('ControlOrMeta+A');
+      if (engine === chromium) {
+        await page.evaluate((source) => navigator.clipboard.writeText(source), pastedFolders);
+        await page.keyboard.press('ControlOrMeta+V');
+      } else await page.keyboard.insertText(pastedFolders);
+      assert.equal(await page.locator('[data-scene-text]').inputValue(), pastedFolders, 'Clipboard paste did not replace the blank project');
+      if (viaWarning) {
+        await page.locator('[data-display-mode="standard"]').click();
+        await page.locator('[data-action="apply-text-and-standard"]').click();
+      } else {
+        await page.locator('[data-action="apply-text"]').click();
+        assert.equal(await page.locator('[data-display-mode="text"]').getAttribute('aria-selected'), 'true');
+        await page.locator('[data-display-mode="standard"]').click();
+      }
+      await assertCleanView();
+      await assertClosedRows(`${sort}, warning=${viaWarning}`);
+      await chooseSort(sort);
+      await assertClosedRows(`Sorted after Apply: ${sort}`);
+      if (sort !== 'dependencies') {
+        await page.locator('[data-toggle-folder="0"]').click();
+        assert.equal(await page.locator('[data-field="functions.0.expression"] .mq-root-block').count(), 1, `${sort}: parent did not open`);
+        assert.equal(await page.locator('[data-field="functions.1.expression"]').count(), 0, `${sort}: nested folder opened itself`);
+      }
+      await page.locator('[data-display-mode="text"]').click();
+      const source = await page.locator('[data-scene-text]').inputValue();
+      appliedSource ??= source;
+      assert.equal(source, appliedSource, 'Apply or view sorting changed source, comments or saved order');
+      await page.locator('[data-display-mode="standard"]').click();
+    }
+  }
+  await page.screenshot({ path: `${output}/pasted-folders-closed.png` });
+  assert.deepEqual(sessionErrors, [], 'Folder clipboard workflow raised browser errors');
+  console.log('ok - clipboard paste into New, both Apply actions, stale filters and every sort show only closed root folders without source loss');
+
   if (!process.env.LEPTON_TEST_URL) {
     const dev = await createServer({ server: { host: "127.0.0.1", port: 0 } });
     try {
