@@ -4,7 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { PreviewClient } from "../src/compiler/preview-client.js";
 import { DEFAULT_SCENE } from "../src/compiler/scene-runtime.js";
 import { createSceneClock } from "../src/animation/scene-clock.js";
-import { SnapshotRenderer } from "../src/compiler/snapshot-renderer.js?v=20261002-text-layout-flags";
+import { SnapshotRenderer } from "../src/compiler/snapshot-renderer.js?v=20261003-unary-points-folders";
 
 const WORKER = new URL("../src/compiler/preview-worker.js", import.meta.url);
 let fixtureSequence = 0;

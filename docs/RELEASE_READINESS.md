@@ -1,6 +1,6 @@
 # Release Readiness
 
-Updated on 2026-10-02 for `20261002-text-layout-flags`. The focused compiler, recursion,
+Updated on 2026-10-03 for `20261003-unary-points-folders`. The focused compiler, recursion,
 and video-export checks below supplement the 2026-09-16 baseline audit. This is a bounded
 validation record, not a guarantee
 that every GPU, browser, expression, or editing sequence is bug-free.
@@ -16,6 +16,31 @@ The Pages workflow now installs locked dependencies and runs verification before
 uploading an explicit 63-file public artifact. Deploy depends on that build of the
 same commit. Tests, development documents, node_modules, local saves, audit
 screenshots, and unrelated ItGE experiments are not deployed.
+
+## Unary Signs, Points and Folder Presentation (2026-10-03)
+
+- Reproduced `-(-x)` becoming `--x` (a decrement) and subtraction producing
+  adjacent minus signs. Text, LaTeX, CPU and GLSL serialization now preserve
+  unary grouping, including powers, fractions and nested calls.
+- Reproduced named points failing argument expansion and nested point selectors
+  leaking `leptonpointselector` placeholders. Selectors now retain AST structure;
+  named points expand consistently, and nested calls respect scalar local scope.
+  A related LaTeX sum/product routing bug found by the new tests is also fixed.
+- Reproduced HTTP 500 for both extensionless bundled `LICENSE` files under Vite.
+  The development middleware serves these exact allowlisted files as plain text;
+  production staging and licence contents are unchanged.
+- URL loads, saved graphs and repeated Apply already close nested folders in the
+  current version; the reported open-on-load behavior did not reproduce.
+  Folding did request an unnecessary render and reset flags to pending. It is
+  now a UI-only update using cached diagnostics and existing graph canvases.
+  Reopened draw rows also retain their cached list counts without requiring a
+  fresh frame; the count lookup uses the row index, not a normalized object copy.
+- Regression tests cover CPU results, repeated editor serialization, actual GPU
+  pixels, closed-folder imports, fold request counts, and raw licence responses.
+- Local build/model checks, 17 syntax tests, 52 renderer tests, 228 runtime tests,
+  TypeScript and all nine native-Chrome browser suites passed. The GPU editing
+  stress check retained all input without a runtime failure; its optional
+  presentation-latency target was not met, so this is not a new performance claim.
 
 ## Text Layout and Folder Diagnostics (2026-10-02)
 

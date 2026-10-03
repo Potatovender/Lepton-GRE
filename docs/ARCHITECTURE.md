@@ -76,6 +76,12 @@ may be displayed even when newer timeline positions are queued, avoiding starvat
 The last completed canvas stays visible while work is pending. Worker replies only
 update pixels, flags and status; they do not rebuild the active math field.
 
+Folder expansion is presentation-only. Its diagnostic key excludes `collapsed`
+but retains folder names, membership and declaration order. A fold rebuilds the
+sidebar using cached flags and preserves both graph canvases without requesting
+another worker render. Imports, saved-graph loads and Apply close all folders;
+new folders made during editing remain open.
+
 Each snapshot renderer retains at most three shader sources. The GPU driver retains
 four linked programs per context and one pending compilation. Its async path polls
 `KHR_parallel_shader_compile` when available. Without that extension the driver may
@@ -130,6 +136,13 @@ again by both bubbling mouse events and per-field handlers.
 5. `expressionToGlsl` recursively expands references and produces GLSL-safe expressions.
 
 Parameterized function locals shadow outer values. Expressions and sliders resolve by ID. Point selectors support `point.x`, `point.y`, `point[0]`, and `point[1]`. Recursive expansion returns the configured base value `0` at maximum depth.
+
+All AST serializers retain grouping around nested unary signs, so `-(-x)` cannot
+become JavaScript/GLSL's decrement operator. Point selectors remain AST nodes
+during normalization, not temporary identifier strings. Named points expand to
+two scalar function arguments just like point-output calls; local scalar
+parameters take precedence over a same-named global point. Standalone point
+coordinates are evaluated in global scope at `(0,0)` in both CPU and GLSL paths.
 
 MathQuill receives the same built-in registry plus the IDs visible in the current
 scene. Referenced global IDs are serialized as upright operators for display,

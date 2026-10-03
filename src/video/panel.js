@@ -81,7 +81,7 @@ export function openVideoPanel({ scene, name = "Lepton", onClose }) {
     }
   };
   let worker;
-  try { worker = new Worker(new URL("./scene-worker.js?v=20261002-text-layout-flags", import.meta.url), { type: "module" }); }
+  try { worker = new Worker(new URL("./scene-worker.js?v=20261003-unary-points-folders", import.meta.url), { type: "module" }); }
   catch (error) {
     setMessage(`Video export is unavailable: ${error.message}`, true);
     restore.remove();

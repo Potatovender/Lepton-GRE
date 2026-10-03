@@ -1,13 +1,14 @@
-import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261002-text-layout-flags";
-import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261002-text-layout-flags";
-import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261002-text-layout-flags";
-import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261002-text-layout-flags";
-import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261002-text-layout-flags";
-import { PreviewClient } from "./compiler/preview-client.js?v=20261002-text-layout-flags";
-import { openVideoPanel } from "./video/panel.js?v=20261002-text-layout-flags";
-import { createAstCache } from "./math/ast-cache.js?v=20261002-text-layout-flags";
-import { exportPhoto } from "./compiler/photo-client.js?v=20261002-text-layout-flags";
-import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261002-text-layout-flags";
+import { LATEX_FUNCTIONS, STANDARD_LATEX_COMMANDS, MATHQUILL_OPERATOR_NAMES, BUILTIN_NAMES } from "./math/builtins.js?v=20261003-unary-points-folders";
+import { convertPowers, getOpPrecedence, normalizeMathSyntax, UNARY_OPERAND_PRECEDENCE } from "./math/expression-syntax.js?v=20261003-unary-points-folders";
+import { renderFrame, disposeRenderer } from "../packages/renderer/src/index.js?v=20261003-unary-points-folders";
+import { colourChannelKeys, hsvToRgb, HSV_GLSL } from "./math/colour.js?v=20261003-unary-points-folders";
+import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "./math/collections.js?v=20261003-unary-points-folders";
+import { PreviewClient } from "./compiler/preview-client.js?v=20261003-unary-points-folders";
+import { openVideoPanel } from "./video/panel.js?v=20261003-unary-points-folders";
+import { createAstCache } from "./math/ast-cache.js?v=20261003-unary-points-folders";
+import { exportPhoto } from "./compiler/photo-client.js?v=20261003-unary-points-folders";
+import { FramePerformanceMonitor } from "./animation/frame-performance.js?v=20261003-unary-points-folders";
+import { sceneDiagnosticKey } from "./compiler/scene-keys.js?v=20261003-unary-points-folders";
 
 const cachedSyntax = createAstCache();
 
@@ -56,7 +57,7 @@ const SAVED_GRAPH_THUMBNAIL_QUALITY = 0.72;
 const SAVED_GRAPH_THUMBNAIL_MAX_CHARACTERS = 24_000;
 const SAVED_GRAPH_LEGACY_THUMBNAIL_MAX_CHARACTERS = 4_000_000;
 const SAVED_GRAPH_THUMBNAIL_VERSION = 2;
-const APP_VERSION = "20261002-text-layout-flags";
+const APP_VERSION = "20261003-unary-points-folders";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 const MAX_SAFE_FRAGMENT_SOURCE_LENGTH = 1500000;
 
@@ -355,7 +356,7 @@ let workerDrawCounts = [];
 const root = document.querySelector("#app");
 window.__leptonForceGradient = false;
 
-function renderApp() {
+function renderApp({ redraw = true } = {}) {
   ensureSceneCollections(scene);
   rememberEntryScroll();
   hideHelpTooltip();
@@ -363,7 +364,8 @@ function renderApp() {
   const diagnostics = validateScene();
   const scrollKey = panelScrollKey();
   const previousCanvas = root.querySelector(".grid-canvas");
-  if (previousCanvas && !workerPreviewEnabled) disposeRenderer(previousCanvas, { loseContext: true });
+  const previousOverlay = root.querySelector(".graph-overlay-canvas");
+  if (previousCanvas && !workerPreviewEnabled && redraw) disposeRenderer(previousCanvas, { loseContext: true });
   disposeMountedMathFields();
   root.innerHTML = `
     <main class="app-shell ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}" style="--sidebar-width: ${sidebarWidth}px; --sidebar-min-width: ${SIDEBAR_MIN_WIDTH}px">
@@ -403,13 +405,15 @@ function renderApp() {
       ${renderNewGraphConfirmation()}
     </main>
   `;
-  if (previousCanvas && workerPreviewEnabled) root.querySelector(".grid-canvas").replaceWith(previousCanvas);
+  if (previousCanvas && (workerPreviewEnabled || !redraw)) root.querySelector(".grid-canvas").replaceWith(previousCanvas);
+  if (previousOverlay && !redraw) root.querySelector(".graph-overlay-canvas").replaceWith(previousOverlay);
   if (root.dataset) root.dataset.panelKey = scrollKey;
 
   bindEvents();
   bindCanvasPan();
   restoreEntryScroll();
-  scheduleSceneRender(diagnostics);
+  if (redraw) scheduleSceneRender(diagnostics);
+  else updateStatusLights(diagnostics);
   queueMathLayoutReflow();
   requestAnimationFrame(() => forceMathFieldsReflow());
 }
@@ -1401,7 +1405,7 @@ function dataRowContent(kind, entry, index, diagnostic = null) {
       </div>
       <label class="draw-reference-row"><span>value</span>${searchableReference(`draws.${index}.equationId`, drawFunctionEntries(), entry.equationId, "Draw function")}</label>
       ${drawArgumentControls(index, draw)}
-      ${drawListCount(draw)}
+      ${drawListCount(draw, index)}
       <div class="draw-components">${components}</div>
       ${missing.length ? `<div class="draw-component-adder">
         <button class="draw-component-add" data-add-draw-component="${index}" type="button" aria-label="Add draw component">+</button>
@@ -1436,8 +1440,8 @@ function drawArgumentControls(drawIndex, draw) {
   </div>`;
 }
 
-function drawListCount(draw) {
-  if (workerPreviewEnabled) return `<output class="draw-list-count">${escapeHtml(workerDrawCounts[scene.draws.indexOf(draw)] ?? "")}</output>`;
+function drawListCount(draw, drawIndex = scene.draws.indexOf(draw)) {
+  if (workerPreviewEnabled) return `<output class="draw-list-count">${escapeHtml(workerDrawCounts[drawIndex] ?? "")}</output>`;
   const source = drawTargetText(draw), env = sceneFunctionEnv(true);
   if (!usesCollections(source, env)) return "";
   try {
@@ -2937,7 +2941,7 @@ function bindEvents() {
       const folder = scene.folders?.[Number(button.dataset.toggleFolder)];
       if (!folder) return;
       folder.collapsed = !folder.collapsed;
-      renderApp();
+      renderApp({ redraw: false });
     });
   });
 
@@ -4699,7 +4703,7 @@ function requestWorkerPreview(transient = false) {
   });
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  previewClient.request({ scene: structuredClone(scene), sceneKey: JSON.stringify(scene), transient,
+  previewClient.request({ scene: structuredClone(scene), sceneKey: sceneDiagnosticKey(scene), transient,
     animation: { selected: [...playingTimeIds], directions: Object.fromEntries(timeVariableDirections) },
     width: Math.max(1, Math.floor(rect.width * dpr)), height: Math.max(1, Math.floor(rect.height * dpr)),
     overlayScale: dpr, baseViewport: viewportNeedsSettings ? undefined : { ...viewport } });
@@ -5384,7 +5388,7 @@ function compileExpression(source, localNames = new Set()) {
 function usesCollections(source, env = {}, locals = new Set(), visited = new Set(), pointOutput = false) {
   const text = String(source ?? "");
   if (/\b(?:pointcall|call|ref)\s*\(\s*"/.test(text)) return false;
-  if (/\b(sum|prod)\b|\bfor\s*\(|\.length\b/.test(text)) return true;
+  if (/\b(?:sum|prod)\b|\\(?:sum|prod)_|\bfor\s*\(|\.length\b/.test(text)) return true;
   if (!pointOutput && /(?:^|[,\s({+*/^=\-])\s*(?:\\left\s*)?\[/.test(text)) return true;
   for (const name of text.match(/\b[A-Za-z_]\w*\b/g) ?? []) {
     if (locals.has(name) || visited.has(name)) continue;
@@ -5456,21 +5460,25 @@ function compileScalarExpression(source, localNames = new Set()) {
   let js = normalizeMathSyntax(normalizeExpressionText(normalizedSource));
   assertBuiltinCallArity(js);
   js = convertTrigForAngleMode(js, scene.settings.angleMode);
-  js = rewritePointSelectors(js, (point, coordinate) => `point("${point.id}",${coordinate})`);
   const functionEnv = sceneFunctionEnv(true);
-  const rewriteRuntimeFunctionCalls = (expression) => rewriteCustomFunctionCalls(expression, functionEnv, (entry, args) => {
-    if (entry.outputType === "point") throw new Error(`Point function ${entry.id} must be expanded into a point output or receiving function inputs`);
-    const expandedArgs = expandPointArguments(args, functionEnv);
-    if (expandedArgs.length !== entry.params.length) {
-      throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
-    }
-    return `call("${entry.id}", [${expandedArgs.map(rewriteRuntimeFunctionCalls).join(",")}], x, y)`;
-  });
-  js = rewritePointFunctionSelectors(js, functionEnv, (entry, args, coordinate) => {
-    const expandedArgs = expandPointArguments(args, functionEnv);
-    if (expandedArgs.length !== entry.params.length) throw new Error(`Function ${entry.id} expects ${entry.params.length} scalar inputs after point expansion`);
-    return `pointcall("${entry.id}",${coordinate},[${expandedArgs.map(rewriteRuntimeFunctionCalls).join(",")}],x,y)`;
-  });
+  // Recurse through arguments before lowering calls: selectors can be nested
+  // inside either point-output calls or ordinary scalar calls.
+  const rewriteRuntimeFunctionCalls = (expression) => {
+    let output = rewritePointSelectors(expression, (point, coordinate) => `point("${point.id}",${coordinate})`, localNames);
+    output = rewritePointFunctionSelectors(output, functionEnv, (entry, args, coordinate) => {
+      const expandedArgs = expandPointArguments(args, functionEnv, [], localNames);
+      if (expandedArgs.length !== entry.params.length) throw new Error(`Function ${entry.id} expects ${entry.params.length} scalar inputs after point expansion`);
+      return `pointcall("${entry.id}",${coordinate},[${expandedArgs.map(rewriteRuntimeFunctionCalls).join(",")}],x,y)`;
+    });
+    return rewriteCustomFunctionCalls(output, functionEnv, (entry, args) => {
+      if (entry.outputType === "point") throw new Error(`Point function ${entry.id} must be expanded into a point output or receiving function inputs`);
+      const expandedArgs = expandPointArguments(args, functionEnv, [], localNames);
+      if (expandedArgs.length !== entry.params.length) {
+        throw new Error(`Function ${entry.id} expects ${entry.params.length} input${entry.params.length === 1 ? "" : "s"}`);
+      }
+      return `call("${entry.id}", [${expandedArgs.map(rewriteRuntimeFunctionCalls).join(",")}], x, y)`;
+    });
+  };
   js = rewriteRuntimeFunctionCalls(js);
   js = convertPowers(js)
     .replaceAll(/~([A-Za-z]\w*)~/g, 'ref("$1", x, y)')
@@ -5603,7 +5611,7 @@ function buildRuntimeEnv(expressions) {
       const runtime = env.__runtime ?? { depth: 0, maxDepth: recursionLimit() };
       if (!definition || definition.kind !== "function" || definition.outputType !== "point" || values.length !== definition.params.length) return NaN;
       if (runtime.depth >= runtime.maxDepth) return 0;
-      const components = pointExpressionComponents(definition.expression, expressions, [...(env.__pointStack ?? []), name]);
+      const components = pointExpressionComponents(definition.expression, expressions, [...(env.__pointStack ?? []), name], null, new Set(definition.params));
       if (!components) return NaN;
       const previousLocals = env.__locals;
       env.__locals = Object.fromEntries(definition.params.map((param, index) => [param, values[index]]));
@@ -5683,9 +5691,16 @@ function topLevelPointBinary(source, operator) {
   return null;
 }
 
-function pointExpressionComponents(source, env, stack = [], formatCall = null) {
+function namedPointReference(name, env, localNames = new Set()) {
+  if (localNames.has(name) || envEntry(env, name)) return null;
+  return dataEntries(scene.points).find((point) => point.id === name) ?? null;
+}
+
+function pointExpressionComponents(source, env, stack = [], formatCall = null, localNames = new Set()) {
   let text = String(source ?? "").trim();
-  if (text.startsWith("(") && matchingParen(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+  while (text.startsWith("(") && matchingParen(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+  const point = namedPointReference(text, env, localNames);
+  if (point) return [`${point.id}.x`, `${point.id}.y`];
   if (text.startsWith("[") && matchingSquareBracket(text, 0) === text.length - 1) {
     const components = splitTopLevelText(text.slice(1, -1), ",").map((part) => part.trim());
     if (components.length !== 2) throw new Error("Point output must contain exactly two coordinates");
@@ -5694,8 +5709,8 @@ function pointExpressionComponents(source, env, stack = [], formatCall = null) {
   for (const operator of ["+", "*"]) {
     const split = topLevelPointBinary(text, operator);
     if (!split) continue;
-    const left = pointExpressionComponents(split[0], env, stack, formatCall);
-    const right = pointExpressionComponents(split[1], env, stack, formatCall);
+    const left = pointExpressionComponents(split[0], env, stack, formatCall, localNames);
+    const right = pointExpressionComponents(split[1], env, stack, formatCall, localNames);
     if (!left && !right) continue;
     const leftParts = left ?? [split[0], split[0]];
     const rightParts = right ?? [split[1], split[1]];
@@ -5704,18 +5719,20 @@ function pointExpressionComponents(source, env, stack = [], formatCall = null) {
   const call = directCustomFunctionCall(text, env);
   if (!call || call.entry.outputType !== "point") return null;
   if (stack.includes(call.entry.id) || stack.length >= recursionLimit()) return ["0", "0"];
-  const expanded = expandPointArguments(call.args, env, stack);
+  const expanded = expandPointArguments(call.args, env, stack, localNames);
   if (expanded.length !== call.entry.params.length) throw new Error(`Function ${call.entry.id} expects ${call.entry.params.length} scalar inputs after point expansion`);
   return [0, 1].map((component) => formatCall ? formatCall(call, component) : `pointcall("${call.entry.id}",${component},[${expanded.join(",")}],x,y)`);
 }
 
-function expandPointArguments(args, env, stack = []) {
-  return args.flatMap((arg) => pointExpressionComponents(arg, env, stack) ?? [arg]);
+function expandPointArguments(args, env, stack = [], localNames = new Set()) {
+  return args.flatMap((arg) => pointExpressionComponents(arg, env, stack, null, localNames) ?? [arg]);
 }
 
 function pointExpressionComponentsGlsl(source, env, zName, stack, angleMode, localMap) {
   let text = String(source ?? "").trim();
-  if (text.startsWith("(") && matchingParen(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+  while (text.startsWith("(") && matchingParen(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+  const point = namedPointReference(text, env, new Set(Object.keys(localMap)));
+  if (point) return ["x", "y"].map((axis) => expressionToGlsl(`${point.id}.${axis}`, env, zName, stack, angleMode, localMap));
   if (text.startsWith("[") && matchingSquareBracket(text, 0) === text.length - 1) {
     const components = splitTopLevelText(text.slice(1, -1), ",").map((part) => part.trim());
     if (components.length !== 2) throw new Error("Point output must contain exactly two coordinates");
@@ -5777,8 +5794,8 @@ function scalarExpressionToGlsl(source, env = {}, zName = null, stack = [], angl
   expression = rewritePointSelectors(expression, (point, coordinate) => {
     const pointKey = `point:${point.id}:${coordinate}`;
     if (stack.includes(pointKey) || stack.length >= recursionLimit()) return "(0.0/0.0)";
-    return `(${expressionToGlsl(coordinate === 0 ? point.x : point.y, env, zName, [...stack, pointKey], angleMode, localMap)})`;
-  });
+    return `(${expressionToGlsl(coordinate === 0 ? point.x : point.y, env, null, [...stack, pointKey], angleMode, { x: "0.0", y: "0.0" })})`;
+  }, new Set(Object.keys(localMap)));
   expression = rewritePointFunctionSelectors(expression, env, (entry, args, coordinate) => {
     const components = pointExpressionComponentsGlsl(`${entry.id}(${args.join(",")})`, env, zName, stack, angleMode, localMap);
     if (!components) throw new Error(`Point function ${entry.id} must return [x,y]`);
@@ -5904,9 +5921,9 @@ function parsePiecewiseExpression(source) {
   for(const part of parts){const pair=splitTopLevelText(part,":");if(pair.length>1)branches.push({condition:pair.shift().trim(),value:pair.join(":").trim()});else fallback=part.trim();}
   return branches.length?{branches,fallback}:null;
 }
-function rewritePointSelectors(expression, build) {
+function rewritePointSelectors(expression, build, localNames = new Set()) {
   let output = String(expression ?? "");
-  const points = dataEntries(scene.points).filter((point) => point.id).sort((a,b) => b.id.length-a.id.length);
+  const points = dataEntries(scene.points).filter((point) => point.id && !localNames.has(point.id)).sort((a,b) => b.id.length-a.id.length);
   for (const point of points) {
     const id = point.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     output = output.replaceAll(new RegExp(`\\b${id}\\s*(?:\\.\\s*([xy])|\\[\\s*([01])\\s*\\])`, "g"), (_, axis, index) => build(point, axis ? (axis === "x" ? 0 : 1) : Number(index)));
@@ -6049,7 +6066,7 @@ function rewriteBareIdentifiers(expression, replace, extraReserved, overrideName
 
 function validateScene() {
   if (workerPreviewEnabled) {
-    if (latestDiagnostics && verifiedSceneKey === JSON.stringify(scene)) return latestDiagnostics;
+    if (latestDiagnostics && verifiedSceneKey === sceneDiagnosticKey(scene)) return latestDiagnostics;
     const pending = { status: "pending", message: "Checking this graph..." };
     return { ...Object.fromEntries(DATA_ENTRY_KINDS.map((kind) => [kind, (scene[kind] ?? []).map(() => pending)])),
       settings: [pending], hasErrors: false, summary: "Checking graph..." };
@@ -6242,7 +6259,7 @@ function validateFunctionOutput(entry, env) {
   try {
     // Validate source selectors, not CPU-only pointcall helpers, through both compilers.
     const components = pointExpressionComponents(entry.expression, env, [entry.id],
-      (call, component) => `${call.entry.id}(${call.args.join(",")})[${component}]`);
+      (call, component) => `${call.entry.id}(${call.args.join(",")})[${component}]`, new Set(entry.params));
     if (!components || components.length !== 2) return { status: "invalid", message: `Point function "${entry.id}" must return [x,y] or point-valued +/* arithmetic` };
     const locals = new Set(entry.params);
     return combineDiagnostics(components.map((component) => validateExpression(component, env, [entry.id], locals)));
@@ -6528,12 +6545,12 @@ function assertExpressionDependencies(source, env, localNames = new Set()) {
       const key = `point:${point.id}:${coordinate}`;
       if (!visited.has(key)) {
         visited.add(key);
-        pending.push({ ...current, source: coordinate === 0 ? point.x : point.y });
+        pending.push({ ...current, source: coordinate === 0 ? point.x : point.y, localNames: new Set() });
       }
       return "0";
-    });
+    }, current.localNames);
     const visitCall = (entry, args) => {
-      if (expandPointArguments(args, current.env).length !== entry.params.length) throw new Error(`Function ${entry.id} expects ${entry.params.length} scalar inputs`);
+      if (expandPointArguments(args, current.env, [], current.localNames).length !== entry.params.length) throw new Error(`Function ${entry.id} expects ${entry.params.length} scalar inputs`);
       for (const argument of args) pending.push({ ...current, source: argument });
       enqueueEntry(entry, current.env);
       return "0";
@@ -6550,6 +6567,15 @@ function assertExpressionDependencies(source, env, localNames = new Set()) {
       }
       if (BUILTIN_NAMES.has(name) || current.localNames.has(name)) continue;
       const entry = envEntry(current.env, name);
+      const point = namedPointReference(name, current.env, current.localNames);
+      if (point) {
+        const key = `point:${point.id}`;
+        if (!visited.has(key)) {
+          visited.add(key);
+          pending.push({ source: `${point.id}.x+${point.id}.y`, env: current.env, localNames: new Set() });
+        }
+        continue;
+      }
       if (!entry) throw new Error(`Unknown variable: ${name}`);
       enqueueEntry(entry, current.env);
     }
@@ -7913,7 +7939,7 @@ function astToLatex(node, operatorNames = null) {
   }
   if (node.type === "unary") {
     const value = render(node.value);
-    return `${node.op}${node.value.type === "binary" ? `\\left(${value}\\right)` : value}`;
+    return `${node.op}${["binary", "unary"].includes(node.value.type) ? `\\left(${value}\\right)` : value}`;
   }
   if (node.type === "power") {
     const base = render(node.base);
@@ -7926,7 +7952,7 @@ function astToLatex(node, operatorNames = null) {
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
       left = `\\left(${left}\\right)`;
     }
-    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
+    if (node.right.type === "unary" || (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op))) {
       right = `\\left(${right}\\right)`;
     }
     return op === "*" ? `${left}\\cdot ${right}` : `${left}${op}${right}`;
@@ -7973,7 +7999,7 @@ function astToLeptonText(node) {
   }
   if (node.type === "unary") {
     const value = astToLeptonText(node.value);
-    return `${node.op}${node.value.type === "binary" ? `(${value})` : value}`;
+    return `${node.op}${["binary", "unary"].includes(node.value.type) ? `(${value})` : value}`;
   }
   if (node.type === "power") {
     const rawBase = astToLeptonText(node.base);
@@ -7991,7 +8017,7 @@ function astToLeptonText(node) {
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
       left = `(${left})`;
     }
-    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
+    if (node.right.type === "unary" || (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op))) {
       right = `(${right})`;
     }
     return `${left}${op}${right}`;
@@ -8020,7 +8046,7 @@ function astToMathString(node) {
   }
   if (node.type === "unary") {
     const value = astToMathString(node.value);
-    return `${node.op}${node.value.type === "binary" ? `(${value})` : value}`;
+    return `${node.op}${["binary", "unary"].includes(node.value.type) ? `(${value})` : value}`;
   }
   if (node.type === "power") {
     const rawBase = astToMathString(node.base);
@@ -8035,7 +8061,7 @@ function astToMathString(node) {
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(op)) {
       left = `(${left})`;
     }
-    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op)) {
+    if (node.right.type === "unary" || (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(op))) {
       right = `(${right})`;
     }
     return `${left}${op}${right}`;
@@ -8063,7 +8089,7 @@ function astToEditableHtml(node, operatorNames = null) {
   }
   if (node.type === "unary") {
     const value = render(node.value);
-    return `${node.op}${node.value.type === "binary" ? `(${value})` : value}`;
+    return `${node.op}${["binary", "unary"].includes(node.value.type) ? `(${value})` : value}`;
   }
   if (node.type === "power") {
     const base = render(node.base);
@@ -8074,7 +8100,7 @@ function astToEditableHtml(node, operatorNames = null) {
     let left = render(node.left);
     let right = render(node.right);
     if (node.left.type === "binary" && getOpPrecedence(node.left.op) < getOpPrecedence(node.op)) left = `(${left})`;
-    if (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(node.op)) right = `(${right})`;
+    if (node.right.type === "unary" || (node.right.type === "binary" && getOpPrecedence(node.right.op) <= getOpPrecedence(node.op))) right = `(${right})`;
     return `${left}${node.op}${right}`;
   }
   if (node.type === "call") {
@@ -9165,20 +9191,9 @@ function stripChannelPrefix(value) {
 
 function normalizeExpressionText(value) {
   const display = normalizeExpressionDisplayText(value);
-  const pointSelectors = [];
-  let protectedDisplay = rewritePointSelectors(display, (point, coordinate) => {
-    const token = `leptonpointselector${pointSelectors.length}`;
-    pointSelectors.push({ token, value: `${point.id}.${coordinate === 0 ? "x" : "y"}` });
-    return token;
-  });
-  protectedDisplay = rewritePointFunctionSelectors(protectedDisplay, sceneFunctionEnv(true), (entry, args, coordinate) => {
-    const token = `leptonpointselector${pointSelectors.length}`;
-    pointSelectors.push({ token, value: `${entry.id}(${args.join(",")}).${coordinate === 0 ? "x" : "y"}` });
-    return token;
-  });
-  let normalized = latexToExpression(protectedDisplay);
-  for (const selector of pointSelectors) normalized = normalized.replaceAll(selector.token, selector.value);
-  return normalized;
+  // Selectors are AST nodes now; hiding nested calls behind tokens loses structure.
+  return rewritePointSelectors(latexToExpression(display),
+    (point, coordinate) => `${point.id}.${coordinate === 0 ? "x" : "y"}`);
 }
 
 function normalizeExpressionDisplayText(value) {

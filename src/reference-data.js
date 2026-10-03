@@ -1,4 +1,4 @@
-import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20261002-text-layout-flags";
+import { LATEX_FUNCTIONS } from "./math/builtins.js?v=20261003-unary-points-folders";
 
 // Documentation is checked against the callable registry during every build.
 // Each example is also evaluated by the CPU and GPU regression suites.

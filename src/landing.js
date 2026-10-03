@@ -1,4 +1,4 @@
-const APP_VERSION = "20261002-text-layout-flags";
+const APP_VERSION = "20261003-unary-points-folders";
 const LEPTON_ICON_PATH = `./src/assets/lepton-favicon.png?v=${APP_VERSION}`;
 
 function ensureLeptonFavicon() {

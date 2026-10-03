@@ -1,7 +1,7 @@
-import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261002-text-layout-flags";
-import { createSceneClock } from "../animation/scene-clock.js?v=20261002-text-layout-flags";
-import { createSceneRuntime, DEFAULT_SCENE } from "./scene-runtime.js?v=20261002-text-layout-flags";
-import { AnimationClockError } from "../animation/clock.js?v=20261002-text-layout-flags";
+import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261003-unary-points-folders";
+import { createSceneClock } from "../animation/scene-clock.js?v=20261003-unary-points-folders";
+import { createSceneRuntime, DEFAULT_SCENE } from "./scene-runtime.js?v=20261003-unary-points-folders";
+import { AnimationClockError } from "../animation/clock.js?v=20261003-unary-points-folders";
 
 const renderer = new SnapshotRenderer();
 let active = null;

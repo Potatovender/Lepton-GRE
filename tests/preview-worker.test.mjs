@@ -15,10 +15,10 @@ async function fixture(t) {
       return new Promise((resolve, reject) => jobs.push({ scene: this.scene, options, resolve, reject }));
     }
   }
-  t.mock.module(new URL("../src/compiler/snapshot-renderer.js?v=20261002-text-layout-flags", import.meta.url), {
+  t.mock.module(new URL("../src/compiler/snapshot-renderer.js?v=20261003-unary-points-folders", import.meta.url), {
     exports: { SnapshotRenderer: FakeRenderer }
   });
-  t.mock.module(new URL("../src/animation/scene-clock.js?v=20261002-text-layout-flags", import.meta.url), {
+  t.mock.module(new URL("../src/animation/scene-clock.js?v=20261003-unary-points-folders", import.meta.url), {
     exports: { createSceneClock(scene, options) {
       if (clockControl.error) throw clockControl.error;
       const clock = { scene: structuredClone(scene), options: structuredClone(options), samples: [],

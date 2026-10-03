@@ -8,12 +8,13 @@ import { buildCollectionPlan, emitCollectionPlan, mapScopedNames } from "../src/
 import { FUNCTION_REFERENCE, validateFunctionReference } from "../src/reference-data.js";
 import { createAstCache } from "../src/math/ast-cache.js";
 import { FramePerformanceMonitor } from "../src/animation/frame-performance.js";
+import { sceneDiagnosticKey } from "../src/compiler/scene-keys.js";
 
 const source = await readFile("src/browser-preview-live.js", "utf8");
 const landingSource = await readFile("src/landing.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 const appSource = await readFile("app.html", "utf8");
-const cacheVersion = "20261002-text-layout-flags";
+const cacheVersion = "20261003-unary-points-folders";
 const sampleSources = await Promise.all([
   readFile("sample code/fire", "utf8"),
   readFile("sample code/mandelbrot set", "utf8"),
@@ -60,6 +61,7 @@ const sandbox = {
   console,
   createAstCache,
   FramePerformanceMonitor,
+  sceneDiagnosticKey,
   structuredClone: globalThis.structuredClone,
   localStorage: {
     getItem: (key) => storage.get(key) ?? null,

@@ -312,6 +312,14 @@ folder Colours = {
   assert.equal(await page.locator("[data-scene-text]").inputValue(), savedSource, "Save/reload/load lost data");
   console.log("ok - mixed-type saved graph reloads without losing data and retains a compact nonblank preview");
 
+  await page.addInitScript(() => {
+    window.__testRenderRequests = 0;
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...args) {
+      if (message?.type === "render") window.__testRenderRequests++;
+      return post.call(this, message, ...args);
+    };
+  });
   await page.goto(`${base}app.html?scene=${encodeURIComponent(`expression root = x
 folder Outer = {
   expression inside = y
@@ -319,10 +327,33 @@ folder Outer = {
     expression nested = x+y
   }
 }
-expression tail = 1`)}`);
+expression tail = 1
+draw(root)`)}`);
   const folderToggles = page.locator('[data-toggle-folder]');
   assert.equal(await folderToggles.count(), 1, "Closed outer folder exposed its nested folder");
   assert.equal(await folderToggles.first().getAttribute('aria-expanded'), 'false', "URL-loaded folder did not start closed");
+  await page.waitForFunction(() => window.__leptonWorkerFrame && !document.querySelector('.status-light.pending'));
+  await settle(page);
+  const beforeFold = await page.evaluate(() => {
+    window.__testCanvas = document.querySelector('.grid-canvas');
+    window.__testOverlay = document.querySelector('.graph-overlay-canvas');
+    return { requests: window.__testRenderRequests, pixels: window.__testCanvas.toDataURL() };
+  });
+  for (let toggle = 0; toggle < 4; toggle++) {
+    await folderToggles.first().click();
+    await settle(page);
+    const afterFold = await page.evaluate(() => ({
+      requests: window.__testRenderRequests,
+      pending: document.querySelectorAll('.status-light.pending').length,
+      sameCanvas: window.__testCanvas === document.querySelector('.grid-canvas'),
+      sameOverlay: window.__testOverlay === document.querySelector('.graph-overlay-canvas'),
+      pixels: document.querySelector('.grid-canvas').toDataURL()
+    }));
+    assert.equal(afterFold.requests, beforeFold.requests, 'Folding scheduled a graph recheck/render');
+    assert.equal(afterFold.pending, 0, 'Folding replaced existing flags with pending flags');
+    assert(afterFold.sameCanvas && afterFold.sameOverlay, 'Folding discarded the rendered graph');
+    assert.equal(afterFold.pixels, beforeFold.pixels, 'Folding changed graph pixels');
+  }
   await folderToggles.first().click();
   assert(!(await page.locator('.graph-actions-trigger').evaluate((button) => button.classList.contains('primary'))), "Opening a folder marked unchanged graph data as unsaved");
   assert.equal(await page.locator('[data-toggle-folder]').count(), 2, "Opening the outer folder did not expose its nested folder");
@@ -337,6 +368,7 @@ expression tail = 1`)}`);
   await page.keyboard.type('7');
   await settle(page);
   assert.equal(await focused.getAttribute('data-value'), '7', "Enter did not focus the new line for continued typing");
+  await page.waitForFunction((previous) => window.__testRenderRequests > previous, beforeFold.requests);
   const enterPlacement = await page.evaluate(() => {
     const ordered = window.__leptonDebug.scene().dataOrder;
     const functions = window.__leptonDebug.scene().functions;
@@ -360,7 +392,8 @@ expression tail = 1`)}`);
     await page.locator('[data-display-mode="text"]').click();
   }
   assert.deepEqual(sessionErrors, [], "Long editor session raised browser errors");
-  console.log("ok - Enter inserts and focuses the next expression inside the current folder; loaded folders start closed");
+  console.log("ok - loaded/applied folders start closed; folding preserves flags and pixels without rendering; real edits still render");
+  console.log("ok - Enter inserts and focuses the next expression inside the current folder");
 
   if (!process.env.LEPTON_TEST_URL) {
     const dev = await createServer({ server: { host: "127.0.0.1", port: 0 } });
@@ -372,6 +405,22 @@ expression tail = 1`)}`);
         assert.equal(await response.text(), await readFile(file, "utf8"), `Development server modified ${file}`);
       }
       console.log("ok - development server serves all nine sample sources byte-for-byte without injected comments");
+      await page.goto(new URL('reference.html', dev.resolvedUrls.local[0]).href);
+      for (const library of ['mathquill', 'mediabunny']) {
+        const file = `src/libs/${library}/LICENSE`;
+        const url = new URL(`${file}?v=licence-regression`, dev.resolvedUrls.local[0]);
+        const response = await fetch(url);
+        assert.equal(response.status, 200, file);
+        assert.match(response.headers.get('content-type'), /^text\/plain/);
+        assert.equal(await response.text(), await readFile(file, 'utf8'), `Licence bytes changed: ${file}`);
+        const head = await fetch(url, { method: 'HEAD' });
+        assert.equal(head.status, 200, file);
+        assert.equal(await head.text(), '');
+      }
+      await settle(page);
+      assert.equal(await page.locator('vite-error-overlay').count(), 0, 'Licence request opened a Vite error overlay');
+      assert.deepEqual(sessionErrors, [], 'Development requests caused browser errors');
+      console.log('ok - development licence GET/HEAD requests return original plain text without an error overlay');
     } finally {
       await dev.close();
     }

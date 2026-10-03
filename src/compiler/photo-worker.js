@@ -1,4 +1,4 @@
-import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261002-text-layout-flags";
+import { SnapshotRenderer } from "./snapshot-renderer.js?v=20261003-unary-points-folders";
 
 self.onmessage = async ({ data }) => {
   const renderer = new SnapshotRenderer();

@@ -1,6 +1,6 @@
-import { createSceneRuntime } from "./scene-runtime.js?v=20261002-text-layout-flags";
-import { sceneProgramKey, sceneDiagnosticKey } from "./scene-keys.js?v=20261002-text-layout-flags";
-import { renderFrameAsync, disposeRenderer } from "../../packages/renderer/src/index.js?v=20261002-text-layout-flags";
+import { createSceneRuntime } from "./scene-runtime.js?v=20261003-unary-points-folders";
+import { sceneProgramKey, sceneDiagnosticKey } from "./scene-keys.js?v=20261003-unary-points-folders";
+import { renderFrameAsync, disposeRenderer } from "../../packages/renderer/src/index.js?v=20261003-unary-points-folders";
 
 /** One private scene evaluator and GPU context, independent of the editor DOM. */
 export class SnapshotRenderer {

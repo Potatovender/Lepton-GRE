@@ -72,3 +72,17 @@ test("diagnostic keys react to validation-relevant definitions", () => {
   b.functions[1].id = "sin";
   assert.notEqual(sceneDiagnosticKey(a), sceneDiagnosticKey(b));
 });
+
+test("folder expansion reuses diagnostics while folder names and membership invalidate them", () => {
+  const a = scene();
+  a.folders = [{ id: "Outer", _uid: "folder", collapsed: true }];
+  a.dataOrder = [{ kind: "functions", uid: "eq", parentUid: "folder" }];
+  const b = structuredClone(a);
+  b.folders[0].collapsed = false;
+  for (const clockValues of [false, true]) assert.equal(sceneDiagnosticKey(a, clockValues), sceneDiagnosticKey(b, clockValues));
+  b.folders[0].id = "";
+  assert.notEqual(sceneDiagnosticKey(a), sceneDiagnosticKey(b));
+  b.folders[0].id = "Outer";
+  b.dataOrder[0].parentUid = "";
+  assert.notEqual(sceneDiagnosticKey(a), sceneDiagnosticKey(b));
+});

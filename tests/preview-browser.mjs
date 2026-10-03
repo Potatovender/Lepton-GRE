@@ -27,7 +27,38 @@ try {
     const readCanvas = new OffscreenCanvas(96, 64), ctx = readCanvas.getContext("2d");
     const pixel = (canvas) => { ctx.clearRect(0, 0, 96, 64); ctx.drawImage(canvas, 0, 0); return [...ctx.getImageData(48, 32, 1, 1).data]; };
     const equal = (a, b) => a.every((value, index) => value === b[index]);
-    const result = { frames: [], errors: [], repairedMatchesFresh: false, piecewise: [] };
+    const result = { frames: [], errors: [], repairedMatchesFresh: false, piecewise: [], arithmetic: [] };
+    const arithmetic = new SnapshotRenderer();
+    try {
+      for (const [expression, reference] of [
+        ['-(-x)', 'x'], ['x-(-y)', 'x+y'], ['x--y', 'x+y'],
+        ['-(-(-x))', '-x'], ['sin(-(-x))-(-cos(y))', 'sin(x)+cos(y)'],
+        ['add(p)', '5'], ['add(p*2)', '10'], ['pack(p).x', '2'],
+        ['pack(pack(p).x,4).y', '4'], ['pack(p.x,pack(2,3).y).x', '2'],
+        ['pack(pack(p)[0],pack(q)[1])[1]', '5'], ['add(fixed)', '5'],
+        ['sum(i=1~2){add(pack(p.x,i))}', '7']
+      ]) {
+        const scene = structuredClone(base);
+        scene.functions = [
+          { id: 'pack', kind: 'function', params: ['a', 'b'], outputType: 'point', expression: '[a,b]' },
+          { id: 'add', kind: 'function', params: ['a', 'b'], expression: 'a+b' },
+          { id: 'eq', kind: 'variable', expression }
+        ];
+        scene.points = [{ id: 'p', x: '2', y: '3' }, { id: 'q', x: '4', y: '5' },
+          { id: 'fixed', x: 'x+2', y: 'y+3' }];
+        scene.colors = [{ id: 'ink', red: '120+10*x', green: '80+12*x', blue: '60' }];
+        const snapshots = [];
+        for (const source of [expression, reference]) {
+          scene.functions[2].expression = source;
+          arithmetic.setScene(structuredClone(scene));
+          const frame = await arithmetic.render({ ...size, bounds: { xMin: -2, xMax: 3, yMin: -1, yMax: 1 } });
+          ctx.clearRect(0, 0, 96, 64); ctx.drawImage(frame.canvas, 0, 0);
+          snapshots.push({ issues: frame.diagnostics.renderIssues ?? [], errors: frame.diagnostics.hasErrors,
+            pixels: [[19, 10], [57, 32], [86, 50]].map(([x, y]) => [...ctx.getImageData(x, y, 1, 1).data]) });
+        }
+        result.arithmetic.push({ expression, snapshots });
+      }
+    } finally { arithmetic.dispose(); }
     const conditional = new SnapshotRenderer();
     try {
       for (const expression of ["inner(x)", "outer(x)", "outer(x)+0", "withFallback(x)", "gate", "{x<2:{x>0:1}}", "[outer(x)][0]"]) {
@@ -98,6 +129,14 @@ try {
     return result;
   }, base);
   assert(reports.initialPixel[0] < 3 && reports.initialPixel[1] > 30, "Initial GPU pixels incorrect");
+  for (const { expression, snapshots } of reports.arithmetic) {
+    for (const snapshot of snapshots) {
+      assert.equal(snapshot.errors, false, expression);
+      assert.deepEqual(snapshot.issues, [], expression);
+    }
+    assert.deepEqual(snapshots[0].pixels, snapshots[1].pixels, `${expression}: GPU pixels differ from equivalent arithmetic`);
+  }
+  console.log('ok - unary signs, named points, nested selectors and reductions match reference GPU pixels');
   for (const conditional of reports.piecewise) {
     const upperClipped = /outer|x<2/.test(conditional.expression);
     assert.equal(conditional.errors, false, conditional.expression);

@@ -88,6 +88,8 @@ Before release, verify:
 - favicon on landing, blank, URL scene, and all sample links;
 - Standard/Text/Standard round trip with folders, standalone and inline comments, fractions, exponents, piecewise expressions, and custom functions;
 - repeated Apply to graph closes all nested folders without changing source;
+- opening/closing folders preserves rendered pixels and flags without requesting compilation;
+- nested negation/subtraction, named point arguments and nested selectors agree through text/LaTeX round trips and CPU/GPU evaluation;
 - expression, slider, time slider, parameterized function, colour, boundary, transparency, point, folder, comment, and draw rows;
 - list literals/comprehensions, zero-based indexing, scalar broadcasting, local sum/product scopes, dynamic bounds, ordered list drawing, and blue size warnings;
 - rename reference propagation, duplicate/reserved-name diagnostics, dependency filtering, sorting, nested drag/drop, and dropdown creation;
@@ -105,8 +107,9 @@ the exact staged build and closes that server on completion. Set `LEPTON_TEST_UR
 to a local or public base URL to verify a deployment. Optional
 `LEPTON_TEST_BROWSER=webkit` uses WebKit after `npx playwright install webkit`;
 `LEPTON_BROWSER_EXECUTABLE` selects a preinstalled test browser.
-The same suite checks that Vite serves sample source files byte-for-byte without
-injecting source-map comments. Use the URL printed by Vite or its automatic port;
+The same suite checks that Vite serves sample source files and the bundled
+MathQuill/Mediabunny licences byte-for-byte as plain text, without import analysis
+or injected source-map comments. Use the URL printed by Vite or its automatic port;
 some otherwise unused ports (including 4190) are blocked by browser networking.
 
 Collections use `src/math/collections.js` for typed plans and reuse the scalar

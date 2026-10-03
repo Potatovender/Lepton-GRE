@@ -13,8 +13,10 @@ export function sceneProgramKey(scene) {
 }
 
 export function sceneDiagnosticKey(scene, clockValues = false) {
-  if (!clockValues) return JSON.stringify(scene);
-  return JSON.stringify({ ...scene, functions: (scene.functions ?? []).map((entry) =>
+  // Folder names/membership affect flags, but expanding a folder does not.
+  const diagnosticScene = { ...scene, folders: (scene.folders ?? []).map(({ collapsed, ...entry }) => entry) };
+  if (!clockValues) return JSON.stringify(diagnosticScene);
+  return JSON.stringify({ ...diagnosticScene, functions: (scene.functions ?? []).map((entry) =>
     entry.kind === "slider" && entry.time && Number.isFinite(Number(entry.expression))
       ? { ...entry, expression: "__verified_clock_value__" } : entry) });
 }

@@ -161,6 +161,11 @@ draw(values)`);
   await appliedFolder.click();
   await page.waitForFunction(() => document.querySelector('.draw-list-count')?.textContent === '4 draw values');
   assert.equal(await page.locator('.draw-list-count').textContent(), '4 draw values');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await appliedFolder.click();
+    await appliedFolder.click();
+    assert.equal(await page.locator('.draw-list-count').textContent(), '4 draw values', 'Opening a folder lost its cached draw count');
+  }
   await page.locator('.graph-actions-trigger').hover();
   await page.locator('[data-action="open-save-dialog"]').click();
   await page.locator('[data-save-name]').fill('Collection persistence regression');
